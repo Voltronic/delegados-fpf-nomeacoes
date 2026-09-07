@@ -5,6 +5,7 @@ import type {
   ProgressoSincronizacao,
   ResultadoSincronizacao
 } from '@shared/tipos'
+import JogoManual from '../components/JogoManual'
 import { classes, formatarDataHora, paraDataIso } from '../lib/formato'
 
 export default function Importacao(): JSX.Element {
@@ -311,6 +312,8 @@ export default function Importacao(): JSX.Element {
             </div>
           </div>
         )}
+
+        <JogoManual />
       </div>
     </>
   )

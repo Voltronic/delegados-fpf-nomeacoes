@@ -27,7 +27,7 @@ apresentada para revisão — nada é gravado até o coordenador confirmar.
 
 **Importação**: escolhe-se a época e as competições; a aplicação lê fases, séries, jornadas e jogos,
 e mostra um *diff* antes de aplicar. Jogos com delegado já nomeado que mudaram de data, hora ou
-recinto aparecem destacados.
+recinto aparecem destacados. O mesmo ecrã permite criar um jogo à mão, para nunca depender do site.
 
 **Dashboard**: km por delegado com desvio à média, jogos por competição × delegado, clubes já feitos
 × delegado, exportação para CSV.
@@ -98,8 +98,8 @@ completos de browser; quando mesmo assim vem 403, a aplicação recorre a uma na
 janela oculta, que passa sempre. Os pedidos são feitos um a um, com pausa, para não sobrecarregar um
 site público.
 
-Se o HTML do site mudar, a importação manual e por CSV continua disponível, e os *parsers* estão
-isolados e cobertos por testes com HTML real guardado em `test/fixtures/`.
+Se o HTML do site mudar, o ecrã de importação continua a permitir criar jogos à mão, e os *parsers*
+estão isolados e cobertos por testes com HTML real guardado em `test/fixtures/`.
 
 Geocodificação por **Nominatim** e distâncias por estrada por **OSRM**, ambos com cache local
 permanente e ambos configuráveis. Sem acesso a estes serviços, a aplicação estima em linha reta e
