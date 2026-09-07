@@ -14,6 +14,7 @@ import * as repos from './db/repos'
 import { candidatosParaJogo, nomear, propostaAutomatica } from './engine/servico'
 import { ClienteFpf } from './fpf/cliente'
 import { parseDetalhesCompeticao, parseEpocas, parseJogosJornada, parseOrganizacoes } from './fpf/parsers'
+import { importarCsv, sincronizar } from './fpf/sincronizacao'
 
 const verde = (t: string): string => t
 const vermelho = (t: string): string => t
@@ -75,6 +76,7 @@ async function principal(): Promise<void> {
     const competicao = repos.guardarCompeticao({
       fpfCompetitionId: 99999,
       seasonId: 106,
+      seasonDescricao: '2026-2027',
       nome: 'Competição de Teste',
       organizacao: 'Competições FPF',
       ativa: true,
@@ -240,10 +242,154 @@ async function principal(): Promise<void> {
           )
         }
       }
+
+      log('\n9. Sincronização real (o fluxo que o coordenador usa)')
+      const antesJogos = repos.listarJogos().length
+      const antesClubes = repos.listarClubes().length
+
+      const resultado = await sincronizar(
+        cliente,
+        {
+          seasonId: epocas[0].seasonId,
+          descricaoEpoca: epocas[0].descricao,
+          organizacao: 'Competições FPF',
+          // A Taça é por eliminatórias (jogos na própria página) e a Liga 3
+          // devolvia a página de desafio do Cloudflare: os dois casos que
+          // faziam a importação acabar em silêncio.
+          competicoes: [29523, 29442]
+            .map((id) => fpf?.competicoes.find((c) => c.competitionId === id))
+            .filter((c): c is NonNullable<typeof c> => !!c)
+            .map((c) => ({ competitionId: c.competitionId, nome: c.nome, nivelMinimo: null, usaDelegadoCampo: true }))
+        },
+        () => undefined
+      )
+
+      const jogosNovos = repos.listarJogos().length - antesJogos
+      const clubesNovos = repos.listarClubes().length - antesClubes
+
+      verificar(
+        'a sincronização grava os jogos sem passo extra',
+        jogosNovos > 0,
+        `→ ${jogosNovos} jogos, ${resultado.criados} reportados como criados`
+      )
+      verificar(
+        'os clubes das competições são criados automaticamente',
+        clubesNovos > 0,
+        `→ ${clubesNovos} clubes, ex.: ${resultado.clubesCriados.slice(0, 3).join(', ')}`
+      )
+      verificar(
+        'competições por eliminatórias trazem jogos',
+        (resultado.competicoes.find((c) => /TA.A DE PORTUGAL/i.test(c.nome))?.jogos ?? 0) > 0,
+        `→ ${resultado.competicoes.map((c) => `${c.nome}: ${c.jogos}`).join(' | ')}`
+      )
+      verificar('sem erros na sincronização', resultado.erros.length === 0, resultado.erros.join(' || '))
+
+      const comRecinto = repos.listarJogos().filter((j) => j.recintoId != null).length
+      verificar(
+        'os jogos ficam com recinto associado',
+        comRecinto > 0,
+        `→ ${comRecinto} de ${repos.listarJogos().length}`
+      )
+      if (cliente.recorreuAJanela) {
+        log('    (foi preciso recorrer à janela oculta para passar o Cloudflare)')
+      }
     } catch (erro) {
       log(`  ${vermelho('!')} sem acesso ao site da FPF: ${(erro as Error).message}`)
       log('    (a aplicação continua a funcionar com importação manual)')
     }
+
+    log('\n10. Alertas de alteração e conflito')
+    const margem = 180
+    const jogoBase = repos.listarJogos().find((j) => j.nomeacoes.length > 0)
+    if (jogoBase) {
+      const delegadoNomeado = jogoBase.nomeacoes[0].delegadoId
+
+      // Outro jogo do mesmo delegado, duas horas depois: é o cenário do
+      // adiamento que cai em cima de uma nomeação que já existia.
+      const outroId = repos.guardarJogo({
+        chaveNatural: 'teste:colisao',
+        competicaoId: jogoBase.competicaoId,
+        fase: null,
+        serie: null,
+        jornada: null,
+        fpfFixtureId: null,
+        fpfMatchId: null,
+        dataHora: '2026-09-13T17:00',
+        clubeCasaId: jogoBase.clubeForaId,
+        clubeForaId: jogoBase.clubeCasaId,
+        recintoId: jogoBase.recintoId,
+        recintoTextoFpf: null,
+        estado: 'AGENDADO'
+      })
+      await nomear({ jogoId: outroId, delegadoId: delegadoNomeado, papel: 'PRINCIPAL' })
+
+      const colisoes = repos.jogosDoDelegadoPerto(delegadoNomeado, '2026-09-13T16:00', margem, jogoBase.id)
+      verificar(
+        'deteta que o delegado já tem outro jogo na nova data',
+        colisoes.some((c) => c.id === outroId),
+        `→ ${colisoes.length} colisões`
+      )
+      verificar(
+        'não acusa colisão fora da margem',
+        repos.jogosDoDelegadoPerto(delegadoNomeado, '2026-09-13T23:00', margem, jogoBase.id).length === 0
+      )
+    }
+
+    const alertas = repos.criarAlertas([
+      {
+        chave: 'teste:alerta:1',
+        tipo: 'ALTERADO',
+        jogoId: null,
+        competicao: 'Competição de Teste',
+        descricao: 'A × B',
+        dataHora: '2026-09-13T15:00',
+        detalhe: 'data passou de 13/09 para 20/09'
+      }
+    ])
+    verificar('grava alertas', alertas.length === 1)
+    verificar(
+      'não repete o mesmo alerta em atualizações seguintes',
+      repos.criarAlertas([
+        {
+          chave: 'teste:alerta:1',
+          tipo: 'ALTERADO',
+          jogoId: null,
+          competicao: 'Competição de Teste',
+          descricao: 'A × B',
+          dataHora: '2026-09-13T15:00',
+          detalhe: 'data passou de 13/09 para 20/09'
+        }
+      ]).length === 0
+    )
+    log('\n11. Importação por ficheiro (recurso sem dependências)')
+    const clubesAntesCsv = repos.listarClubes().length
+    const csv = [
+      'Competicao;Jornada;Data;Hora;Casa;Fora;Recinto',
+      'TAÇA DE TESTE;1;20/09/2026;16:00;Clube Novo A;Clube Novo B;Campo de Teste',
+      'TAÇA DE TESTE;1;20/09/2026;18:00;"Clube, Com Vírgula";Clube Novo A;Campo de Teste',
+      'TAÇA DE TESTE;1;data inválida;;X;Y;'
+    ].join('\n')
+    const importado = importarCsv(csv, 106, '2026-2027')
+    verificar('importa as linhas válidas', importado.criados === 2, `→ ${importado.criados} jogos`)
+    verificar('reporta a linha inválida sem perder as outras', importado.erros.length === 1)
+    verificar(
+      'cria competições e clubes que não existiam',
+      importado.competicoesCriadas.includes('TAÇA DE TESTE') && repos.listarClubes().length > clubesAntesCsv,
+      `→ ${importado.clubesCriados.length} clubes`
+    )
+    verificar(
+      'o recinto do ficheiro fica associado ao jogo',
+      repos.listarJogos({ competicaoId: importado.criados > 0 ? repos.listarCompeticoes(106).find((c) => c.nome === 'TAÇA DE TESTE')!.id : 0 })
+        .every((j) => j.recintoNome === 'Campo de Teste')
+    )
+    verificar(
+      'reimportar o mesmo ficheiro não duplica jogos',
+      importarCsv(csv, 106, '2026-2027').criados === 0
+    )
+
+    verificar('lista os alertas por ler', repos.listarAlertas(true).length === 1)
+    repos.marcarTodosAlertasLidos()
+    verificar('marcar como lido limpa a lista de por ler', repos.listarAlertas(true).length === 0)
   } finally {
     rmSync(pasta, { recursive: true, force: true })
   }

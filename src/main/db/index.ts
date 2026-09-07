@@ -65,6 +65,7 @@ export const CONFIG_POR_OMISSAO: Record<string, string> = {
   'geo.contacto': 'nomeacoes-delegados-fpf',
   'fpf.baseUrl': 'https://resultados.fpf.pt',
   'fpf.seasonId': '106',
+  'sync.automatico': 'true',
   'mapa.tilesUrl': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 }
 

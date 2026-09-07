@@ -12,7 +12,7 @@ import {
   parseOrganizacoes,
   resolverData
 } from '../src/main/fpf/parsers'
-import { normalizarNome, texto } from '../src/main/fpf/html'
+import { normalizarNome, pareceDesafioCloudflare, texto } from '../src/main/fpf/html'
 
 const fixture = (nome: string): string => readFileSync(join(__dirname, 'fixtures', nome), 'utf-8')
 
@@ -218,5 +218,53 @@ describe('HTML vindo da janela oculta', () => {
       horaTexto: '15:00',
       recinto: 'Estadio Municipal Vila Meã'
     })
+  })
+})
+
+// Competições a eliminar (taças) não têm jornadas: os jogos vêm logo na página
+// da competição. Antes disto a Taça de Portugal importava zero jogos.
+describe('competições por eliminatórias', () => {
+  const detalhes = parseDetalhesCompeticao(fixture('competition-details-eliminatorias.html'))
+
+  it('lê as eliminatórias como fases', () => {
+    expect(detalhes.nome).toBe('TAÇA DE PORTUGAL GENERALI TRANQUILIDADE')
+    expect(detalhes.fases.map((f) => f.nome)).toEqual(['2.ª Eliminatória', '1.ª Eliminatória'])
+  })
+
+  it('não encontra jornadas nenhumas', () => {
+    const jornadas = detalhes.fases.flatMap((f) => f.series).flatMap((s) => s.jornadas)
+    expect(jornadas).toHaveLength(0)
+  })
+
+  it('lê os jogos diretamente de cada série', () => {
+    const jogos = detalhes.fases.flatMap((f) => f.series).flatMap((s) => s.jogos)
+    expect(jogos.length).toBeGreaterThan(20)
+    const castroDaire = jogos.find((j) => j.clubeCasa === 'Ad Castro Daire')
+    expect(castroDaire).toMatchObject({
+      clubeFora: 'Portimonense Sad',
+      dataTexto: '19 set',
+      horaTexto: '14:00',
+      recinto: 'Complexo Desportivo Castro Daire'
+    })
+  })
+
+  it('não duplica jogos quando há jornadas', () => {
+    // Numa competição por pontos os jogos vêm das jornadas, não inline.
+    const porPontos = parseDetalhesCompeticao(fixture('competition-details.html'))
+    expect(porPontos.fases.flatMap((f) => f.series).every((s) => s.jogos.length === 0)).toBe(true)
+  })
+})
+
+// O Cloudflare devolve a página de desafio com HTTP 200. Sem a detetar, a
+// sincronização lia-a como uma competição vazia e terminava em silêncio.
+describe('deteção do desafio do Cloudflare', () => {
+  it('reconhece a página de verificação', () => {
+    expect(pareceDesafioCloudflare(fixture('cloudflare-desafio.html'))).toBe(true)
+  })
+
+  it('não confunde páginas legítimas com o desafio', () => {
+    expect(pareceDesafioCloudflare(fixture('competition-index.html'))).toBe(false)
+    expect(pareceDesafioCloudflare(fixture('fixture-futuro.html'))).toBe(false)
+    expect(pareceDesafioCloudflare(fixture('fixture-jogado.html'))).toBe(false)
   })
 })

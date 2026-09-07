@@ -1,4 +1,5 @@
 import { BrowserWindow, net } from 'electron'
+import { pareceDesafioCloudflare } from './html'
 
 /**
  * Cliente HTTP para o Centro de Resultados da FPF.
@@ -16,6 +17,15 @@ import { BrowserWindow, net } from 'electron'
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+
+export { pareceDesafioCloudflare }
+
+export class ErroDesafio extends Error {
+  constructor(readonly url: string) {
+    super(`O site da FPF devolveu a verificação do Cloudflare em ${url}`)
+    this.name = 'ErroDesafio'
+  }
+}
 
 export class ErroHttp extends Error {
   constructor(
@@ -40,7 +50,8 @@ export interface OpcoesCliente {
 
 export class ClienteFpf {
   private readonly baseUrl: string
-  private readonly intervaloMs: number
+  private readonly intervaloBaseMs: number
+  private intervaloMs: number
   private readonly tentativas: number
   private fila: Promise<unknown> = Promise.resolve()
   private ultimoPedido = 0
@@ -49,7 +60,8 @@ export class ClienteFpf {
 
   constructor(opcoes: OpcoesCliente) {
     this.baseUrl = opcoes.baseUrl.replace(/\/$/, '')
-    this.intervaloMs = opcoes.intervaloMs ?? 900
+    this.intervaloBaseMs = opcoes.intervaloMs ?? 900
+    this.intervaloMs = this.intervaloBaseMs
     this.tentativas = opcoes.tentativas ?? 3
   }
 
@@ -59,7 +71,10 @@ export class ClienteFpf {
       const espera = this.intervaloMs - (Date.now() - this.ultimoPedido)
       if (espera > 0) await new Promise((r) => setTimeout(r, espera))
       try {
-        return await tarefa()
+        const resultado = await tarefa()
+        // Depois de uma leitura limpa, volta-se devagar ao ritmo normal.
+        this.intervaloMs = Math.max(this.intervaloBaseMs, this.intervaloMs * 0.8)
+        return resultado
       } finally {
         this.ultimoPedido = Date.now()
       }
@@ -72,7 +87,9 @@ export class ClienteFpf {
     const url = caminho.startsWith('http') ? caminho : `${this.baseUrl}${caminho}`
     const eIndice = caminho === '/Competition'
     return new Promise((resolve, reject) => {
-      const pedido = net.request({ method: 'GET', url, redirect: 'follow' })
+      // As cookies da sessão são o que faz valer a pena resolver o desafio uma
+      // vez: a partir daí os pedidos diretos voltam a passar.
+      const pedido = net.request({ method: 'GET', url, redirect: 'follow', useSessionCookies: true })
       pedido.setHeader('User-Agent', UA)
       pedido.setHeader(
         'Accept',
@@ -90,8 +107,13 @@ export class ClienteFpf {
         resposta.on('data', (p) => pedacos.push(Buffer.from(p)))
         resposta.on('end', () => {
           const corpo = Buffer.concat(pedacos).toString('utf-8')
-          if (resposta.statusCode >= 200 && resposta.statusCode < 300) resolve(corpo)
-          else reject(new ErroHttp(resposta.statusCode, url))
+          if (resposta.statusCode < 200 || resposta.statusCode >= 300) {
+            reject(new ErroHttp(resposta.statusCode, url))
+          } else if (pareceDesafioCloudflare(corpo)) {
+            reject(new ErroDesafio(url))
+          } else {
+            resolve(corpo)
+          }
         })
         resposta.on('error', reject)
       })
@@ -110,13 +132,30 @@ export class ClienteFpf {
     if (!this.janela || this.janela.isDestroyed()) {
       this.janela = new BrowserWindow({
         show: false,
-        webPreferences: { javascript: true, images: false }
+        webPreferences: {
+          javascript: true,
+          // Sem isto o Chromium trava os temporizadores das janelas ocultas e o
+          // script do desafio do Cloudflare nunca chega ao fim — era o que
+          // fazia falhar jornadas seguidas a meio de uma sincronização longa.
+          backgroundThrottling: false
+        }
       })
     }
     await this.janela.loadURL(url)
-    return (await this.janela.webContents.executeJavaScript(
-      'document.documentElement.outerHTML'
-    )) as string
+
+    // `loadURL` resolve ainda na página de desafio: é preciso dar tempo ao
+    // Cloudflare para correr o script e redirecionar sozinho.
+    const limite = Date.now() + 25_000
+    let html = ''
+    do {
+      html = (await this.janela.webContents.executeJavaScript(
+        'document.documentElement.outerHTML'
+      )) as string
+      if (!pareceDesafioCloudflare(html)) return html
+      await new Promise((r) => setTimeout(r, 1000))
+    } while (Date.now() < limite)
+
+    throw new ErroDesafio(url)
   }
 
   async obter(caminho: string): Promise<string> {
@@ -128,8 +167,21 @@ export class ClienteFpf {
           return await this.pedir(caminho)
         } catch (erro) {
           ultimoErro = erro
-          const travado = erro instanceof ErroHttp && (erro.estado === 403 || erro.estado === 429)
-          if (travado) {
+          const travado =
+            erro instanceof ErroDesafio ||
+            (erro instanceof ErroHttp && (erro.estado === 403 || erro.estado === 429))
+          // Numa sincronização longa o Windows chega a suspender a rede da
+          // aplicação; é transitório e vale sempre a pena voltar a tentar.
+          const suspenso = /ERR_NETWORK_IO_SUSPENDED|ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED/.test(
+            (erro as Error).message ?? ''
+          )
+          // O Cloudflare aperta quando o ritmo é alto. Abrandar durante o resto
+          // da sincronização é mais eficaz do que insistir ao mesmo ritmo.
+          if (travado) this.intervaloMs = Math.min(this.intervaloMs * 2, 8000)
+
+          // A janela é o último recurso para qualquer falha, não só para o
+          // Cloudflare: uma navegação a sério recupera de quase tudo.
+          if (travado || tentativa === this.tentativas - 1) {
             try {
               const html = await this.pedirViaJanela(url)
               this.usouJanela = true
@@ -139,7 +191,8 @@ export class ClienteFpf {
             }
           }
           if (tentativa >= this.tentativas) break
-          await new Promise((r) => setTimeout(r, travado ? 3000 * tentativa : 1000 * tentativa))
+          const espera = travado ? 3000 : suspenso ? 5000 : 1000
+          await new Promise((r) => setTimeout(r, espera * tentativa))
         }
       }
       throw ultimoErro

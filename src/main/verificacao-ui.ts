@@ -27,7 +27,7 @@ function verificar(descricao: string, condicao: boolean, detalhe = ''): void {
   log(`  ${condicao ? 'OK   ' : 'FALHA'} ${descricao}${detalhe ? ` ${detalhe}` : ''}`)
 }
 
-const ECRAS = ['Nomeações', 'Dashboard', 'Delegados', 'Clubes e recintos', 'Importação', 'Definições']
+const ECRAS = ['Nomeações', 'Dashboard', 'Alertas', 'Delegados', 'Clubes e recintos', 'Importação', 'Definições']
 
 function semear(): void {
   const delegados = [
@@ -49,6 +49,7 @@ function semear(): void {
   const competicao = repos.guardarCompeticao({
     fpfCompetitionId: 29529,
     seasonId: 106,
+    seasonDescricao: '2026-2027',
     nome: 'CAMPEONATO DE PORTUGAL',
     organizacao: 'Competições FPF',
     ativa: true,
@@ -133,7 +134,7 @@ app.whenReady().then(async () => {
       "[...document.querySelectorAll('.barra-lateral button')].map(b => b.textContent.trim())"
     )) as string[]
     verificar(
-      'menu com os seis ecrãs',
+      `menu com os ${ECRAS.length} ecrãs`,
       ECRAS.every((e) => menu.some((m) => m.includes(e))),
       `→ ${menu.join(' | ')}`
     )

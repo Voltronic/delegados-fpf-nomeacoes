@@ -1,3 +1,9 @@
+/* Inter empacotado localmente: a app tem de funcionar sem internet e o CSP não
+   permite fontes externas. */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
 @import 'leaflet/dist/leaflet.css';
 
 :root {
@@ -42,7 +48,8 @@ body,
 }
 
 body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: Inter, 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv05' 1, 'ss03' 1; /* 'l' com cauda, cifrão simples */
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--texto);
@@ -55,7 +62,7 @@ h2,
 h3,
 h4 {
   margin: 0;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
@@ -220,7 +227,7 @@ button.botao {
   border: 1px solid var(--borda-forte);
   background: var(--superficie);
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 500;
   color: var(--texto);
   white-space: nowrap;
 }
@@ -272,7 +279,7 @@ button.botao.pequeno {
   cursor: pointer;
   padding: 5px 12px;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 500;
   background: var(--superficie);
   border-right: 1px solid var(--borda);
 }
@@ -570,7 +577,7 @@ table.tabela th.num {
 }
 
 .candidato .nome {
-  font-weight: 650;
+  font-weight: 600;
   font-size: 13.5px;
   display: flex;
   align-items: center;
@@ -860,4 +867,45 @@ details.grupo-bloqueados > summary {
 
 .mono {
   font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------- alertas e notificações */
+
+.barra-lateral .contador {
+  margin-left: auto;
+  background: var(--perigo);
+  color: #fff;
+  border-radius: 999px;
+  min-width: 18px;
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 17px;
+}
+
+.barra-lateral button.ativo .contador {
+  background: #fff;
+  color: var(--primaria-escura);
+}
+
+/* Aviso flutuante da atualização automática: informa sem roubar o ecrã. */
+.notificacao {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: min(420px, calc(100vw - 36px));
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  border-left: 3px solid var(--aviso);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-forte);
+  padding: 12px 14px;
+  font-size: 12.5px;
+  z-index: 900;
+}
+
+.notificacao ul {
+  list-style: disc;
+  line-height: 1.45;
 }

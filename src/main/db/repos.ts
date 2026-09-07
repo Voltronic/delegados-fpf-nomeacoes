@@ -1,4 +1,5 @@
 import type {
+  Alerta,
   Clube,
   Competicao,
   Delegado,
@@ -15,6 +16,7 @@ import type {
 } from '@shared/tipos'
 import { obterBaseDados, registarAuditoria } from './index'
 import { normalizarNome } from '../fpf/html'
+import { jogosQueColidem } from '../sync/conflitos'
 
 const agora = (): string => new Date().toISOString()
 const bool = (v: unknown): boolean => v === 1 || v === true
@@ -312,6 +314,7 @@ const paraCompeticao = (l: {
   id: number
   fpf_competition_id: number | null
   season_id: number
+  season_descricao: string | null
   nome: string
   organizacao: string | null
   ativa: number
@@ -321,6 +324,7 @@ const paraCompeticao = (l: {
   id: l.id,
   fpfCompetitionId: l.fpf_competition_id,
   seasonId: l.season_id,
+  seasonDescricao: l.season_descricao,
   nome: l.nome,
   organizacao: l.organizacao,
   ativa: bool(l.ativa),
@@ -343,6 +347,7 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
   const params = {
     fpfCompetitionId: dados.fpfCompetitionId,
     seasonId: dados.seasonId,
+    seasonDescricao: dados.seasonDescricao,
     nome: dados.nome,
     organizacao: dados.organizacao,
     ativa: dados.ativa ? 1 : 0,
@@ -351,18 +356,21 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
   }
   if (dados.id) {
     db.prepare(
-      `UPDATE competicao SET fpf_competition_id=@fpfCompetitionId, season_id=@seasonId, nome=@nome,
-        organizacao=@organizacao, ativa=@ativa, nivel_minimo=@nivelMinimo,
-        usa_delegado_campo=@usaDelegadoCampo WHERE id=@id`
+      `UPDATE competicao SET fpf_competition_id=@fpfCompetitionId, season_id=@seasonId,
+        season_descricao=@seasonDescricao, nome=@nome, organizacao=@organizacao, ativa=@ativa,
+        nivel_minimo=@nivelMinimo, usa_delegado_campo=@usaDelegadoCampo WHERE id=@id`
     ).run({ ...params, id: dados.id })
     return listarCompeticoes().find((c) => c.id === dados.id)!
   }
   const info = db
     .prepare(
-      `INSERT INTO competicao (fpf_competition_id, season_id, nome, organizacao, ativa, nivel_minimo, usa_delegado_campo)
-       VALUES (@fpfCompetitionId, @seasonId, @nome, @organizacao, @ativa, @nivelMinimo, @usaDelegadoCampo)
+      `INSERT INTO competicao (fpf_competition_id, season_id, season_descricao, nome, organizacao,
+         ativa, nivel_minimo, usa_delegado_campo)
+       VALUES (@fpfCompetitionId, @seasonId, @seasonDescricao, @nome, @organizacao, @ativa,
+         @nivelMinimo, @usaDelegadoCampo)
        ON CONFLICT(fpf_competition_id, season_id) DO UPDATE SET
-         nome = excluded.nome, organizacao = excluded.organizacao, ativa = excluded.ativa`
+         nome = excluded.nome, organizacao = excluded.organizacao, ativa = excluded.ativa,
+         season_descricao = COALESCE(excluded.season_descricao, competicao.season_descricao)`
     )
     .run(params)
   const id =
@@ -496,9 +504,33 @@ export function listarJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
   })
 }
 
+/**
+ * Vai buscar um jogo pelo id. Está no caminho crítico da nomeação, por isso é
+ * uma consulta direta — com uma época inteira importada, varrer a lista toda
+ * custava caro a cada clique.
+ */
 export function obterJogoDetalhado(id: number): JogoDetalhado | null {
-  const linhas = listarJogos()
-  return linhas.find((j) => j.id === id) ?? null
+  const l = obterBaseDados().prepare(`${SQL_JOGO_DETALHADO} WHERE j.id = ?`).get(id) as
+    | (LinhaJogo & {
+        competicao_nome: string
+        clube_casa_nome: string
+        clube_fora_nome: string
+        recinto_nome: string | null
+        recinto_lat: number | null
+        recinto_lng: number | null
+      })
+    | undefined
+  if (!l) return null
+  return {
+    ...paraJogo(l),
+    competicaoNome: l.competicao_nome,
+    clubeCasaNome: l.clube_casa_nome,
+    clubeForaNome: l.clube_fora_nome,
+    recintoNome: l.recinto_nome,
+    recintoLat: l.recinto_lat,
+    recintoLng: l.recinto_lng,
+    nomeacoes: listarNomeacoesDoJogo(id)
+  }
 }
 
 export interface EntradaJogo {
@@ -783,4 +815,111 @@ export function matrizPorClube(seasonId?: number): MatrizDashboard {
       }))
     )
   }
+}
+
+// ---------------------------------------------------------------------------
+// Alertas
+// ---------------------------------------------------------------------------
+
+type LinhaAlerta = {
+  id: number
+  chave: string
+  tipo: string
+  jogo_id: number | null
+  competicao: string | null
+  descricao: string
+  data_hora: string | null
+  detalhe: string
+  lido: number
+  criado_em: string
+}
+
+const paraAlerta = (l: LinhaAlerta): Alerta => ({
+  id: l.id,
+  chave: l.chave,
+  tipo: l.tipo as Alerta['tipo'],
+  jogoId: l.jogo_id,
+  competicao: l.competicao,
+  descricao: l.descricao,
+  dataHora: l.data_hora,
+  detalhe: l.detalhe,
+  lido: bool(l.lido),
+  criadoEm: l.criado_em
+})
+
+export type EntradaAlerta = Omit<Alerta, 'id' | 'lido' | 'criadoEm'>
+
+/**
+ * Grava alertas ignorando os que já existem: a atualização corre de hora a hora
+ * e o mesmo adiamento não deve encher a lista de repetições.
+ */
+export function criarAlertas(entradas: EntradaAlerta[]): Alerta[] {
+  if (!entradas.length) return []
+  const db = obterBaseDados()
+  const inserir = db.prepare(
+    `INSERT OR IGNORE INTO alerta (chave, tipo, jogo_id, competicao, descricao, data_hora, detalhe, lido, criado_em)
+     VALUES (@chave, @tipo, @jogoId, @competicao, @descricao, @dataHora, @detalhe, 0, @criadoEm)`
+  )
+  const criadas: string[] = []
+  const transacao = db.transaction(() => {
+    for (const e of entradas) {
+      const info = inserir.run({ ...e, criadoEm: agora() })
+      if (info.changes > 0) criadas.push(e.chave)
+    }
+  })
+  transacao()
+  if (!criadas.length) return []
+  const marcadores = criadas.map(() => '?').join(',')
+  return (
+    db.prepare(`SELECT * FROM alerta WHERE chave IN (${marcadores}) ORDER BY criado_em DESC`).all(...criadas) as LinhaAlerta[]
+  ).map(paraAlerta)
+}
+
+export function listarAlertas(apenasPorLer = false): Alerta[] {
+  const sql = `SELECT * FROM alerta ${apenasPorLer ? 'WHERE lido = 0' : ''} ORDER BY lido, criado_em DESC LIMIT 200`
+  return (obterBaseDados().prepare(sql).all() as LinhaAlerta[]).map(paraAlerta)
+}
+
+export function marcarAlertaLido(id: number, lido: boolean): void {
+  obterBaseDados().prepare('UPDATE alerta SET lido = ? WHERE id = ?').run(lido ? 1 : 0, id)
+}
+
+export function marcarTodosAlertasLidos(): void {
+  obterBaseDados().prepare('UPDATE alerta SET lido = 1 WHERE lido = 0').run()
+}
+
+export function apagarAlerta(id: number): void {
+  obterBaseDados().prepare('DELETE FROM alerta WHERE id = ?').run(id)
+}
+
+/** Jogos futuros de uma competição, para detetar os que deixaram de existir. */
+export function jogosFuturosDaCompeticao(competicaoId: number, desde: string): JogoDetalhado[] {
+  return listarJogos({ competicaoId, de: desde })
+}
+
+/**
+ * Outros jogos do delegado que colidem com um instante, dentro de uma margem.
+ * É o que responde a "este jogo foi adiado — o delegado já tem outro nessa data?".
+ */
+export function jogosDoDelegadoPerto(
+  delegadoId: number,
+  dataHora: string,
+  margemMinutos: number,
+  excluirJogoId: number
+): JogoDetalhado[] {
+  const agenda = obterBaseDados()
+    .prepare(
+      `SELECT j.id, j.data_hora FROM nomeacao n JOIN jogo j ON j.id = n.jogo_id
+       WHERE n.delegado_id = ? AND n.estado <> 'CANCELADA' AND j.data_hora IS NOT NULL`
+    )
+    .all(delegadoId) as { id: number; data_hora: string }[]
+
+  return jogosQueColidem(
+    agenda.map((l) => ({ id: l.id, dataHora: l.data_hora, descricao: '' })),
+    dataHora,
+    margemMinutos,
+    excluirJogoId
+  )
+    .map((j) => obterJogoDetalhado(j.id))
+    .filter((j): j is JogoDetalhado => j !== null)
 }

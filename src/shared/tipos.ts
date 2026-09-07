@@ -65,6 +65,8 @@ export interface Competicao {
   id: number
   fpfCompetitionId: number | null
   seasonId: number
+  /** Época como o site a apresenta, ex.: "2026-2027". */
+  seasonDescricao: string | null
   nome: string
   organizacao: string | null
   ativa: boolean
@@ -257,9 +259,55 @@ export interface DiffJogo {
 }
 
 export interface ResultadoSincronizacao {
-  competicoes: { id: number; nome: string; jogos: number }[]
-  diffs: DiffJogo[]
-  clubesNovos: string[]
+  competicoes: {
+    id: number
+    nome: string
+    jogos: number
+    aviso: string | null
+    /** Falso quando a estrutura não foi lida — nesse caso não se conclui nada. */
+    lida: boolean
+  }[]
+  /** Jogos novos gravados automaticamente. */
+  criados: number
+  /** Jogos existentes atualizados automaticamente (sem nomeações em risco). */
+  atualizados: number
+  clubesCriados: string[]
+  /**
+   * Alterações já aplicadas que mexem em jogos com delegado nomeado — o que o
+   * coordenador tem mesmo de saber.
+   */
+  sensiveis: DiffJogo[]
+  erros: string[]
+}
+
+// ---------------------------------------------------------------------------
+// Alertas
+// ---------------------------------------------------------------------------
+
+export type TipoAlerta = 'ALTERADO' | 'DESAPARECIDO' | 'CONFLITO'
+
+export interface Alerta {
+  id: number
+  /** Chave estável, para o mesmo facto não gerar alertas repetidos. */
+  chave: string
+  tipo: TipoAlerta
+  jogoId: number | null
+  competicao: string | null
+  /** Ex.: "Sc Braga B × Cdc Montalegre". */
+  descricao: string
+  dataHora: string | null
+  /** Texto já pronto a ler, com o que mudou e quem é afetado. */
+  detalhe: string
+  lido: boolean
+  criadoEm: string
+}
+
+export interface ResultadoAtualizacao {
+  /** Momento em que correu, ISO. */
+  quando: string
+  criados: number
+  atualizados: number
+  alertas: Alerta[]
   erros: string[]
 }
 

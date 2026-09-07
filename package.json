@@ -20,6 +20,7 @@
     "verificar:ui": "electron-vite build && electron out/main/verificacao-ui.js"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
     "better-sqlite3": "^11.8.1",
     "leaflet": "^1.9.4"
   },

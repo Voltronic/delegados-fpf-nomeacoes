@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Api } from '@shared/api'
-import type { ProgressoSincronizacao } from '@shared/tipos'
+import type { Alerta, ProgressoSincronizacao, ResultadoAtualizacao } from '@shared/tipos'
 
 const invocar =
   (canal: string) =>
@@ -45,7 +45,8 @@ const api = {
     listar: invocar('jogos:listar'),
     obter: invocar('jogos:obter'),
     criarManual: invocar('jogos:criarManual'),
-    apagar: invocar('jogos:apagar')
+    apagar: invocar('jogos:apagar'),
+    importarCsv: invocar('jogos:importarCsv')
   },
   nomeacoes: {
     candidatos: invocar('nomeacoes:candidatos'),
@@ -63,12 +64,31 @@ const api = {
     catalogo: invocar('fpf:catalogo'),
     competicoesDaAssociacao: invocar('fpf:competicoesDaAssociacao'),
     sincronizar: invocar('fpf:sincronizar'),
-    aplicar: invocar('fpf:aplicar'),
     /** Subscreve o progresso da sincronização; devolve a função para cancelar. */
     aoProgredir: (ouvinte: (p: ProgressoSincronizacao) => void): (() => void) => {
       const wrapper = (_e: unknown, p: ProgressoSincronizacao): void => ouvinte(p)
       ipcRenderer.on('fpf:progresso', wrapper)
       return () => ipcRenderer.removeListener('fpf:progresso', wrapper)
+    }
+  },
+  alertas: {
+    listar: invocar('alertas:listar'),
+    marcarLido: invocar('alertas:marcarLido'),
+    marcarTodosLidos: invocar('alertas:marcarTodosLidos'),
+    apagar: invocar('alertas:apagar'),
+    aoChegar: (ouvinte: (alertas: Alerta[]) => void): (() => void) => {
+      const wrapper = (_e: unknown, a: Alerta[]): void => ouvinte(a)
+      ipcRenderer.on('alertas:novos', wrapper)
+      return () => ipcRenderer.removeListener('alertas:novos', wrapper)
+    }
+  },
+  sync: {
+    estado: invocar('sync:estado'),
+    agora: invocar('sync:agora'),
+    aoConcluir: (ouvinte: (r: ResultadoAtualizacao) => void): (() => void) => {
+      const wrapper = (_e: unknown, r: ResultadoAtualizacao): void => ouvinte(r)
+      ipcRenderer.on('sync:concluida', wrapper)
+      return () => ipcRenderer.removeListener('sync:concluida', wrapper)
     }
   },
   config: {

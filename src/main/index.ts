@@ -1,7 +1,8 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join, dirname } from 'node:path'
 import { abrirBaseDados, caminhoBaseDados } from './db'
-import { fecharCliente, registarIpc } from './ipc'
+import { clienteFpfPartilhado, fecharCliente, registarIpc } from './ipc'
+import { iniciarAgendador, pararAgendador } from './sync/agendador'
 
 /**
  * Raiz portátil: em produção é a pasta que contém o executável, para que a
@@ -38,6 +39,7 @@ function criarJanela(): void {
   // `window-all-closed`, por isso o encerramento é ancorado na janela principal.
   janela.on('closed', () => {
     janela = null
+    pararAgendador()
     fecharCliente()
     if (process.platform !== 'darwin') app.quit()
   })
@@ -61,6 +63,7 @@ app.whenReady().then(() => {
   registarIpc({ versao: app.getVersion(), caminhoBaseDados: caminho })
 
   criarJanela()
+  iniciarAgendador(clienteFpfPartilhado)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) criarJanela()

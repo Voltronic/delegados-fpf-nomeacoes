@@ -150,5 +150,36 @@ export const MIGRACOES: Migracao[] = [
         criado_em  TEXT NOT NULL
       );
     `
+  },
+  {
+    versao: 2,
+    descricao: 'Descrição legível da época na competição',
+    sql: `
+      -- O seasonId da FPF (106) não diz nada a quem usa a aplicação; guarda-se
+      -- a descrição tal como o site a apresenta ("2026-2027").
+      ALTER TABLE competicao ADD COLUMN season_descricao TEXT;
+    `
+  },
+  {
+    versao: 3,
+    descricao: 'Alertas de alterações a jogos',
+    sql: `
+      -- Os alertas ficam em base de dados, não apenas em memória: um adiamento
+      -- ou um conflito de agenda não se pode perder por a aplicação ter sido
+      -- fechada antes de o coordenador o ver.
+      CREATE TABLE alerta (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        chave         TEXT NOT NULL UNIQUE,
+        tipo          TEXT NOT NULL CHECK (tipo IN ('ALTERADO','DESAPARECIDO','CONFLITO')),
+        jogo_id       INTEGER REFERENCES jogo(id) ON DELETE CASCADE,
+        competicao    TEXT,
+        descricao     TEXT NOT NULL,
+        data_hora     TEXT,
+        detalhe       TEXT NOT NULL,
+        lido          INTEGER NOT NULL DEFAULT 0,
+        criado_em     TEXT NOT NULL
+      );
+      CREATE INDEX ix_alerta_lido ON alerta(lido, criado_em);
+    `
   }
 ]

@@ -5,6 +5,7 @@ import type {
   ProgressoSincronizacao,
   ResultadoSincronizacao
 } from '@shared/tipos'
+import ImportarCsv from '../components/ImportarCsv'
 import JogoManual from '../components/JogoManual'
 import { classes, formatarDataHora, paraDataIso } from '../lib/formato'
 
@@ -19,9 +20,7 @@ export default function Importacao(): JSX.Element {
   const [aCarregar, setACarregar] = useState(false)
   const [progresso, setProgresso] = useState<ProgressoSincronizacao | null>(null)
   const [resultado, setResultado] = useState<ResultadoSincronizacao | null>(null)
-  const [selecaoDiff, setSelecaoDiff] = useState<Set<string>>(new Set())
   const [erro, setErro] = useState<string | null>(null)
-  const [aplicado, setAplicado] = useState<string | null>(null)
 
   useEffect(() => {
     return window.api.fpf.aoProgredir(setProgresso)
@@ -76,7 +75,6 @@ export default function Importacao(): JSX.Element {
     setACarregar(true)
     setErro(null)
     setResultado(null)
-    setAplicado(null)
     try {
       const descricao = catalogo?.epocas.find((e) => e.seasonId === seasonId)?.descricao ?? ''
       const r = await window.api.fpf.sincronizar({
@@ -94,8 +92,6 @@ export default function Importacao(): JSX.Element {
           }))
       })
       setResultado(r)
-      // Por omissão aplicam-se os jogos novos e os alterados; os inalterados não precisam.
-      setSelecaoDiff(new Set(r.diffs.filter((d) => d.tipo !== 'INALTERADO').map((d) => d.chaveNatural)))
     } catch (e) {
       setErro(`A sincronização falhou: ${(e as Error).message}`)
     } finally {
@@ -104,16 +100,8 @@ export default function Importacao(): JSX.Element {
     }
   }
 
-  async function aplicar(): Promise<void> {
-    const r = await window.api.fpf.aplicar([...selecaoDiff])
-    setAplicado(`${r.aplicados} jogos gravados.`)
-    setResultado(null)
-  }
-
-  const diffs = resultado?.diffs ?? []
-  const novos = diffs.filter((d) => d.tipo === 'NOVO')
-  const alterados = diffs.filter((d) => d.tipo === 'ALTERADO')
-  const criticos = alterados.filter((d) => d.temNomeacoes)
+  const sensiveis = resultado?.sensiveis ?? []
+  const semJogos = resultado?.competicoes.filter((c) => c.aviso) ?? []
 
   return (
     <>
@@ -128,7 +116,6 @@ export default function Importacao(): JSX.Element {
 
       <div className="corpo-ecra">
         {erro && <div className="aviso-caixa erro">{erro}</div>}
-        {aplicado && <div className="aviso-caixa info">{aplicado}</div>}
 
         <div className="cartao">
           <h2>1. Escolher época e competições</h2>
@@ -254,7 +241,46 @@ export default function Importacao(): JSX.Element {
 
         {resultado && (
           <div className="cartao">
-            <h2>2. Rever alterações</h2>
+            <h2>2. Resultado</h2>
+
+            <div className="linha" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+              <span className="emblema ok">{resultado.criados} jogos novos</span>
+              <span className="emblema neutro">{resultado.atualizados} atualizados</span>
+              {resultado.clubesCriados.length > 0 && (
+                <span className="emblema ok">{resultado.clubesCriados.length} clubes criados</span>
+              )}
+              {sensiveis.length > 0 && (
+                <span className="emblema alerta">{sensiveis.length} mexem em jogos nomeados</span>
+              )}
+            </div>
+
+            <table className="tabela" style={{ marginBottom: 12 }}>
+              <thead>
+                <tr>
+                  <th>Competição</th>
+                  <th className="num" style={{ width: 90 }}>
+                    Jogos
+                  </th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultado.competicoes.map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.nome}</td>
+                    <td className="num">{c.jogos}</td>
+                    <td className="silencioso">{c.aviso ?? ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {resultado.clubesCriados.length > 0 && (
+              <div className="silencioso" style={{ marginBottom: 10 }}>
+                Clubes criados: {resultado.clubesCriados.join(', ')}. Confirme os recintos em{' '}
+                <b>Clubes e recintos</b> — sem coordenadas não há cálculo de distâncias.
+              </div>
+            )}
 
             {resultado.erros.length > 0 && (
               <div className="aviso-caixa erro">
@@ -267,51 +293,32 @@ export default function Importacao(): JSX.Element {
               </div>
             )}
 
-            {criticos.length > 0 && (
+            {semJogos.length > 0 && resultado.erros.length === 0 && (
               <div className="aviso-caixa alerta">
-                <b>{criticos.length} jogos com delegado já nomeado mudaram de data, hora ou recinto.</b> Reveja
-                cada um antes de aplicar — pode ser preciso avisar o delegado.
+                {semJogos.length === 1
+                  ? `${semJogos[0].nome} não trouxe jogos.`
+                  : `${semJogos.length} competições não trouxeram jogos.`}{' '}
+                Pode ser calendário ainda por publicar, ou todos os jogos serem anteriores à data
+                escolhida em <b>Importar a partir de</b>.
               </div>
             )}
 
-            <div className="linha" style={{ marginBottom: 10 }}>
-              <span className="emblema ok">{novos.length} novos</span>
-              <span className="emblema alerta">{alterados.length} alterados</span>
-              <span className="emblema neutro">{diffs.length - novos.length - alterados.length} sem alteração</span>
-              {resultado.clubesNovos.length > 0 && (
-                <span className="emblema neutro">{resultado.clubesNovos.length} clubes novos</span>
-              )}
-            </div>
-
-            {resultado.clubesNovos.length > 0 && (
-              <div className="silencioso" style={{ marginBottom: 10 }}>
-                Clubes que vão ser criados: {resultado.clubesNovos.join(', ')}
-              </div>
+            {sensiveis.length > 0 && (
+              <>
+                <div className="aviso-caixa alerta">
+                  <b>{sensiveis.length} jogos com delegado já nomeado mudaram de data, hora ou recinto.</b>{' '}
+                  A alteração foi aplicada — os jogos passam a mostrar os dados novos — mas convém avisar os
+                  delegados. Também está registado em <b>Alertas</b>.
+                </div>
+                <div className="envolve-tabela" style={{ maxHeight: 380 }}>
+                  <TabelaDiffs diffs={sensiveis} />
+                </div>
+              </>
             )}
-
-            <div className="envolve-tabela" style={{ maxHeight: 420 }}>
-              <TabelaDiffs
-                diffs={diffs.filter((d) => d.tipo !== 'INALTERADO')}
-                selecao={selecaoDiff}
-                aoAlternar={(chave) => {
-                  const nova = new Set(selecaoDiff)
-                  if (nova.has(chave)) nova.delete(chave)
-                  else nova.add(chave)
-                  setSelecaoDiff(nova)
-                }}
-              />
-            </div>
-
-            <div className="linha" style={{ marginTop: 12 }}>
-              <button className="botao primario" onClick={aplicar} disabled={selecaoDiff.size === 0}>
-                Aplicar {selecaoDiff.size} alterações
-              </button>
-              <button className="botao" onClick={() => setResultado(null)}>
-                Descartar
-              </button>
-            </div>
           </div>
         )}
+
+        <ImportarCsv epocas={catalogo?.epocas ?? []} seasonId={seasonId} />
 
         <JogoManual />
       </div>
@@ -319,15 +326,7 @@ export default function Importacao(): JSX.Element {
   )
 }
 
-function TabelaDiffs({
-  diffs,
-  selecao,
-  aoAlternar
-}: {
-  diffs: DiffJogo[]
-  selecao: Set<string>
-  aoAlternar: (chave: string) => void
-}): JSX.Element {
+function TabelaDiffs({ diffs }: { diffs: DiffJogo[] }): JSX.Element {
   if (diffs.length === 0) {
     return <div className="vazio">Nada para atualizar — os jogos já estão todos em dia.</div>
   }
@@ -335,7 +334,6 @@ function TabelaDiffs({
     <table className="tabela">
       <thead>
         <tr>
-          <th style={{ width: 1 }} />
           <th style={{ width: 1 }}>Tipo</th>
           <th>Jogo</th>
           <th>Data</th>
@@ -346,14 +344,6 @@ function TabelaDiffs({
       <tbody>
         {diffs.map((d) => (
           <tr key={d.chaveNatural} className={classes(d.temNomeacoes && 'critico')}>
-            <td>
-              <input
-                type="checkbox"
-                style={{ width: 'auto' }}
-                checked={selecao.has(d.chaveNatural)}
-                onChange={() => aoAlternar(d.chaveNatural)}
-              />
-            </td>
             <td>
               <span className={classes('emblema', d.tipo === 'NOVO' ? 'ok' : 'alerta')}>
                 {d.tipo === 'NOVO' ? 'Novo' : 'Alterado'}

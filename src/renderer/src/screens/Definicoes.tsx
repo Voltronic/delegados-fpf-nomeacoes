@@ -7,11 +7,13 @@ export default function Definicoes(): JSX.Element {
   const [competicoes, setCompeticoes] = useState<Competicao[]>([])
   const [info, setInfo] = useState<InfoAplicacao | null>(null)
   const [guardado, setGuardado] = useState(false)
+  const [syncAutomatico, setSyncAutomatico] = useState(true)
 
   useEffect(() => {
     void window.api.config.motor().then(setConfig)
     void window.api.competicoes.listar().then(setCompeticoes)
     void window.api.app.info().then(setInfo)
+    void window.api.config.ler('sync.automatico').then((v) => setSyncAutomatico(v !== 'false'))
   }, [])
 
   async function guardar(): Promise<void> {
@@ -124,6 +126,26 @@ export default function Definicoes(): JSX.Element {
         </div>
 
         <div className="cartao">
+          <h2>Atualização automática</h2>
+          <p className="silencioso" style={{ marginTop: 0 }}>
+            Os jogos futuros das competições ativas são relidos no arranque e depois de hora a hora.
+            Jogos sem alterações não são tocados; o que mudar aparece em <b>Alertas</b>.
+          </p>
+          <label className="linha" style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              style={{ width: 'auto' }}
+              checked={syncAutomatico}
+              onChange={async (e) => {
+                setSyncAutomatico(e.target.checked)
+                await window.api.config.escrever('sync.automatico', String(e.target.checked))
+              }}
+            />
+            Manter os jogos atualizados automaticamente
+          </label>
+        </div>
+
+        <div className="cartao">
           <h2>Competições</h2>
           <p className="silencioso" style={{ marginTop: 0 }}>
             Defina se uma competição exige delegado de elite e se leva delegado de campo além do principal.
@@ -142,7 +164,7 @@ export default function Definicoes(): JSX.Element {
               {competicoes.map((c) => (
                 <tr key={c.id}>
                   <td>{c.nome}</td>
-                  <td className="silencioso mono">{c.seasonId}</td>
+                  <td className="silencioso">{c.seasonDescricao ?? `Época ${c.seasonId}`}</td>
                   <td>
                     <select
                       value={c.nivelMinimo ?? ''}

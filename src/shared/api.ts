@@ -1,4 +1,5 @@
 import type {
+  Alerta,
   Candidato,
   Clube,
   Competicao,
@@ -15,6 +16,7 @@ import type {
   ProgressoSincronizacao,
   PropostaAutomatica,
   Recinto,
+  ResultadoAtualizacao,
   ResultadoSincronizacao,
   VetoClube
 } from './tipos'
@@ -54,6 +56,15 @@ export interface InfoAplicacao {
   caminhoBaseDados: string
   pastaDados: string
   tilesUrl: string
+}
+
+export interface ResultadoImportacaoCsvApi {
+  criados: number
+  atualizados: number
+  competicoesCriadas: string[]
+  clubesCriados: string[]
+  erros: { linha: number; mensagem: string }[]
+  colunasIgnoradas: string[]
 }
 
 export interface JogoManual {
@@ -121,6 +132,8 @@ export interface Api {
     obter(id: number): Promise<JogoDetalhado | null>
     criarManual(dados: JogoManual): Promise<JogoDetalhado | null>
     apagar(id: number): Promise<void>
+    /** Importa jogos de um ficheiro CSV — o recurso que não depende do site. */
+    importarCsv(texto: string, seasonId: number, descricaoEpoca: string): Promise<ResultadoImportacaoCsvApi>
   }
 
   nomeacoes: {
@@ -146,8 +159,22 @@ export interface Api {
     catalogo(seasonId?: number): Promise<CatalogoFpf>
     competicoesDaAssociacao(associationId: number, seasonId: number): Promise<OrganizacaoFpf['competicoes']>
     sincronizar(pedido: PedidoSincronizacaoApi): Promise<ResultadoSincronizacao>
-    aplicar(chaves: string[]): Promise<{ aplicados: number; ignorados: number }>
     aoProgredir(ouvinte: (p: ProgressoSincronizacao) => void): () => void
+  }
+
+  alertas: {
+    listar(apenasPorLer?: boolean): Promise<Alerta[]>
+    marcarLido(id: number, lido: boolean): Promise<Alerta[]>
+    marcarTodosLidos(): Promise<Alerta[]>
+    apagar(id: number): Promise<Alerta[]>
+    /** Alertas novos vindos da atualização automática. */
+    aoChegar(ouvinte: (alertas: Alerta[]) => void): () => void
+  }
+
+  sync: {
+    estado(): Promise<{ aCorrer: boolean; ultima: ResultadoAtualizacao | null }>
+    agora(): Promise<ResultadoAtualizacao>
+    aoConcluir(ouvinte: (r: ResultadoAtualizacao) => void): () => void
   }
 
   config: {

@@ -25,9 +25,23 @@ no computador do coordenador.
 difíceis de preencher e recalculando o equilíbrio de km à medida que atribui. A proposta é
 apresentada para revisão — nada é gravado até o coordenador confirmar.
 
-**Importação**: escolhe-se a época e as competições; a aplicação lê fases, séries, jornadas e jogos,
-e mostra um *diff* antes de aplicar. Jogos com delegado já nomeado que mudaram de data, hora ou
-recinto aparecem destacados. O mesmo ecrã permite criar um jogo à mão, para nunca depender do site.
+**Importação**: escolhe-se a época e as competições, e a sincronização grava tudo — jogos, clubes e
+recintos são criados automaticamente. As alterações que mexam em jogos **com delegado já nomeado**
+são aplicadas na mesma (a FPF é a fonte de verdade, e guardar a data antiga de um jogo adiado poria o
+coordenador a mandar alguém no dia errado), mas ficam destacadas e registadas em **Alertas**. O mesmo
+ecrã permite criar um jogo à mão, para nunca depender do site.
+
+**Atualização automática**: os jogos futuros das competições ativas são relidos no arranque e depois
+de hora a hora. Jogos sem alterações não são tocados. O que muda gera um alerta:
+
+- **jogo alterado** — mudou a data, a hora ou o recinto de um jogo que já tem delegado nomeado (estes
+  nunca são alterados sem o coordenador saber);
+- **jogo desapareceu** — deixou de aparecer no site, tipicamente um adiamento ou cancelamento;
+- **conflito de agenda** — um jogo mudou de data e o delegado nomeado já tem outro jogo nessa altura.
+  Ninguém está em dois recintos ao mesmo tempo.
+
+Os alertas ficam guardados em base de dados (não se perdem ao fechar a aplicação), contam no ícone da
+barra lateral, e aparecem num aviso flutuante quando chegam com a aplicação aberta.
 
 **Dashboard**: km por delegado com desvio à média, jogos por competição × delegado, clubes já feitos
 × delegado, exportação para CSV.
@@ -93,13 +107,26 @@ Não existe API pública oficial da FPF. Os jogos são lidos do **Centro de Resu
 | `/Competition/GetClassificationAndMatchesByFixture?fixtureId=` | Jogos da jornada, com data, hora e recinto |
 | `/Match/GetMatchInformation?matchId=` | Detalhe de um jogo já realizado |
 
-O site está atrás de Cloudflare. A leitura direta usa a stack de rede do Chromium com cabeçalhos
-completos de browser; quando mesmo assim vem 403, a aplicação recorre a uma navegação real numa
-janela oculta, que passa sempre. Os pedidos são feitos um a um, com pausa, para não sobrecarregar um
-site público.
+Suporta tanto competições por pontos (fases → séries → jornadas) como por eliminatórias (taças), em
+que os jogos vêm listados na própria página da competição, sem jornadas.
 
-Se o HTML do site mudar, o ecrã de importação continua a permitir criar jogos à mão, e os *parsers*
-estão isolados e cobertos por testes com HTML real guardado em `test/fixtures/`.
+O site está atrás de Cloudflare, com duas armadilhas:
+
+- pedidos sem os cabeçalhos `Sec-Fetch-*` levam **403**;
+- a página de verificação ("Just a moment…") chega com **HTTP 200**, não com um código de erro. Uma
+  leitura ingénua vê uma página válida, não encontra jornadas e conclui que a competição está vazia.
+
+A aplicação deteta ambos os casos e recorre a uma navegação real numa janela oculta, que resolve o
+desafio e deixa a cookie de acesso na sessão — a partir daí os pedidos diretos voltam a passar. Os
+pedidos são feitos um a um, com pausa, para não sobrecarregar um site público.
+
+**Se o site falhar por completo**, o ecrã de importação tem dois recursos que não dependem de
+ninguém: importar jogos de um **ficheiro CSV** (aceita `;`, `,` ou tabulação, com um modelo para
+descarregar) e criar um jogo **à mão**. Foi esta a opção em vez de uma API pública de futebol: das
+competições em causa, as APIs gratuitas cobrem apenas Liga 3 e Taça de Portugal — nenhuma cobre
+futsal nem os nacionais de formação, e todas exigiriam chave e casar nomes de clubes entre fontes.
+
+Os *parsers* estão isolados e cobertos por testes com HTML real guardado em `test/fixtures/`.
 
 Geocodificação por **Nominatim** e distâncias por estrada por **OSRM**, ambos com cache local
 permanente e ambos configuráveis. Sem acesso a estes serviços, a aplicação estima em linha reta e
@@ -112,7 +139,7 @@ assinala-o claramente.
 ```bash
 npm install        # instala e compila o SQLite nativo para o Electron
 npm run dev        # aplicação em modo de desenvolvimento
-npm test           # testes de parsers e do motor (46)
+npm test           # parsers, motor, conflitos e CSV (72)
 npm run verificar  # smoke test do processo principal, incluindo os endpoints reais da FPF
 npm run verificar:ui   # arranca a janela real e percorre todos os ecrãs
 npm run typecheck
@@ -125,6 +152,7 @@ npm run dist       # gera o executável portátil em release/
 src/main/     db/      esquema, migrações e repositórios
               fpf/     cliente HTTP, parsers e sincronização
               geo/     geocodificação, distâncias e cache
+              sync/    atualização periódica, alertas e conflitos de agenda
               engine/  motor de sugestão e modo automático
               ipc/     handlers expostos ao renderer
 src/preload/  ponte contextIsolated

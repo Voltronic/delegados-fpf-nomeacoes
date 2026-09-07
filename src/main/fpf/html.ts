@@ -56,3 +56,18 @@ export function normalizarNome(nome: string): string {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
 }
+
+/**
+ * O Cloudflare devolve a página de desafio com **HTTP 200**, não com 403. Sem
+ * esta deteção a sincronização engolia a página, não encontrava jornadas
+ * nenhumas e terminava em silêncio, como se a competição estivesse vazia.
+ */
+export function pareceDesafioCloudflare(html: string): boolean {
+  return (
+    /<title>\s*(Just a moment|Attention Required|Access denied)/i.test(html) ||
+    /cf-browser-verification|cf-error-details|id="challenge-(form|error|running)"|__cf_chl_|cf_chl_opt/i.test(
+      html
+    ) ||
+    /Enable JavaScript and cookies to continue/i.test(html)
+  )
+}

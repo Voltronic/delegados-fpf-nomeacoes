@@ -130,6 +130,11 @@ export interface SerieFpf {
   serieId: number
   nome: string
   jornadas: JornadaFpf[]
+  /**
+   * Competições a eliminar (taças, supertaças) não têm jornadas: os jogos vêm
+   * logo na página da competição. Só é preenchido quando `jornadas` está vazio.
+   */
+  jogos: JogoJornadaFpf[]
 }
 
 export interface FaseFpf {
@@ -171,10 +176,12 @@ export function parseDetalhesCompeticao(html: string): DetalhesCompeticaoFpf {
       const fim = encontros[i + 1]?.inicio ?? segmento.html.length
       const trecho = segmento.html.slice(encontros[i].inicio, fim)
       const nomeSerie = texto(trecho.match(/<div class="tag">[\s\S]*?<span>([\s\S]*?)<\/span>/i)?.[1] ?? '')
+      const jornadas = parseJornadas(trecho)
       series.push({
         serieId: encontros[i].serieId,
         nome: nomeSerie || `Série ${i + 1}`,
-        jornadas: parseJornadas(trecho)
+        jornadas,
+        jogos: jornadas.length ? [] : parseJogosJornada(trecho)
       })
     }
     if (series.length) fases.push({ nome: segmento.nome, series })

@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell } from 'electron'
+import { BrowserWindow, ipcMain, powerSaveBlocker, shell } from 'electron'
 import { dirname } from 'node:path'
 import type {
   CatalogoFpf,
@@ -21,13 +21,14 @@ import { escreverConfig, lerConfig } from '../db'
 import * as repos from '../db/repos'
 import { ClienteFpf } from '../fpf/cliente'
 import {
-  aplicarSincronizacao,
   competicoesDaAssociacao,
+  importarCsv,
   obterCatalogo,
   sincronizar
 } from '../fpf/sincronizacao'
 import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache } from '../geo'
+import { atualizarJogos, estadoAtualizacao } from '../sync/agendador'
 import {
   aplicarProposta,
   candidatosParaJogo,
@@ -50,6 +51,9 @@ function cliente(): ClienteFpf {
   }
   return clienteFpf
 }
+
+/** O mesmo cliente usado pelo IPC, para o agendador partilhar fila e sessão. */
+export const clienteFpfPartilhado = (): ClienteFpf => cliente()
 
 export function fecharCliente(): void {
   clienteFpf?.fechar()
@@ -218,6 +222,9 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
     return repos.obterJogoDetalhado(id)
   })
   registar('jogos:apagar', (id: number) => repos.apagarJogo(id))
+  registar('jogos:importarCsv', (texto: string, seasonId: number, descricaoEpoca: string) =>
+    importarCsv(texto, seasonId, descricaoEpoca)
+  )
 
   // -- Nomeações ------------------------------------------------------------
   registar('nomeacoes:candidatos', (jogoId: number, papel: PapelNomeacao) =>
@@ -249,9 +256,41 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
     const emitir = (p: ProgressoSincronizacao): void => {
       for (const janela of BrowserWindow.getAllWindows()) janela.webContents.send('fpf:progresso', p)
     }
-    return sincronizar(cliente(), pedido, emitir)
+    // Uma sincronização grande demora minutos; sem isto o Windows suspende a
+    // rede da aplicação a meio e as jornadas começam a falhar.
+    const bloqueio = powerSaveBlocker.start('prevent-app-suspension')
+    try {
+      return await sincronizar(cliente(), pedido, emitir)
+    } finally {
+      if (powerSaveBlocker.isStarted(bloqueio)) powerSaveBlocker.stop(bloqueio)
+    }
   })
-  registar('fpf:aplicar', (chaves: string[]) => aplicarSincronizacao(chaves))
+
+  // -- Alertas e atualização automática --------------------------------------
+  registar('alertas:listar', (apenasPorLer?: boolean) => repos.listarAlertas(apenasPorLer ?? false))
+  registar('alertas:marcarLido', (id: number, lido: boolean) => {
+    repos.marcarAlertaLido(id, lido)
+    return repos.listarAlertas(false)
+  })
+  registar('alertas:marcarTodosLidos', () => {
+    repos.marcarTodosAlertasLidos()
+    return repos.listarAlertas(false)
+  })
+  registar('alertas:apagar', (id: number) => {
+    repos.apagarAlerta(id)
+    return repos.listarAlertas(false)
+  })
+  registar('sync:estado', () => estadoAtualizacao())
+  registar('sync:agora', async () => {
+    const bloqueio = powerSaveBlocker.start('prevent-app-suspension')
+    try {
+      return await atualizarJogos(cliente(), (p) => {
+        for (const janela of BrowserWindow.getAllWindows()) janela.webContents.send('fpf:progresso', p)
+      })
+    } finally {
+      if (powerSaveBlocker.isStarted(bloqueio)) powerSaveBlocker.stop(bloqueio)
+    }
+  })
 
   // -- Configuração ---------------------------------------------------------
   registar('config:motor', () => obterConfiguracaoMotor())

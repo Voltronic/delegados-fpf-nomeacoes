@@ -3,7 +3,7 @@ import type { Competicao, LinhaKmDelegado, MatrizDashboard } from '@shared/tipos
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
 
 export default function Dashboard(): JSX.Element {
-  const [epocas, setEpocas] = useState<number[]>([])
+  const [epocas, setEpocas] = useState<{ seasonId: number; etiqueta: string }[]>([])
   const [seasonId, setSeasonId] = useState<number | ''>('')
   const [km, setKm] = useState<LinhaKmDelegado[]>([])
   const [porCompeticao, setPorCompeticao] = useState<MatrizDashboard | null>(null)
@@ -11,9 +11,17 @@ export default function Dashboard(): JSX.Element {
 
   useEffect(() => {
     void window.api.competicoes.listar().then((cs: Competicao[]) => {
-      const distintas = [...new Set(cs.map((c) => c.seasonId))].sort((a, b) => b - a)
+      const porEpoca = new Map<number, string>()
+      for (const c of cs) {
+        if (!porEpoca.has(c.seasonId) || c.seasonDescricao) {
+          porEpoca.set(c.seasonId, c.seasonDescricao ?? `Época ${c.seasonId}`)
+        }
+      }
+      const distintas = [...porEpoca.entries()]
+        .map(([seasonId, etiqueta]) => ({ seasonId, etiqueta }))
+        .sort((a, b) => b.seasonId - a.seasonId)
       setEpocas(distintas)
-      setSeasonId((atual) => (atual === '' ? (distintas[0] ?? '') : atual))
+      setSeasonId((atual) => (atual === '' ? (distintas[0]?.seasonId ?? '') : atual))
     })
   }, [])
 
@@ -51,9 +59,9 @@ export default function Dashboard(): JSX.Element {
         <div style={{ width: 160 }}>
           <select value={seasonId} onChange={(e) => setSeasonId(e.target.value ? Number(e.target.value) : '')}>
             <option value="">Todas as épocas</option>
-            {epocas.map((s) => (
-              <option key={s} value={s}>
-                Época {s}
+            {epocas.map((e) => (
+              <option key={e.seasonId} value={e.seasonId}>
+                {e.etiqueta}
               </option>
             ))}
           </select>
