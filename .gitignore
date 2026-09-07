@@ -1,0 +1,11 @@
+node_modules/
+out/
+release/
+data/
+dist/
+.vite/
+*.log
+
+verificacao.log
+verificacao-ui.log
+sonda.log

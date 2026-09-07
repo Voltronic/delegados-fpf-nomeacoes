@@ -1,0 +1,19 @@
+appId: pt.delegados.nomeacoes
+productName: Nomeacoes Delegados FPF
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**
+  - package.json
+  - '!**/{.eslintrc,.editorconfig,.prettierrc}'
+asarUnpack:
+  - '**/*.node'
+win:
+  target:
+    - portable
+  artifactName: NomeacoesDelegadosFPF-${version}-portable.exe
+portable:
+  artifactName: NomeacoesDelegadosFPF-${version}-portable.exe
+  unpackDirName: NomeacoesDelegadosFPF
+npmRebuild: true

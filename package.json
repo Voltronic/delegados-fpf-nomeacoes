@@ -1,0 +1,41 @@
+{
+  "name": "delegados-fpf-nomeacoes",
+  "version": "0.1.0",
+  "description": "Aplicação de apoio à nomeação de delegados para jogos das competições nacionais da FPF",
+  "main": "out/main/index.js",
+  "author": "Coordenação de Delegados",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder --win portable",
+    "postinstall": "electron-builder install-app-deps",
+    "verificar": "electron-vite build && electron out/main/verificacao.js",
+    "verificar:ui": "electron-vite build && electron out/main/verificacao-ui.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/leaflet": "^1.9.16",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.14",
+    "vitest": "^2.1.8"
+  }
+}
