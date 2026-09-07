@@ -57,6 +57,12 @@ export class ClienteFpf {
   private ultimoPedido = 0
   private janela: BrowserWindow | null = null
   private usouJanela = false
+  /**
+   * Assim que o Cloudflare desafia uma vez, vale mais passar tudo pela janela
+   * do que insistir com pedidos diretos: cada tentativa falhada custa segundos
+   * de espera, e a janela resolve o desafio uma vez e depois passa sempre.
+   */
+  private preferirJanelaAte = 0
 
   constructor(opcoes: OpcoesCliente) {
     this.baseUrl = opcoes.baseUrl.replace(/\/$/, '')
@@ -161,6 +167,18 @@ export class ClienteFpf {
   async obter(caminho: string): Promise<string> {
     const url = caminho.startsWith('http') ? caminho : `${this.baseUrl}${caminho}`
     return this.agendar(async () => {
+      // Enquanto o site estiver a desafiar, a janela é o caminho principal.
+      if (Date.now() < this.preferirJanelaAte) {
+        try {
+          const html = await this.pedirViaJanela(url)
+          this.usouJanela = true
+          return html
+        } catch {
+          // Se falhar, volta-se ao percurso normal em baixo.
+          this.preferirJanelaAte = 0
+        }
+      }
+
       let ultimoErro: unknown
       for (let tentativa = 1; tentativa <= this.tentativas; tentativa++) {
         try {
@@ -175,9 +193,12 @@ export class ClienteFpf {
           const suspenso = /ERR_NETWORK_IO_SUSPENDED|ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED/.test(
             (erro as Error).message ?? ''
           )
-          // O Cloudflare aperta quando o ritmo é alto. Abrandar durante o resto
-          // da sincronização é mais eficaz do que insistir ao mesmo ritmo.
-          if (travado) this.intervaloMs = Math.min(this.intervaloMs * 2, 8000)
+          // O Cloudflare aperta quando o ritmo é alto: abrandar um pouco e
+          // passar a usar a janela durante os próximos minutos.
+          if (travado) {
+            this.intervaloMs = Math.min(this.intervaloMs * 2, 3000)
+            this.preferirJanelaAte = Date.now() + 15 * 60 * 1000
+          }
 
           // A janela é o último recurso para qualquer falha, não só para o
           // Cloudflare: uma navegação a sério recupera de quase tudo.

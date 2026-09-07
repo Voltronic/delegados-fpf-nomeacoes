@@ -178,7 +178,39 @@ app.whenReady().then(async () => {
       verificar(`ecrã "${nome}" desenha`, conteudo > 30, `→ título "${titulo}", ${conteudo} caracteres`)
     }
 
-    log('\n4. Erros de consola')
+    log('\n4. Indicador de atualização')
+    // A atualização automática corre em segundo plano e demora minutos: sem
+    // este indicador o coordenador vê um ecrã vazio e julga que nada funciona.
+    janela.webContents.send('fpf:progresso', {
+      etapa: 'LIGA 3 PLACARD — Série A, jornada 5',
+      atual: 12,
+      total: 121,
+      concluido: false
+    })
+    await new Promise((r) => setTimeout(r, 600))
+    const indicador = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.sync-estado')?.innerText.replace(/\\s+/g,' ') ?? ''"
+    )) as string
+    verificar(
+      'o progresso aparece na barra lateral, em qualquer ecrã',
+      indicador.includes('A atualizar') && indicador.includes('121'),
+      `→ ${indicador}`
+    )
+
+    janela.webContents.send('sync:concluida', {
+      quando: new Date().toISOString(),
+      criados: 0,
+      atualizados: 0,
+      alertas: [],
+      erros: []
+    })
+    await new Promise((r) => setTimeout(r, 600))
+    verificar(
+      'o indicador desaparece quando a atualização acaba',
+      (await janela.webContents.executeJavaScript("document.querySelector('.sync-estado') === null")) as boolean
+    )
+
+    log('\n5. Erros de consola')
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
   } catch (erro) {
     verificar('percurso completo sem exceções', false, `→ ${(erro as Error).message}`)

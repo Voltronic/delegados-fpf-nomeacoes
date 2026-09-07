@@ -198,94 +198,121 @@ export async function sincronizar(
     }
   }
 
-  // 3) Ler os jogos de cada jornada que ainda falte.
-  const contagem = new Map<number, number>()
-  // Uma jornada que falhe deixa os seus jogos de fora do resultado. Marcar a
-  // competição como não lida evita que esses jogos sejam depois tomados por
-  // desaparecidos — um falso alarme muito pior do que não avisar.
-  const competicoesIncompletas = new Set<number>()
-  for (let i = 0; i < tarefas.length; i++) {
-    const t = tarefas[i]
+  // 3) Ler os jogos, competição a competição, gravando no fim de cada uma.
+  //    Gravar só no fim de tudo deixava o coordenador minutos a olhar para um
+  //    ecrã vazio e perdia o trabalho todo se a última jornada falhasse.
+  const clubesAntes = new Set(listarClubes().map((c) => c.nomeNormalizado))
+  const porCompeticao = new Map<number, Tarefa[]>()
+  for (const t of tarefas) {
+    porCompeticao.set(t.competicao.id, [...(porCompeticao.get(t.competicao.id) ?? []), t])
+  }
+
+  let criados = 0
+  let atualizados = 0
+  const sensiveis: DiffJogo[] = []
+  let feitas = 0
+
+  for (const competicao of competicoes) {
+    const lista = porCompeticao.get(competicao.id) ?? []
+    if (!lista.length) {
+      resumo.push({
+        id: competicao.id,
+        nome: competicao.nome,
+        jogos: 0,
+        lida: !erros.some((e) => e.startsWith(competicao.nome)),
+        aviso: erros.some((e) => e.startsWith(competicao.nome))
+          ? null
+          : 'Sem jogos — a competição pode ainda não ter calendário nesta época, ou todos os jogos são anteriores à data escolhida.'
+      })
+      continue
+    }
+
+    const chavesDesta: string[] = []
+    let incompleta = false
+
+    for (const t of lista) {
+      feitas++
+      progresso({
+        etapa: `${t.competicao.nome} — ${t.serie}${t.numero ? `, jornada ${t.numero}` : ''}`,
+        atual: feitas,
+        total: tarefas.length,
+        concluido: false
+      })
+      try {
+        const jogos = t.jogos ?? parseJogosJornada(await cliente.jogosDaJornada(t.fixtureId))
+        for (const jogo of jogos) {
+          const dataHora = resolverData(jogo.dataTexto, jogo.horaTexto, epoca)
+          if (pedido.desde && dataHora && dataHora < pedido.desde) continue
+          const chave = chaveNatural(t.competicao.id, t.fixtureId, jogo.clubeCasa, jogo.clubeFora)
+          pendentes.set(chave, {
+            chaveNatural: chave,
+            competicaoId: t.competicao.id,
+            competicaoNome: t.competicao.nome,
+            fase: t.fase,
+            serie: t.serie,
+            jornada: t.numero,
+            fixtureId: t.fixtureId,
+            matchId: jogo.matchId,
+            dataHora,
+            clubeCasa: jogo.clubeCasa,
+            clubeFora: jogo.clubeFora,
+            recintoTexto: jogo.recinto,
+            temResultado: jogo.resultado != null
+          })
+          chavesDesta.push(chave)
+        }
+      } catch (erro) {
+        // Uma jornada que falhe deixa os seus jogos de fora. Marcar a
+        // competição como incompleta evita que sejam tomados por desaparecidos.
+        incompleta = true
+        erros.push(`${t.competicao.nome}, ${t.serie}: ${(erro as Error).message}`)
+      }
+    }
+
+    // Gravar já esta competição. A FPF é a fonte de verdade: guardar a data
+    // antiga de um jogo adiado poria o coordenador a mandar um delegado no dia
+    // errado. O que muda em jogos nomeados vai para `sensiveis`, que gera
+    // alerta. Os jogos inalterados não são tocados.
+    const mudados = calcularDiffs(chavesDesta).filter((d) => d.tipo !== 'INALTERADO')
+    aplicarSincronizacao(mudados.map((d) => d.chaveNatural))
+    criados += mudados.filter((d) => d.tipo === 'NOVO').length
+    atualizados += mudados.filter((d) => d.tipo === 'ALTERADO').length
+    sensiveis.push(...mudados.filter((d) => d.tipo === 'ALTERADO' && d.temNomeacoes))
+
     progresso({
-      etapa: `${t.competicao.nome} — ${t.serie}${t.numero ? `, jornada ${t.numero}` : ''}`,
-      atual: i + 1,
+      etapa: `${competicao.nome}: ${chavesDesta.length} jogos gravados`,
+      atual: feitas,
       total: tarefas.length,
       concluido: false
     })
-    try {
-      const jogos = t.jogos ?? parseJogosJornada(await cliente.jogosDaJornada(t.fixtureId))
-      for (const jogo of jogos) {
-        const dataHora = resolverData(jogo.dataTexto, jogo.horaTexto, epoca)
-        if (pedido.desde && dataHora && dataHora < pedido.desde) continue
-        const chave = chaveNatural(t.competicao.id, t.fixtureId, jogo.clubeCasa, jogo.clubeFora)
-        pendentes.set(chave, {
-          chaveNatural: chave,
-          competicaoId: t.competicao.id,
-          competicaoNome: t.competicao.nome,
-          fase: t.fase,
-          serie: t.serie,
-          jornada: t.numero,
-          fixtureId: t.fixtureId,
-          matchId: jogo.matchId,
-          dataHora,
-          clubeCasa: jogo.clubeCasa,
-          clubeFora: jogo.clubeFora,
-          recintoTexto: jogo.recinto,
-          temResultado: jogo.resultado != null
-        })
-        contagem.set(t.competicao.id, (contagem.get(t.competicao.id) ?? 0) + 1)
-      }
-    } catch (erro) {
-      competicoesIncompletas.add(t.competicao.id)
-      erros.push(`${t.competicao.nome}, ${t.serie}: ${(erro as Error).message}`)
-    }
-  }
 
-  // 4) Aplicar tudo o que mudou. A FPF é a fonte de verdade: guardar a data
-  //    antiga de um jogo adiado seria pior do que atualizá-la, porque punha o
-  //    coordenador a mandar um delegado no dia errado. O que muda em jogos já
-  //    nomeados é devolvido em `sensiveis` para gerar alerta.
-  //    Os jogos inalterados não são tocados.
-  const clubesAntes = new Set(listarClubes().map((c) => c.nomeNormalizado))
-  const diffs = calcularDiffs()
-  const mudados = diffs.filter((d) => d.tipo !== 'INALTERADO')
-  aplicarSincronizacao(mudados.map((d) => d.chaveNatural))
+    resumo.push({
+      id: competicao.id,
+      nome: competicao.nome,
+      jogos: chavesDesta.length,
+      lida: !incompleta && !erros.some((e) => e.startsWith(`${competicao.nome}:`)),
+      aviso:
+        chavesDesta.length > 0 || incompleta
+          ? null
+          : 'Sem jogos — a competição pode ainda não ter calendário nesta época, ou todos os jogos são anteriores à data escolhida.'
+    })
+  }
 
   const clubesCriados = listarClubes()
     .filter((c) => !clubesAntes.has(c.nomeNormalizado))
     .map((c) => c.nome)
     .sort()
 
-  for (const competicao of competicoes) {
-    const jogos = contagem.get(competicao.id) ?? 0
-    const teveErro = erros.some((e) => e.startsWith(competicao.nome))
-    resumo.push({
-      id: competicao.id,
-      nome: competicao.nome,
-      jogos,
-      lida: !teveErro && !competicoesIncompletas.has(competicao.id),
-      aviso:
-        jogos > 0 || teveErro
-          ? null
-          : 'Sem jogos — a competição pode ainda não ter calendário nesta época, ou todos os jogos são anteriores à data escolhida.'
-    })
-  }
-
   progresso({ etapa: 'Concluído', atual: tarefas.length, total: tarefas.length, concluido: true })
 
-  return {
-    competicoes: resumo,
-    criados: mudados.filter((d) => d.tipo === 'NOVO').length,
-    atualizados: mudados.filter((d) => d.tipo === 'ALTERADO').length,
-    clubesCriados,
-    sensiveis: mudados.filter((d) => d.tipo === 'ALTERADO' && d.temNomeacoes),
-    erros
-  }
+  return { competicoes: resumo, criados, atualizados, clubesCriados, sensiveis, erros }
 }
 
-function calcularDiffs(): DiffJogo[] {
+function calcularDiffs(chaves: string[]): DiffJogo[] {
   const diffs: DiffJogo[] = []
-  for (const p of pendentes.values()) {
+  for (const chave of chaves) {
+    const p = pendentes.get(chave)
+    if (!p) continue
     const existente = obterJogoPorChave(p.chaveNatural)
     const base: Omit<DiffJogo, 'tipo' | 'alteracoes' | 'temNomeacoes' | 'jogoId'> = {
       chaveNatural: p.chaveNatural,

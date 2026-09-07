@@ -909,3 +909,34 @@ details.grupo-bloqueados > summary {
   list-style: disc;
   line-height: 1.45;
 }
+
+/* Estado da atualização, visível a partir de qualquer ecrã. */
+.sync-estado {
+  margin-top: auto;
+  padding: 10px;
+  border-top: 1px solid #22304a;
+  font-size: 11px;
+  color: #9fb0c9;
+}
+
+.sync-estado + .rodape {
+  margin-top: 0;
+  border-top: none;
+}
+
+.sync-estado .etapa {
+  font-weight: 600;
+  color: #e6edf7;
+  margin-top: 6px;
+}
+
+.sync-estado .detalhe {
+  color: #7f8da3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-estado .barra-progresso {
+  background: #22304a;
+}

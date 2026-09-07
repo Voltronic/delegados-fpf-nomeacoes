@@ -14,9 +14,11 @@ type EstadoNomeacao = 'TODOS' | 'POR_NOMEAR' | 'PARCIAL' | 'COMPLETO'
 
 interface Props {
   tilesUrl: string
+  /** Incrementa quando uma atualização automática termina. */
+  versaoDados: number
 }
 
-export default function Nomeacoes({ tilesUrl }: Props): JSX.Element {
+export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element {
   const [semana, setSemana] = useState(() => inicioDaSemana(new Date()))
   const [competicaoId, setCompeticaoId] = useState<number | ''>('')
   const [estado, setEstado] = useState<EstadoNomeacao>('TODOS')
@@ -40,7 +42,7 @@ export default function Nomeacoes({ tilesUrl }: Props): JSX.Element {
 
   useEffect(() => {
     void window.api.competicoes.listar().then(setCompeticoes)
-  }, [])
+  }, [versaoDados])
 
   const carregarJogos = useCallback(async () => {
     const lista = await window.api.jogos.listar({
@@ -56,7 +58,7 @@ export default function Nomeacoes({ tilesUrl }: Props): JSX.Element {
 
   useEffect(() => {
     void carregarJogos()
-  }, [carregarJogos])
+  }, [carregarJogos, versaoDados])
 
   const jogo = jogos.find((j) => j.id === selecionado) ?? null
   const competicaoDoJogo = competicoes.find((c) => c.id === jogo?.competicaoId)

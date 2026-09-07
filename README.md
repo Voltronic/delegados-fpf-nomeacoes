@@ -32,7 +32,9 @@ coordenador a mandar alguém no dia errado), mas ficam destacadas e registadas e
 ecrã permite criar um jogo à mão, para nunca depender do site.
 
 **Atualização automática**: os jogos futuros das competições ativas são relidos no arranque e depois
-de hora a hora. Jogos sem alterações não são tocados. O que muda gera um alerta:
+de hora a hora. Jogos sem alterações não são tocados. Cada competição é gravada assim que termina, e
+o progresso aparece na barra lateral a partir de qualquer ecrã — uma primeira importação de seis
+competições demora cerca de dois a três minutos e traz umas 600 partidas. O que muda gera um alerta:
 
 - **jogo alterado** — mudou a data, a hora ou o recinto de um jogo que já tem delegado nomeado (estes
   nunca são alterados sem o coordenador saber);

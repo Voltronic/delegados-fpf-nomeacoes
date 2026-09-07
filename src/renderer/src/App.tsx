@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { InfoAplicacao } from '@shared/api'
-import type { Alerta } from '@shared/tipos'
+import type { Alerta, ProgressoSincronizacao } from '@shared/tipos'
 import Alertas from './screens/Alertas'
 import ClubesRecintos from './screens/ClubesRecintos'
 import Dashboard from './screens/Dashboard'
@@ -27,6 +27,9 @@ export default function App(): JSX.Element {
   const [info, setInfo] = useState<InfoAplicacao | null>(null)
   const [alertas, setAlertas] = useState<Alerta[]>([])
   const [aviso, setAviso] = useState<Alerta[] | null>(null)
+  const [progresso, setProgresso] = useState<ProgressoSincronizacao | null>(null)
+  // Muda sempre que uma atualização termina, para os ecrãs recarregarem sozinhos.
+  const [versaoDados, setVersaoDados] = useState(0)
 
   const recarregarAlertas = useCallback(async () => {
     setAlertas(await window.api.alertas.listar(false))
@@ -42,10 +45,16 @@ export default function App(): JSX.Element {
       void recarregarAlertas()
       setAviso(novos)
     })
-    const largarSync = window.api.sync.aoConcluir(() => void recarregarAlertas())
+    const largarSync = window.api.sync.aoConcluir(() => {
+      void recarregarAlertas()
+      setProgresso(null)
+      setVersaoDados((v) => v + 1)
+    })
+    const largarProgresso = window.api.fpf.aoProgredir((p) => setProgresso(p.concluido ? null : p))
     return () => {
       largarAlertas()
       largarSync()
+      largarProgresso()
     }
   }, [recarregarAlertas])
 
@@ -66,6 +75,19 @@ export default function App(): JSX.Element {
             {m.chave === 'alertas' && porLer > 0 && <span className="contador">{porLer}</span>}
           </button>
         ))}
+        {progresso && (
+          <div className="sync-estado">
+            <div className="barra-progresso">
+              <i style={{ width: `${progresso.total ? (progresso.atual / progresso.total) * 100 : 0}%` }} />
+            </div>
+            <div className="etapa">A atualizar jogos…</div>
+            <div className="detalhe">{progresso.etapa}</div>
+            <div className="detalhe">
+              {progresso.atual} de {progresso.total}
+            </div>
+          </div>
+        )}
+
         <div className="rodape">
           v{info?.versao ?? '—'}
           <br />
@@ -74,7 +96,7 @@ export default function App(): JSX.Element {
       </nav>
 
       <main className="conteudo">
-        {ecra === 'nomeacoes' && <Nomeacoes tilesUrl={tilesUrl} />}
+        {ecra === 'nomeacoes' && <Nomeacoes tilesUrl={tilesUrl} versaoDados={versaoDados} />}
         {ecra === 'dashboard' && <Dashboard />}
         {ecra === 'alertas' && <Alertas alertas={alertas} aoMudar={setAlertas} />}
         {ecra === 'delegados' && <Delegados tilesUrl={tilesUrl} />}
