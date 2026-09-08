@@ -433,7 +433,8 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
       <div className="corpo-ecra">
         {relatorio && (
           <div className={`aviso-caixa ${relatorio.falhados.length ? 'alerta' : 'info'}`}>
-            <b>{relatorio.localizados} recintos localizados</b> — {relatorio.porConfianca.alta} com
+            <b>{relatorio.localizados} recintos localizados</b>
+            {relatorio.corrigidos > 0 && `, ${relatorio.corrigidos} por correções já confirmadas`} — {relatorio.porConfianca.alta} com
             várias pesquisas a concordar, {relatorio.porConfianca.media} razoáveis e{' '}
             {relatorio.porConfianca.baixa} pouco fiáveis.{' '}
             {relatorio.porConfirmar > 0 && (
@@ -570,12 +571,13 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
               </div>
               <div className="pilha" style={{ borderTop: '1px solid var(--borda)', paddingTop: 10 }}>
                 <div className="silencioso">
-                  Se souber onde é, escreva a localidade ou o nome certo e escolha o resultado.
+                  Se souber onde é, cole aqui o link do Google Maps — ou escreva a localidade e escolha
+                  o resultado.
                 </div>
                 <div className="linha">
                   <input
                     type="search"
-                    placeholder="ex.: Campo da Mata, Caldas da Rainha"
+                    placeholder="link do Google Maps, ou Campo da Mata, Caldas da Rainha"
                     value={procura}
                     onChange={(e) => setProcura(e.target.value)}
                     onKeyDown={async (e) => {

@@ -3,6 +3,7 @@ import * as repos from '../db/repos'
 import { geocodificar, invalidarCache } from './index'
 import { consultasParaRecinto } from './consultas'
 import { escolherCoordenada, type CandidatoCoordenada } from './escolha'
+import { correcaoParaRecinto } from './correcoes'
 
 /**
  * Localiza de uma vez todos os recintos que ainda não têm ponto no mapa.
@@ -22,10 +23,28 @@ export async function geocodificarRecintosEmFalta(
   const falhados: ResultadoGeocodificacaoLote['falhados'] = []
   const porConfianca = { alta: 0, media: 0, baixa: 0 }
   let localizados = 0
+  let corrigidos = 0
 
   for (let i = 0; i < emFalta.length; i++) {
     const recinto = emFalta[i]
     progresso({ atual: i + 1, total: emFalta.length, recinto: recinto.nome, concluido: false })
+
+    // Correções confirmadas por quem conhece o terreno ganham a qualquer
+    // pesquisa: não há heurística que bata alguém que sabe onde é o campo.
+    const correcao = correcaoParaRecinto(recinto.nome)
+    if (correcao) {
+      repos.atualizarRecinto(recinto.id, {
+        nome: recinto.nome,
+        morada: recinto.morada ?? correcao.descricao,
+        lat: correcao.lat,
+        lng: correcao.lng,
+        coordsManuais: true
+      })
+      invalidarCache({ recintoId: recinto.id })
+      localizados++
+      corrigidos++
+      continue
+    }
 
     const candidatos: CandidatoCoordenada[] = []
     for (const consulta of consultasParaRecinto(recinto.nome, recinto.morada, recinto.clubes ?? [])) {
@@ -70,6 +89,7 @@ export async function geocodificarRecintosEmFalta(
 
   return {
     localizados,
+    corrigidos,
     porConfirmar: repos.listarRecintos().filter((r) => r.lat != null && !r.confirmado).length,
     porConfianca,
     falhados

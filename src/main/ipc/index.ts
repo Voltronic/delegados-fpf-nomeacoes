@@ -29,6 +29,7 @@ import {
 import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
+import { extrairCoordenadas } from '../geo/googlemaps'
 import { atualizarJogos, estadoAtualizacao } from '../sync/agendador'
 import {
   aplicarProposta,
@@ -196,6 +197,19 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
     }
   })
   registar('recintos:procurar', async (termo: string) => {
+    // Um link do Google Maps colado é a forma mais rápida de resolver um
+    // recinto que a pesquisa não acerta — lê-se sem contactar ninguém.
+    const coladas = extrairCoordenadas(termo)
+    if (coladas) {
+      return [
+        {
+          lat: coladas.lat,
+          lng: coladas.lng,
+          moradaResolvida: `Coordenadas do link (${coladas.lat.toFixed(5)}, ${coladas.lng.toFixed(5)})`,
+          categoria: `colado/${coladas.fonte}`
+        }
+      ]
+    }
     const r = await geocodificar(termo)
     return r ? [r] : []
   })

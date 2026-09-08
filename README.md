@@ -151,8 +151,13 @@ silêncio todos os quilómetros da época.
 
 Por isso **nada fica dado como certo**. Cada recinto guarda como foi encontrado e um nível de
 confiança, e a lista mostra primeiro os menos fiáveis. Há um mapa com todos os recintos, onde um
-ponto no sítio errado salta à vista, e quem sabe onde é corrige em dois cliques: escreve a localidade
-na caixa de pesquisa e escolhe o resultado.
+ponto no sítio errado salta à vista, e quem sabe onde é corrige em dois cliques: **cola o link do
+Google Maps** na caixa de pesquisa (ou escreve a localidade e escolhe o resultado).
+
+Os recintos que a pesquisa comprovadamente falha — porque não existem no OpenStreetMap ou porque têm
+homónimos que ganham — estão numa lista de correções confirmadas em
+`src/main/geo/correcoes.ts`, aplicada antes de qualquer pesquisa. Como são recintos das competições
+nacionais, repetem-se todas as épocas.
 
 ---
 
@@ -161,7 +166,7 @@ na caixa de pesquisa e escolhe o resultado.
 ```bash
 npm install        # instala e compila o SQLite nativo para o Electron
 npm run dev        # aplicação em modo de desenvolvimento
-npm test           # parsers, motor, conflitos, CSV e geocodificação (96)
+npm test           # parsers, motor, conflitos, CSV e geocodificação (116)
 npm run verificar  # smoke test do processo principal, incluindo os endpoints reais da FPF
 npm run verificar:ui   # arranca a janela real e percorre todos os ecrãs
 npm run typecheck

@@ -81,6 +81,8 @@ export interface ProgressoGeocodificacao {
 
 export interface ResultadoGeocodificacaoLote {
   localizados: number
+  /** Quantos vieram da lista de correções confirmadas, sem pesquisa. */
+  corrigidos: number
   porConfirmar: number
   /** Quantos ficaram em cada nível de confiança. */
   porConfianca: { alta: number; media: number; baixa: number }
