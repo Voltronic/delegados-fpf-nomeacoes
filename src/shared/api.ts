@@ -13,10 +13,12 @@ import type {
   MatrizDashboard,
   OrganizacaoFpf,
   PapelNomeacao,
+  ProgressoGeocodificacao,
   ProgressoSincronizacao,
   PropostaAutomatica,
   Recinto,
   ResultadoAtualizacao,
+  ResultadoGeocodificacaoLote,
   ResultadoSincronizacao,
   VetoClube
 } from './tipos'
@@ -119,6 +121,14 @@ export interface Api {
       coordsManuais: boolean
     }): Promise<Recinto[]>
     geocodificar(id: number): Promise<Recinto | null>
+    /** Localiza de uma vez todos os recintos sem coordenadas. */
+    geocodificarEmFalta(): Promise<ResultadoGeocodificacaoLote>
+    /** Procura um local por texto livre, para o coordenador escolher. */
+    procurar(termo: string): Promise<{ lat: number; lng: number; moradaResolvida: string; categoria: string }[]>
+    definirCoordenadas(id: number, lat: number, lng: number, descricao: string): Promise<Recinto[]>
+    confirmar(id: number, confirmado: boolean): Promise<Recinto[]>
+    confirmarTodos(): Promise<Recinto[]>
+    aoProgredir(ouvinte: (p: ProgressoGeocodificacao) => void): () => void
   }
 
   competicoes: {

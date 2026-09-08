@@ -44,6 +44,14 @@ export interface Clube {
   notas: string | null
 }
 
+export type OrigemCoordenadas =
+  | 'MORADA'
+  | 'NOME'
+  | 'NOME_SIMPLIFICADO'
+  | 'CLUBE'
+  | 'CLUBE_SIMPLIFICADO'
+  | 'MANUAL'
+
 export interface Recinto {
   id: number
   nome: string
@@ -52,6 +60,31 @@ export interface Recinto {
   lng: number | null
   coordsManuais: boolean
   geocodificadoEm: string | null
+  /** Como as coordenadas foram obtidas — ver `confirmado`. */
+  origemCoords: OrigemCoordenadas | null
+  /** Quão de confiança é o ponto: ALTA quando várias pesquisas concordaram. */
+  confianca: 'ALTA' | 'MEDIA' | 'BAIXA' | null
+  /** O que o serviço devolveu, para se poder conferir a olho. */
+  moradaResolvida: string | null
+  /** Verdadeiro depois de alguém confirmar que o ponto está certo. */
+  confirmado: boolean
+  /** Clubes que jogam neste recinto, para dar contexto na revisão. */
+  clubes?: string[]
+}
+
+export interface ProgressoGeocodificacao {
+  atual: number
+  total: number
+  recinto: string
+  concluido: boolean
+}
+
+export interface ResultadoGeocodificacaoLote {
+  localizados: number
+  porConfirmar: number
+  /** Quantos ficaram em cada nível de confiança. */
+  porConfianca: { alta: number; media: number; baixa: number }
+  falhados: { id: number; nome: string; clubes: string[] }[]
 }
 
 export interface ClubeRecinto {

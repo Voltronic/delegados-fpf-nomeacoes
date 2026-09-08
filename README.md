@@ -86,8 +86,8 @@ histórico não mudar se o recinto for corrigido mais tarde.
    escrever as coordenadas à mão — ficam marcadas como manuais e não voltam a ser substituídas.
 2. **Importação** — escolher a época, a organização *Competições FPF* e as competições a acompanhar.
    Sincronizar e aplicar. Clubes e recintos são criados automaticamente a partir dos dados da FPF.
-3. **Clubes e recintos** — confirmar as coordenadas dos recintos (o ecrã assinala os que faltam) e
-   ajustar onde um clube joga noutro recinto numa competição específica.
+3. **Clubes e recintos** — carregar em *Localizar os N em falta*, olhar para o mapa e confirmar (ver
+   acima). Ajustar também onde um clube joga noutro recinto numa competição específica.
 4. **Definições** — indicar que competições exigem delegado de elite e quais levam delegado de campo.
 
 ### No dia a dia
@@ -134,6 +134,26 @@ Geocodificação por **Nominatim** e distâncias por estrada por **OSRM**, ambos
 permanente e ambos configuráveis. Sem acesso a estes serviços, a aplicação estima em linha reta e
 assinala-o claramente.
 
+### Localizar os recintos
+
+Os jogos importados trazem o nome do recinto mas não as coordenadas, e sem elas não há distâncias. O
+ecrã **Clubes e recintos → Recintos** localiza todos de uma vez.
+
+Os nomes que a FPF usa dividem-se em três famílias e só uma se encontra pelo nome: os que trazem o
+local ("Estádio Municipal Marco De Canaveses"), os que têm nome de pessoa ("Estádio Carlos Osório") e
+os genéricos ("Campo Da Mata"). Para os dois últimos, o que localiza é o clube da casa. A aplicação
+faz por isso várias pesquisas por recinto — nome, nome sem as palavras da instalação, e nome do clube
+— e **decide por consenso**: o ponto onde mais pesquisas concordam ganha.
+
+Isto importa porque procurar só pelo nome dá respostas confiantes e erradas: "Campo Manuel Marques"
+existe na Madeira mas o clube é de Torres Vedras. Um erro destes não dá erro nenhum — corrompe em
+silêncio todos os quilómetros da época.
+
+Por isso **nada fica dado como certo**. Cada recinto guarda como foi encontrado e um nível de
+confiança, e a lista mostra primeiro os menos fiáveis. Há um mapa com todos os recintos, onde um
+ponto no sítio errado salta à vista, e quem sabe onde é corrige em dois cliques: escreve a localidade
+na caixa de pesquisa e escolhe o resultado.
+
 ---
 
 ## Desenvolvimento
@@ -141,7 +161,7 @@ assinala-o claramente.
 ```bash
 npm install        # instala e compila o SQLite nativo para o Electron
 npm run dev        # aplicação em modo de desenvolvimento
-npm test           # parsers, motor, conflitos e CSV (72)
+npm test           # parsers, motor, conflitos, CSV e geocodificação (96)
 npm run verificar  # smoke test do processo principal, incluindo os endpoints reais da FPF
 npm run verificar:ui   # arranca a janela real e percorre todos os ecrãs
 npm run typecheck

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { RecintoDoClubeApi } from '@shared/api'
-import type { Clube, Competicao, Recinto } from '@shared/tipos'
+import type {
+  Clube,
+  Competicao,
+  ProgressoGeocodificacao,
+  Recinto,
+  ResultadoGeocodificacaoLote
+} from '@shared/tipos'
 import Mapa from '../components/Mapa'
 import { classes } from '../lib/formato'
 
@@ -237,6 +243,10 @@ function PainelClubes(): JSX.Element {
 
 function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
   const [recintos, setRecintos] = useState<Recinto[]>([])
+  const [aLocalizarTodos, setALocalizarTodos] = useState(false)
+  const [progresso, setProgresso] = useState<ProgressoGeocodificacao | null>(null)
+  const [relatorio, setRelatorio] = useState<ResultadoGeocodificacaoLote | null>(null)
+  const [vista, setVista] = useState<'TODOS' | 'SEM_COORDS' | 'POR_CONFIRMAR'>('TODOS')
   const [selecionado, setSelecionado] = useState<number | 'novo' | null>(null)
   const [form, setForm] = useState<{
     id?: number
@@ -249,10 +259,30 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
   const [filtro, setFiltro] = useState('')
   const [aGeocodificar, setAGeocodificar] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
+  const [procura, setProcura] = useState('')
+  const [candidatos, setCandidatos] = useState<
+    { lat: number; lng: number; moradaResolvida: string; categoria: string }[] | null
+  >(null)
+  const [aProcurar, setAProcurar] = useState(false)
 
   useEffect(() => {
     void window.api.recintos.listar().then(setRecintos)
+    return window.api.recintos.aoProgredir((p) => setProgresso(p.concluido ? null : p))
   }, [])
+
+  async function localizarTodos(): Promise<void> {
+    setALocalizarTodos(true)
+    setRelatorio(null)
+    try {
+      const r = await window.api.recintos.geocodificarEmFalta()
+      setRelatorio(r)
+      setRecintos(await window.api.recintos.listar())
+      if (r.porConfirmar > 0) setVista('POR_CONFIRMAR')
+    } finally {
+      setALocalizarTodos(false)
+      setProgresso(null)
+    }
+  }
 
   useEffect(() => {
     if (selecionado === 'novo') {
@@ -287,7 +317,31 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
   }
 
   const semCoordenadas = recintos.filter((r) => r.lat == null).length
-  const visiveis = recintos.filter((r) => r.nome.toLowerCase().includes(filtro.toLowerCase()))
+  const porConfirmar = recintos.filter((r) => r.lat != null && !r.confirmado).length
+  const visiveis = recintos
+    .filter((r) => r.nome.toLowerCase().includes(filtro.toLowerCase()))
+    .filter((r) => {
+      if (vista === 'SEM_COORDS') return r.lat == null
+      if (vista === 'POR_CONFIRMAR') return r.lat != null && !r.confirmado
+      return true
+    })
+    // Na revisão, primeiro os menos fiáveis — é aí que estão os erros.
+    .sort((a, b) => {
+      if (vista !== 'POR_CONFIRMAR') return 0
+      const risco = (r: Recinto): number => ({ BAIXA: 0, MEDIA: 1, ALTA: 2 })[r.confianca ?? 'BAIXA']
+      return risco(a) - risco(b)
+    })
+
+  const pontosMapa = recintos
+    .filter((r): r is Recinto & { lat: number; lng: number } => r.lat != null && r.lng != null)
+    .map((r) => ({
+      id: r.id,
+      lat: r.lat,
+      lng: r.lng,
+      etiqueta: r.confirmado ? '✓' : '?',
+      titulo: `${r.nome}${r.clubes?.length ? ` — ${r.clubes.join(', ')}` : ''}`,
+      classe: (r.confirmado ? 'top' : 'medio') as 'top' | 'medio'
+    }))
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', height: '100%', minHeight: 0 }}>
@@ -299,11 +353,23 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
           />
-          {semCoordenadas > 0 && (
-            <div className="emblema alerta" style={{ marginTop: 8 }}>
-              {semCoordenadas} sem coordenadas
-            </div>
-          )}
+          <div className="grupo-botoes" style={{ marginTop: 8 }}>
+            <button className={classes(vista === 'TODOS' && 'ativo')} onClick={() => setVista('TODOS')}>
+              Todos ({recintos.length})
+            </button>
+            <button
+              className={classes(vista === 'SEM_COORDS' && 'ativo')}
+              onClick={() => setVista('SEM_COORDS')}
+            >
+              Sem coords ({semCoordenadas})
+            </button>
+            <button
+              className={classes(vista === 'POR_CONFIRMAR' && 'ativo')}
+              onClick={() => setVista('POR_CONFIRMAR')}
+            >
+              Por confirmar ({porConfirmar})
+            </button>
+          </div>
         </div>
         <div className="painel-corpo">
           {visiveis.map((r) => (
@@ -313,25 +379,137 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
               onClick={() => setSelecionado(r.id)}
             >
               <div className="equipas">{r.nome}</div>
-              <div className="local">{r.morada ?? 'sem morada'}</div>
-              {r.lat == null && <span className="emblema alerta">Sem coordenadas</span>}
+              {r.clubes && r.clubes.length > 0 && <div className="local">{r.clubes.join(', ')}</div>}
+              {r.moradaResolvida && <div className="local">{r.moradaResolvida}</div>}
+              <div className="linha" style={{ flexWrap: 'wrap' }}>
+                {r.lat == null && <span className="emblema alerta">Sem coordenadas</span>}
+                {r.lat != null && !r.confirmado && (
+                  <span
+                    className={classes(
+                      'emblema',
+                      r.confianca === 'BAIXA' ? 'erro' : r.confianca === 'ALTA' ? 'neutro' : 'alerta'
+                    )}
+                    title={`Encontrado por: ${r.origemCoords ?? '?'}`}
+                  >
+                    {r.confianca === 'BAIXA'
+                      ? 'Pouco fiável'
+                      : r.confianca === 'ALTA'
+                        ? 'Confirmar'
+                        : 'A conferir'}
+                  </span>
+                )}
+                {r.confirmado && <span className="emblema ok">Confirmado</span>}
+              </div>
             </div>
           ))}
+          {visiveis.length === 0 && <div className="vazio">Nada nesta vista.</div>}
         </div>
         <div className="painel-cabecalho" style={{ borderTop: '1px solid var(--borda)', borderBottom: 'none' }}>
-          <button className="botao" onClick={() => setSelecionado('novo')}>
-            Novo recinto
-          </button>
+          <div className="pilha">
+            <button
+              className="botao primario"
+              onClick={localizarTodos}
+              disabled={aLocalizarTodos || semCoordenadas === 0}
+            >
+              {aLocalizarTodos ? 'A localizar…' : `Localizar os ${semCoordenadas} em falta`}
+            </button>
+            {progresso && (
+              <>
+                <div className="barra-progresso">
+                  <i style={{ width: `${(progresso.atual / progresso.total) * 100}%` }} />
+                </div>
+                <div className="silencioso">
+                  {progresso.atual}/{progresso.total} · {progresso.recinto}
+                </div>
+              </>
+            )}
+            <button className="botao" onClick={() => setSelecionado('novo')}>
+              Novo recinto
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="corpo-ecra">
+        {relatorio && (
+          <div className={`aviso-caixa ${relatorio.falhados.length ? 'alerta' : 'info'}`}>
+            <b>{relatorio.localizados} recintos localizados</b> — {relatorio.porConfianca.alta} com
+            várias pesquisas a concordar, {relatorio.porConfianca.media} razoáveis e{' '}
+            {relatorio.porConfianca.baixa} pouco fiáveis.{' '}
+            {relatorio.porConfirmar > 0 && (
+              <>
+                Estão {relatorio.porConfirmar} por confirmar; comece pelos pouco fiáveis, que aparecem
+                primeiro na lista.{' '}
+              </>
+            )}
+            {relatorio.falhados.length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                Não foi possível localizar {relatorio.falhados.length}:{' '}
+                {relatorio.falhados.map((f) => f.nome).join(', ')}. Marque-os à mão.
+              </div>
+            )}
+          </div>
+        )}
+
+        {porConfirmar > 0 && (
+          <div className="cartao">
+            <h2>Mapa de todos os recintos</h2>
+            <p className="silencioso" style={{ marginTop: 0 }}>
+              Um recinto no sítio errado salta à vista aqui. Verde é confirmado, azul está por confirmar.
+            </p>
+            <div style={{ height: 340, display: 'flex' }}>
+              <Mapa
+                tilesUrl={tilesUrl}
+                recinto={null}
+                realcado={typeof selecionado === 'number' ? selecionado : null}
+                pontos={pontosMapa}
+                aoSelecionar={(id) => setSelecionado(id)}
+              />
+            </div>
+            <div className="linha" style={{ marginTop: 10 }}>
+              <button
+                className="botao"
+                onClick={async () => setRecintos(await window.api.recintos.confirmarTodos())}
+              >
+                Confirmar todos os {porConfirmar}
+              </button>
+              <span className="silencioso">
+                Só faça isto depois de olhar para o mapa — os quilómetros todos dependem destes pontos.
+              </span>
+            </div>
+          </div>
+        )}
+
         {selecionado == null ? (
           <div className="vazio">Selecione um recinto.</div>
         ) : (
           <div className="cartao">
             <h2>{form.nome || 'Novo recinto'}</h2>
             {mensagem && <div className="aviso-caixa alerta">{mensagem}</div>}
+            {typeof selecionado === 'number' &&
+              (() => {
+                const r = recintos.find((x) => x.id === selecionado)
+                if (!r?.moradaResolvida) return null
+                return (
+                  <div className="pilha" style={{ marginBottom: 10 }}>
+                    <div className="silencioso">
+                      Encontrado como: <b>{r.moradaResolvida}</b>
+                      {r.confianca ? ` · confiança ${r.confianca.toLowerCase()}` : ''}
+                      {r.clubes?.length ? ` · joga aqui: ${r.clubes.join(', ')}` : ''}
+                    </div>
+                    <div className="linha">
+                      <button
+                        className={classes('botao', !r.confirmado && 'primario')}
+                        onClick={async () =>
+                          setRecintos(await window.api.recintos.confirmar(r.id, !r.confirmado))
+                        }
+                      >
+                        {r.confirmado ? 'Marcar por confirmar' : 'Confirmar este ponto'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
             <div className="pilha">
               <label className="campo">
                 Nome
@@ -390,6 +568,71 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
                   </button>
                 </div>
               </div>
+              <div className="pilha" style={{ borderTop: '1px solid var(--borda)', paddingTop: 10 }}>
+                <div className="silencioso">
+                  Se souber onde é, escreva a localidade ou o nome certo e escolha o resultado.
+                </div>
+                <div className="linha">
+                  <input
+                    type="search"
+                    placeholder="ex.: Campo da Mata, Caldas da Rainha"
+                    value={procura}
+                    onChange={(e) => setProcura(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key !== 'Enter' || !procura.trim()) return
+                      setAProcurar(true)
+                      try {
+                        setCandidatos(await window.api.recintos.procurar(procura))
+                      } finally {
+                        setAProcurar(false)
+                      }
+                    }}
+                  />
+                  <button
+                    className="botao"
+                    disabled={aProcurar || !procura.trim()}
+                    onClick={async () => {
+                      setAProcurar(true)
+                      try {
+                        setCandidatos(await window.api.recintos.procurar(procura))
+                      } finally {
+                        setAProcurar(false)
+                      }
+                    }}
+                  >
+                    {aProcurar ? 'A procurar…' : 'Procurar'}
+                  </button>
+                </div>
+                {candidatos?.length === 0 && (
+                  <div className="silencioso">Nada encontrado. Tente a localidade em vez do nome.</div>
+                )}
+                {candidatos?.map((cand, i) => (
+                  <div key={i} className="linha">
+                    <span style={{ flex: '1 1 auto' }}>
+                      {cand.moradaResolvida} <span className="silencioso">({cand.categoria})</span>
+                    </span>
+                    <button
+                      className="botao pequeno primario"
+                      onClick={async () => {
+                        if (typeof selecionado !== 'number') return
+                        const lista = await window.api.recintos.definirCoordenadas(
+                          selecionado,
+                          cand.lat,
+                          cand.lng,
+                          cand.moradaResolvida
+                        )
+                        setRecintos(lista)
+                        setForm({ ...form, lat: cand.lat, lng: cand.lng, coordsManuais: true })
+                        setCandidatos(null)
+                        setProcura('')
+                      }}
+                    >
+                      Usar este
+                    </button>
+                  </div>
+                ))}
+              </div>
+
               <div style={{ height: 300, display: 'flex' }}>
                 <Mapa
                   tilesUrl={tilesUrl}

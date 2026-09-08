@@ -193,6 +193,11 @@ const paraRecinto = (l: {
   lng: number | null
   coords_manuais: number
   geocodificado_em: string | null
+  origem_coords: string | null
+  morada_resolvida: string | null
+  confianca: string | null
+  confirmado: number
+  clubes?: string | null
 }): Recinto => ({
   id: l.id,
   nome: l.nome,
@@ -200,17 +205,60 @@ const paraRecinto = (l: {
   lat: l.lat,
   lng: l.lng,
   coordsManuais: bool(l.coords_manuais),
-  geocodificadoEm: l.geocodificado_em
+  geocodificadoEm: l.geocodificado_em,
+  origemCoords: l.origem_coords as Recinto['origemCoords'],
+  confianca: l.confianca as Recinto['confianca'],
+  moradaResolvida: l.morada_resolvida,
+  confirmado: bool(l.confirmado),
+  clubes: l.clubes ? l.clubes.split('||') : []
 })
+
+const SQL_RECINTO = `
+  SELECT r.*, (
+    SELECT group_concat(c.nome, '||') FROM clube_recinto cr
+    JOIN clube c ON c.id = cr.clube_id WHERE cr.recinto_id = r.id
+  ) AS clubes
+  FROM recinto r
+`
 
 export function listarRecintos(): Recinto[] {
   return (
-    obterBaseDados().prepare('SELECT * FROM recinto ORDER BY nome').all() as Parameters<typeof paraRecinto>[0][]
+    obterBaseDados().prepare(`${SQL_RECINTO} ORDER BY r.nome`).all() as Parameters<typeof paraRecinto>[0][]
   ).map(paraRecinto)
 }
 
+/** Recintos ainda sem ponto no mapa — os que a geocodificação em lote trata. */
+export function recintosSemCoordenadas(): Recinto[] {
+  return (
+    obterBaseDados()
+      .prepare(`${SQL_RECINTO} WHERE r.lat IS NULL OR r.lng IS NULL ORDER BY r.nome`)
+      .all() as Parameters<typeof paraRecinto>[0][]
+  ).map(paraRecinto)
+}
+
+/** Grava as coordenadas obtidas automaticamente, sempre por confirmar. */
+export function guardarCoordenadasAutomaticas(
+  id: number,
+  dados: { lat: number; lng: number; origem: string; moradaResolvida: string; confianca: string }
+): void {
+  obterBaseDados()
+    .prepare(
+      `UPDATE recinto SET lat = ?, lng = ?, origem_coords = ?, morada_resolvida = ?, confianca = ?,
+        geocodificado_em = ?, coords_manuais = 0, confirmado = 0 WHERE id = ?`
+    )
+    .run(dados.lat, dados.lng, dados.origem, dados.moradaResolvida, dados.confianca, agora(), id)
+}
+
+export function confirmarRecinto(id: number, confirmado: boolean): void {
+  obterBaseDados().prepare('UPDATE recinto SET confirmado = ? WHERE id = ?').run(confirmado ? 1 : 0, id)
+}
+
+export function confirmarTodosRecintos(): void {
+  obterBaseDados().prepare('UPDATE recinto SET confirmado = 1 WHERE lat IS NOT NULL').run()
+}
+
 export function obterRecinto(id: number): Recinto | null {
-  const l = obterBaseDados().prepare('SELECT * FROM recinto WHERE id = ?').get(id) as
+  const l = obterBaseDados().prepare(`${SQL_RECINTO} WHERE r.id = ?`).get(id) as
     | Parameters<typeof paraRecinto>[0]
     | undefined
   return l ? paraRecinto(l) : null
@@ -236,7 +284,10 @@ export function atualizarRecinto(
   obterBaseDados()
     .prepare(
       `UPDATE recinto SET nome = ?, nome_normalizado = ?, morada = ?, lat = ?, lng = ?,
-        coords_manuais = ?, geocodificado_em = ? WHERE id = ?`
+        coords_manuais = ?, geocodificado_em = ?,
+        origem_coords = CASE WHEN ? = 1 THEN 'MANUAL' ELSE origem_coords END,
+        confirmado = CASE WHEN ? = 1 THEN 1 ELSE confirmado END
+       WHERE id = ?`
     )
     .run(
       dados.nome,
@@ -246,6 +297,8 @@ export function atualizarRecinto(
       dados.lng,
       dados.coordsManuais ? 1 : 0,
       dados.lat != null ? agora() : null,
+      dados.coordsManuais ? 1 : 0,
+      dados.coordsManuais ? 1 : 0,
       id
     )
   return obterRecinto(id)!

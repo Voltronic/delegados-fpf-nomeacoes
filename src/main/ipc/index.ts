@@ -28,6 +28,7 @@ import {
 } from '../fpf/sincronizacao'
 import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache } from '../geo'
+import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { atualizarJogos, estadoAtualizacao } from '../sync/agendador'
 import {
   aplicarProposta,
@@ -182,6 +183,42 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
     })
     invalidarCache({ recintoId: id })
     return atualizado
+  })
+
+  registar('recintos:geocodificarEmFalta', async () => {
+    const bloqueio = powerSaveBlocker.start('prevent-app-suspension')
+    try {
+      return await geocodificarRecintosEmFalta((p) => {
+        for (const janela of BrowserWindow.getAllWindows()) janela.webContents.send('geo:progresso', p)
+      })
+    } finally {
+      if (powerSaveBlocker.isStarted(bloqueio)) powerSaveBlocker.stop(bloqueio)
+    }
+  })
+  registar('recintos:procurar', async (termo: string) => {
+    const r = await geocodificar(termo)
+    return r ? [r] : []
+  })
+  registar('recintos:definirCoordenadas', (id: number, lat: number, lng: number, descricao: string) => {
+    const recinto = repos.obterRecinto(id)
+    if (!recinto) return repos.listarRecintos()
+    repos.atualizarRecinto(id, {
+      nome: recinto.nome,
+      morada: recinto.morada ?? descricao,
+      lat,
+      lng,
+      coordsManuais: true
+    })
+    invalidarCache({ recintoId: id })
+    return repos.listarRecintos()
+  })
+  registar('recintos:confirmar', (id: number, confirmado: boolean) => {
+    repos.confirmarRecinto(id, confirmado)
+    return repos.listarRecintos()
+  })
+  registar('recintos:confirmarTodos', () => {
+    repos.confirmarTodosRecintos()
+    return repos.listarRecintos()
   })
 
   // -- Competições ----------------------------------------------------------

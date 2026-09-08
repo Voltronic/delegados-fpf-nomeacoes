@@ -92,6 +92,9 @@ function semear(): void {
     })
   }
 
+  // Um recinto por localizar, para o ecrã de recintos ter o caso real a mostrar.
+  repos.encontrarOuCriarRecinto('Campo Sem Coordenadas')
+
   const jogos = repos.listarJogos()
   void nomear({ jogoId: jogos[0].id, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
 }
@@ -178,7 +181,29 @@ app.whenReady().then(async () => {
       verificar(`ecrã "${nome}" desenha`, conteudo > 30, `→ título "${titulo}", ${conteudo} caracteres`)
     }
 
-    log('\n4. Indicador de atualização')
+    log('\n4. Recintos por confirmar')
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.barra-lateral button')].find(b => b.textContent.includes('Clubes')).click()"
+    )
+    await new Promise((r) => setTimeout(r, 500))
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.cabecalho-ecra .grupo-botoes button')].find(b => b.textContent.includes('Recintos')).click()"
+    )
+    await new Promise((r) => setTimeout(r, 700))
+    const filtros = (await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.painel .grupo-botoes button')].map(b => b.textContent.trim()).join(' | ')"
+    )) as string
+    verificar(
+      'o ecrã separa os recintos que faltam dos que estão por confirmar',
+      /Sem coords/.test(filtros) && /Por confirmar/.test(filtros),
+      `→ ${filtros}`
+    )
+    const botaoLote = (await janela.webContents.executeJavaScript(
+      "([...document.querySelectorAll('.painel button')].map(b => b.textContent).find(t => t.includes('em falta')) ?? '')"
+    )) as string
+    verificar('oferece localizar de uma vez os que faltam', botaoLote.includes('em falta'), `→ ${botaoLote}`)
+
+    log('\n5. Indicador de atualização')
     // A atualização automática corre em segundo plano e demora minutos: sem
     // este indicador o coordenador vê um ecrã vazio e julga que nada funciona.
     janela.webContents.send('fpf:progresso', {
@@ -210,7 +235,7 @@ app.whenReady().then(async () => {
       (await janela.webContents.executeJavaScript("document.querySelector('.sync-estado') === null")) as boolean
     )
 
-    log('\n5. Erros de consola')
+    log('\n6. Erros de consola')
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
   } catch (erro) {
     verificar('percurso completo sem exceções', false, `→ ${(erro as Error).message}`)

@@ -9,6 +9,8 @@ export interface Coordenadas {
 
 export interface ResultadoGeocodificacao extends Coordenadas {
   moradaResolvida: string
+  /** Classificação do OSM, ex.: leisure/pitch, place/village. */
+  categoria: string
 }
 
 export interface ResultadoDistancia {
@@ -72,17 +74,28 @@ export async function geocodificar(morada: string): Promise<ResultadoGeocodifica
 
   const base = lerConfig('geo.nominatimUrl') ?? 'https://nominatim.openstreetmap.org'
   const contacto = lerConfig('geo.contacto') ?? 'nomeacoes-delegados-fpf'
-  const url = `${base}/search?format=jsonv2&limit=1&countrycodes=pt&q=${encodeURIComponent(texto)}`
+  const url = `${base}/search?format=jsonv2&limit=5&countrycodes=pt&q=${encodeURIComponent(texto)}`
 
-  const resposta = await pedirJson<{ lat: string; lon: string; display_name: string }[]>(url, {
+  const resposta = await pedirJson<
+    { lat: string; lon: string; display_name: string; class?: string; type?: string }[]
+  >(url, {
     'User-Agent': `NomeacoesDelegadosFPF/0.1 (${contacto})`,
     'Accept-Language': 'pt-PT'
   })
   if (!resposta.length) return null
+
+  // Havendo várias respostas, prefere-se uma instalação desportiva: procura-se
+  // um recinto, não a rua com o mesmo nome.
+  const desportivo = resposta.find((r) =>
+    ['leisure', 'sport'].includes(r.class ?? '') ||
+    ['stadium', 'pitch', 'sports_centre', 'sports_hall'].includes(r.type ?? '')
+  )
+  const escolhido = desportivo ?? resposta[0]
   return {
-    lat: Number(resposta[0].lat),
-    lng: Number(resposta[0].lon),
-    moradaResolvida: resposta[0].display_name
+    lat: Number(escolhido.lat),
+    lng: Number(escolhido.lon),
+    moradaResolvida: escolhido.display_name,
+    categoria: `${escolhido.class ?? '?'}/${escolhido.type ?? '?'}`
   }
 }
 

@@ -181,5 +181,22 @@ export const MIGRACOES: Migracao[] = [
       );
       CREATE INDEX ix_alerta_lido ON alerta(lido, criado_em);
     `
+  },
+  {
+    versao: 4,
+    descricao: 'Proveniência e confirmação das coordenadas dos recintos',
+    sql: `
+      -- Coordenadas obtidas automaticamente podem estar erradas, e um recinto
+      -- no sítio errado corrompe em silêncio todos os quilómetros. Guarda-se
+      -- como foram obtidas e se já foram confirmadas por olho humano.
+      ALTER TABLE recinto ADD COLUMN origem_coords TEXT;
+      ALTER TABLE recinto ADD COLUMN morada_resolvida TEXT;
+      ALTER TABLE recinto ADD COLUMN confianca TEXT;
+      ALTER TABLE recinto ADD COLUMN confirmado INTEGER NOT NULL DEFAULT 0;
+
+      -- O que já foi escrito à mão conta como confirmado.
+      UPDATE recinto SET confirmado = 1, origem_coords = 'MANUAL'
+      WHERE coords_manuais = 1 AND lat IS NOT NULL;
+    `
   }
 ]

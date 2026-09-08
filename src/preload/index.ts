@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Api } from '@shared/api'
-import type { Alerta, ProgressoSincronizacao, ResultadoAtualizacao } from '@shared/tipos'
+import type {
+  Alerta,
+  ProgressoGeocodificacao,
+  ProgressoSincronizacao,
+  ResultadoAtualizacao
+} from '@shared/tipos'
 
 const invocar =
   (canal: string) =>
@@ -34,7 +39,17 @@ const api = {
   recintos: {
     listar: invocar('recintos:listar'),
     guardar: invocar('recintos:guardar'),
-    geocodificar: invocar('recintos:geocodificar')
+    geocodificar: invocar('recintos:geocodificar'),
+    geocodificarEmFalta: invocar('recintos:geocodificarEmFalta'),
+    procurar: invocar('recintos:procurar'),
+    definirCoordenadas: invocar('recintos:definirCoordenadas'),
+    confirmar: invocar('recintos:confirmar'),
+    confirmarTodos: invocar('recintos:confirmarTodos'),
+    aoProgredir: (ouvinte: (p: ProgressoGeocodificacao) => void): (() => void) => {
+      const wrapper = (_e: unknown, p: ProgressoGeocodificacao): void => ouvinte(p)
+      ipcRenderer.on('geo:progresso', wrapper)
+      return () => ipcRenderer.removeListener('geo:progresso', wrapper)
+    }
   },
   competicoes: {
     listar: invocar('competicoes:listar'),
