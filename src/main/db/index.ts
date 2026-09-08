@@ -22,6 +22,10 @@ export function abrirBaseDados(caminho: string): Database.Database {
   const conn = new Database(caminho)
   conn.pragma('journal_mode = WAL')
   conn.pragma('foreign_keys = ON')
+  // Com WAL, `NORMAL` é seguro contra falhas da aplicação (só uma falha de
+  // energia pode perder a última transação) e evita um fsync por escrita —
+  // é a diferença entre uma importação fluida e a interface a engasgar.
+  conn.pragma('synchronous = NORMAL')
   aplicarMigracoes(conn)
   semearConfiguracao(conn)
   db = conn
@@ -93,6 +97,14 @@ export function escreverConfig(chave: string, valor: string): void {
   obterBaseDados()
     .prepare('INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor')
     .run(chave, valor)
+}
+
+/**
+ * Corre várias escritas como uma só transação. Importações e sincronizações
+ * fazem centenas de escritas; uma a uma, bloqueiam o processo principal.
+ */
+export function emTransacao<T>(tarefa: () => T): T {
+  return obterBaseDados().transaction(tarefa)()
 }
 
 export function registarAuditoria(entidade: string, entidadeId: number | null, accao: string, payload?: unknown): void {

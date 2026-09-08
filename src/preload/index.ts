@@ -17,6 +17,9 @@ const api = {
     info: invocar('app:info'),
     abrirPastaDados: invocar('app:abrirPastaDados')
   },
+  geo: {
+    procurar: invocar('geo:procurar')
+  },
   delegados: {
     listar: invocar('delegados:listar'),
     guardar: invocar('delegados:guardar'),

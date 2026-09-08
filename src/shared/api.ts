@@ -86,6 +86,11 @@ export interface Api {
     abrirPastaDados(): Promise<void>
   }
 
+  geo: {
+    /** Procura um local por texto livre ou por link do Google Maps colado. */
+    procurar(termo: string): Promise<{ lat: number; lng: number; moradaResolvida: string; categoria: string }[]>
+  }
+
   delegados: {
     listar(incluirInativos?: boolean): Promise<Delegado[]>
     guardar(delegado: Omit<Delegado, 'id'> & { id?: number }): Promise<Delegado>

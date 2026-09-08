@@ -32,7 +32,52 @@ export function haversineKm(a: Coordenadas, b: Coordenadas): number {
   return 2 * RAIO_TERRA_KM * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
+/**
+ * O Nominatim aceita um pedido por segundo, e a geocodificação em lote dos
+ * recintos ocupa esse ritmo durante minutos. Sem prioridades, uma pesquisa
+ * feita pelo coordenador ficava atrás de centenas de pedidos automáticos e a
+ * interface parecia pendurada. Os pedidos do utilizador passam à frente.
+ */
+interface PedidoFila {
+  executar: () => void
+  prioritario: boolean
+}
+
+const fila: PedidoFila[] = []
+let aProcessar = false
 let ultimoNominatim = 0
+
+function aguardarVez(prioritario: boolean): Promise<void> {
+  return new Promise((resolve) => {
+    const pedido: PedidoFila = { executar: resolve, prioritario }
+    if (prioritario) {
+      // Entra antes dos automáticos, mas depois de outros pedidos do utilizador.
+      const posicao = fila.findIndex((p) => !p.prioritario)
+      if (posicao === -1) fila.push(pedido)
+      else fila.splice(posicao, 0, pedido)
+    } else {
+      fila.push(pedido)
+    }
+    void processarFila()
+  })
+}
+
+async function processarFila(): Promise<void> {
+  if (aProcessar) return
+  aProcessar = true
+  try {
+    while (fila.length) {
+      const espera = 1100 - (Date.now() - ultimoNominatim)
+      if (espera > 0) await new Promise((r) => setTimeout(r, espera))
+      ultimoNominatim = Date.now()
+      fila.shift()!.executar()
+      // Deixa o pedido arrancar antes de contar o intervalo seguinte.
+      await new Promise((r) => setTimeout(r, 0))
+    }
+  } finally {
+    aProcessar = false
+  }
+}
 
 async function pedirJson<T>(url: string, cabecalhos: Record<string, string> = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -65,13 +110,14 @@ async function pedirJson<T>(url: string, cabecalhos: Record<string, string> = {}
  * Geocodifica uma morada com o Nominatim, respeitando o limite público de um
  * pedido por segundo e identificando a aplicação, como a política do serviço exige.
  */
-export async function geocodificar(morada: string): Promise<ResultadoGeocodificacao | null> {
+export async function geocodificar(
+  morada: string,
+  prioritario = false
+): Promise<ResultadoGeocodificacao | null> {
   const texto = morada.trim()
   if (!texto) return null
 
-  const espera = 1100 - (Date.now() - ultimoNominatim)
-  if (espera > 0) await new Promise((r) => setTimeout(r, espera))
-  ultimoNominatim = Date.now()
+  await aguardarVez(prioritario)
 
   const base = lerConfig('geo.nominatimUrl') ?? 'https://nominatim.openstreetmap.org'
   const contacto = lerConfig('geo.contacto') ?? 'nomeacoes-delegados-fpf'

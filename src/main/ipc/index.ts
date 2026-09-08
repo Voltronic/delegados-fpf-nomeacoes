@@ -96,7 +96,7 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
   registar('delegados:geocodificar', async (id: number) => {
     const delegado = repos.obterDelegado(id)
     if (!delegado?.morada) return null
-    const resultado = await geocodificar(delegado.morada)
+    const resultado = await geocodificar(delegado.morada, true)
     if (!resultado) return null
     const atualizado = repos.atualizarDelegado(id, {
       ...delegado,
@@ -173,7 +173,7 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
     const recinto = repos.obterRecinto(id)
     if (!recinto) return null
     // Sem morada, procura-se pelo nome do recinto, que costuma bastar em Portugal.
-    const resultado = await geocodificar(recinto.morada || `${recinto.nome}, Portugal`)
+    const resultado = await geocodificar(recinto.morada || `${recinto.nome}, Portugal`, true)
     if (!resultado) return null
     const atualizado = repos.atualizarRecinto(id, {
       nome: recinto.nome,
@@ -196,6 +196,24 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
       if (powerSaveBlocker.isStarted(bloqueio)) powerSaveBlocker.stop(bloqueio)
     }
   })
+  // Pesquisa de um local por texto livre ou link do Google Maps, usada tanto
+  // pelos recintos como pela morada dos delegados.
+  registar('geo:procurar', async (termo: string) => {
+    const coladas = extrairCoordenadas(termo)
+    if (coladas) {
+      return [
+        {
+          lat: coladas.lat,
+          lng: coladas.lng,
+          moradaResolvida: `Coordenadas do link (${coladas.lat.toFixed(5)}, ${coladas.lng.toFixed(5)})`,
+          categoria: `colado/${coladas.fonte}`
+        }
+      ]
+    }
+    const r = await geocodificar(termo, true)
+    return r ? [r] : []
+  })
+
   registar('recintos:procurar', async (termo: string) => {
     // Um link do Google Maps colado é a forma mais rápida de resolver um
     // recinto que a pesquisa não acerta — lê-se sem contactar ninguém.
@@ -210,7 +228,7 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
         }
       ]
     }
-    const r = await geocodificar(termo)
+    const r = await geocodificar(termo, true)
     return r ? [r] : []
   })
   registar('recintos:definirCoordenadas', (id: number, lat: number, lng: number, descricao: string) => {

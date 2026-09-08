@@ -19,6 +19,7 @@ import {
   type AssociacaoFpf,
   type JogoJornadaFpf
 } from './parsers'
+import { emTransacao } from '../db'
 import { normalizarNome } from './html'
 import { eRecintoPorIndicar } from './recintoPorIndicar'
 import { lerCsv } from './csv'
@@ -369,6 +370,13 @@ function calcularDiffs(chaves: string[]): DiffJogo[] {
  * importação preenche sozinha o mapa de clubes e recintos.
  */
 export function aplicarSincronizacao(chaves: string[]): { aplicados: number; ignorados: number } {
+  // Uma transação só. Sem ela, cada jogo era uma escrita independente com a sua
+  // sincronização em disco: centenas de jogos deixavam o processo principal
+  // bloqueado segundos a fio, e a interface parecia pendurada.
+  return emTransacao(() => aplicarJogos(chaves))
+}
+
+function aplicarJogos(chaves: string[]): { aplicados: number; ignorados: number } {
   let aplicados = 0
   let ignorados = 0
 
@@ -449,6 +457,14 @@ export interface ResultadoImportacaoCsv {
  * clube da casa, e não toca em jogos que não mudaram.
  */
 export function importarCsv(texto: string, seasonId: number, descricaoEpoca: string): ResultadoImportacaoCsv {
+  return emTransacao(() => importarLinhasCsv(texto, seasonId, descricaoEpoca))
+}
+
+function importarLinhasCsv(
+  texto: string,
+  seasonId: number,
+  descricaoEpoca: string
+): ResultadoImportacaoCsv {
   const leitura = lerCsv(texto)
   const clubesAntes = new Set(listarClubes().map((c) => c.nomeNormalizado))
   const competicoesAntes = new Set(listarCompeticoes(seasonId).map((c) => normalizarNome(c.nome)))

@@ -30,6 +30,21 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
   const [vetos, setVetos] = useState<VetoClube[]>([])
   const [aGeocodificar, setAGeocodificar] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
+  const [procura, setProcura] = useState('')
+  const [aProcurar, setAProcurar] = useState(false)
+  const [candidatos, setCandidatos] = useState<
+    { lat: number; lng: number; moradaResolvida: string; categoria: string }[] | null
+  >(null)
+
+  async function procurarLocal(): Promise<void> {
+    if (!procura.trim()) return
+    setAProcurar(true)
+    try {
+      setCandidatos(await window.api.geo.procurar(procura))
+    } finally {
+      setAProcurar(false)
+    }
+  }
 
   const carregar = useCallback(async () => {
     setDelegados(await window.api.delegados.listar(true))
@@ -190,7 +205,7 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
                     </div>
                     <div className="linha-campos">
                       <label className="campo">
-                        Telefone
+                        Telefone (opcional)
                         <input
                           type="text"
                           value={formulario.telefone ?? ''}
@@ -198,7 +213,7 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
                         />
                       </label>
                       <label className="campo">
-                        Email
+                        Email (opcional)
                         <input
                           type="email"
                           value={formulario.email ?? ''}
@@ -261,6 +276,60 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
                         )}
                       </div>
                     </div>
+                    <div className="pilha" style={{ borderTop: '1px solid var(--borda)', paddingTop: 10 }}>
+                      <div className="silencioso">
+                        Cole aqui o link do Google Maps da casa do delegado — ou escreva a localidade e
+                        escolha o resultado.
+                      </div>
+                      <div className="linha">
+                        <input
+                          type="search"
+                          placeholder="link do Google Maps, ou Rua X, Braga"
+                          value={procura}
+                          onChange={(e) => setProcura(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void procurarLocal()
+                          }}
+                        />
+                        <button
+                          className="botao"
+                          disabled={aProcurar || !procura.trim()}
+                          onClick={procurarLocal}
+                        >
+                          {aProcurar ? 'A procurar…' : 'Procurar'}
+                        </button>
+                      </div>
+                      {candidatos?.length === 0 && (
+                        <div className="silencioso">
+                          Nada encontrado. Tente a localidade, ou cole o link do Google Maps.
+                        </div>
+                      )}
+                      {candidatos?.map((cand, i) => (
+                        <div key={i} className="linha">
+                          <span style={{ flex: '1 1 auto' }}>
+                            {cand.moradaResolvida}{' '}
+                            <span className="silencioso">({cand.categoria})</span>
+                          </span>
+                          <button
+                            className="botao pequeno primario"
+                            onClick={() => {
+                              setFormulario((f) => ({
+                                ...f,
+                                lat: cand.lat,
+                                lng: cand.lng,
+                                morada: f.morada || cand.moradaResolvida,
+                                coordsManuais: true
+                              }))
+                              setCandidatos(null)
+                              setProcura('')
+                            }}
+                          >
+                            Usar este
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
                     <div style={{ height: 240, display: 'flex' }}>
                       <Mapa
                         tilesUrl={tilesUrl}
