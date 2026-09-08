@@ -344,6 +344,12 @@ export interface ResultadoAtualizacao {
   atualizados: number
   alertas: Alerta[]
   erros: string[]
+  /** Recintos novos que ficaram com ponto no mapa nesta atualização. */
+  recintosLocalizados: number
+  /** Recintos que continuam sem coordenadas e precisam de mão humana. */
+  recintosPorLocalizar: number
+  /** Recintos localizados automaticamente, à espera de confirmação visual. */
+  recintosPorConfirmar: number
 }
 
 export interface ProgressoSincronizacao {

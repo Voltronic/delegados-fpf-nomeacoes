@@ -80,7 +80,7 @@ export default function App(): JSX.Element {
             <div className="barra-progresso">
               <i style={{ width: `${progresso.total ? (progresso.atual / progresso.total) * 100 : 0}%` }} />
             </div>
-            <div className="etapa">A atualizar jogos…</div>
+            <div className="etapa">A atualizar…</div>
             <div className="detalhe">{progresso.etapa}</div>
             <div className="detalhe">
               {progresso.atual} de {progresso.total}

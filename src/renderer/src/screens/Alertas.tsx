@@ -43,10 +43,17 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
       const r = await window.api.sync.agora()
       setEstado({ aCorrer: false, ultima: r })
       aoMudar(await window.api.alertas.listar(false))
+      const partes = [
+        `${r.criados} jogos novos`,
+        `${r.atualizados} atualizados`,
+        `${r.alertas.length} alertas`
+      ]
+      if (r.recintosLocalizados > 0) partes.push(`${r.recintosLocalizados} recintos localizados`)
+      if (r.recintosPorLocalizar > 0) partes.push(`${r.recintosPorLocalizar} recintos por localizar à mão`)
       setMensagem(
-        r.alertas.length === 0 && r.criados === 0
+        r.alertas.length === 0 && r.criados === 0 && r.recintosLocalizados === 0
           ? 'Já estava tudo em dia — nada foi alterado.'
-          : `${r.criados} jogos novos, ${r.atualizados} atualizados, ${r.alertas.length} alertas.`
+          : `${partes.join(', ')}.`
       )
     } catch (e) {
       setMensagem(`A atualização falhou: ${(e as Error).message}`)
@@ -109,9 +116,17 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
         )}
 
         <div className="silencioso" style={{ marginBottom: 12 }}>
-          Os jogos futuros são atualizados no arranque e de hora a hora. Jogos sem alterações não são
-          tocados; o que muda aparece aqui.
+          Os jogos futuros são atualizados no arranque e de hora a hora, e os recintos novos são
+          localizados a seguir. Jogos sem alterações não são tocados; o que muda aparece aqui.
         </div>
+
+        {estado.ultima && estado.ultima.recintosPorConfirmar > 0 && (
+          <div className="aviso-caixa alerta">
+            {estado.ultima.recintosPorConfirmar} recintos foram localizados automaticamente e estão por
+            confirmar. Vale a pena vê-los no mapa em <b>Clubes e recintos → Recintos</b> — todos os
+            quilómetros dependem destes pontos.
+          </div>
+        )}
 
         {visiveis.length === 0 ? (
           <div className="vazio">

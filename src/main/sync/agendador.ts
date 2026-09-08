@@ -11,6 +11,7 @@ import * as repos from '../db/repos'
 import type { EntradaAlerta } from '../db/repos'
 import { ClienteFpf } from '../fpf/cliente'
 import { chavesPendentes, sincronizar } from '../fpf/sincronizacao'
+import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { obterConfiguracaoMotor } from '../engine/servico'
 
 const INTERVALO_MS = 60 * 60 * 1000
@@ -159,10 +160,11 @@ export async function atualizarJogos(
     criados: 0,
     atualizados: 0,
     alertas: [],
-    erros: []
+    erros: [],
+    recintosLocalizados: 0,
+    recintosPorLocalizar: 0,
+    recintosPorConfirmar: 0
   }
-  if (!competicoes.length) return resultado
-
   // Uma sincronização por época, porque o seasonId faz parte do pedido.
   const porEpoca = new Map<number, typeof competicoes>()
   for (const c of competicoes) {
@@ -204,6 +206,24 @@ export async function atualizarJogos(
   }
 
   resultado.alertas = repos.criarAlertas(entradas)
+
+  // Um recinto sem coordenadas não tem distâncias, e sem distâncias o motor não
+  // ordena ninguém — não faz sentido deixar isto à espera de alguém se lembrar
+  // de carregar num botão. Cada recinto só é procurado uma vez.
+  if (repos.recintosSemCoordenadas().length) {
+    const geo = await geocodificarRecintosEmFalta((p) =>
+      progresso({
+        etapa: p.recinto ? `A localizar recintos — ${p.recinto}` : 'Recintos',
+        atual: p.atual,
+        total: p.total,
+        concluido: p.concluido
+      })
+    )
+    resultado.recintosLocalizados = geo.localizados
+    resultado.recintosPorLocalizar = geo.falhados.length
+    resultado.recintosPorConfirmar = geo.porConfirmar
+  }
+
   ultimaAtualizacao = resultado
   return resultado
 }
@@ -234,7 +254,10 @@ export function iniciarAgendador(cliente: () => ClienteFpf): void {
         criados: 0,
         atualizados: 0,
         alertas: [],
-        erros: [(erro as Error).message]
+        erros: [(erro as Error).message],
+        recintosLocalizados: 0,
+        recintosPorLocalizar: 0,
+        recintosPorConfirmar: 0
       } satisfies ResultadoAtualizacao)
     } finally {
       aCorrer = false

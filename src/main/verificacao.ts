@@ -15,6 +15,7 @@ import { candidatosParaJogo, nomear, propostaAutomatica } from './engine/servico
 import { ClienteFpf } from './fpf/cliente'
 import { parseDetalhesCompeticao, parseEpocas, parseJogosJornada, parseOrganizacoes } from './fpf/parsers'
 import { importarCsv, sincronizar } from './fpf/sincronizacao'
+import { atualizarJogos } from './sync/agendador'
 
 const verde = (t: string): string => t
 const vermelho = (t: string): string => t
@@ -390,6 +391,29 @@ async function principal(): Promise<void> {
     verificar('lista os alertas por ler', repos.listarAlertas(true).length === 1)
     repos.marcarTodosAlertasLidos()
     verificar('marcar como lido limpa a lista de por ler', repos.listarAlertas(true).length === 0)
+
+    log('\n12. Recintos localizados sozinhos após a atualização')
+    // Sem competições ativas a sincronização não faz nada, o que deixa este
+    // teste rápido e prova que os recintos são tratados na mesma.
+    for (const comp of repos.listarCompeticoes()) {
+      repos.guardarCompeticao({ ...comp, ativa: false })
+    }
+    const semCoords = repos.encontrarOuCriarRecinto('Campo Da Mata')
+    verificar('há um recinto por localizar', repos.recintosSemCoordenadas().length >= 1)
+
+    const atualizacao = await atualizarJogos(new ClienteFpf({ baseUrl: 'https://resultados.fpf.pt' }))
+    verificar(
+      'a atualização localiza os recintos sem que ninguém carregue num botão',
+      atualizacao.recintosLocalizados >= 1,
+      `→ ${atualizacao.recintosLocalizados} localizados`
+    )
+    const corrigido = repos.obterRecinto(semCoords.id)
+    verificar(
+      'a correção confirmada é aplicada sem consultar ninguém',
+      corrigido?.lat != null && Math.abs(corrigido.lat - 39.4034078) < 0.001,
+      `→ ${corrigido?.lat}, ${corrigido?.lng} (${corrigido?.morada})`
+    )
+    verificar('fica marcado como confirmado', corrigido?.confirmado === true)
   } finally {
     rmSync(pasta, { recursive: true, force: true })
   }

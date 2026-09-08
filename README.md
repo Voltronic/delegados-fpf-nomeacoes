@@ -136,8 +136,10 @@ assinala-o claramente.
 
 ### Localizar os recintos
 
-Os jogos importados trazem o nome do recinto mas não as coordenadas, e sem elas não há distâncias. O
-ecrã **Clubes e recintos → Recintos** localiza todos de uma vez.
+Os jogos importados trazem o nome do recinto mas não as coordenadas, e sem elas não há distâncias.
+A atualização automática trata disso sozinha, logo a seguir a trazer os jogos — no arranque e de hora
+a hora. Cada recinto só é procurado uma vez. Há também um botão em **Clubes e recintos → Recintos**
+para forçar a qualquer momento.
 
 Os nomes que a FPF usa dividem-se em três famílias e só uma se encontra pelo nome: os que trazem o
 local ("Estádio Municipal Marco De Canaveses"), os que têm nome de pessoa ("Estádio Carlos Osório") e
