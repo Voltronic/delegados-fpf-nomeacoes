@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { Competicao, ConfiguracaoMotor, NivelDelegado } from '@shared/tipos'
-import type { InfoAplicacao } from '@shared/api'
+import type { CopiaSegurancaApi, InfoAplicacao } from '@shared/api'
 import { guardarCom } from '../lib/avisos'
 
 export default function Definicoes(): JSX.Element {
   const [config, setConfig] = useState<ConfiguracaoMotor | null>(null)
   const [competicoes, setCompeticoes] = useState<Competicao[]>([])
   const [info, setInfo] = useState<InfoAplicacao | null>(null)
+  const [copias, setCopias] = useState<CopiaSegurancaApi[]>([])
   const [guardado, setGuardado] = useState(false)
   const [syncAutomatico, setSyncAutomatico] = useState(true)
 
@@ -14,6 +15,7 @@ export default function Definicoes(): JSX.Element {
     void window.api.config.motor().then(setConfig)
     void window.api.competicoes.listar().then(setCompeticoes)
     void window.api.app.info().then(setInfo)
+    void window.api.app.copias().then(setCopias)
     void window.api.config.ler('sync.automatico').then((v) => setSyncAutomatico(v !== 'false'))
   }, [])
 
@@ -247,13 +249,62 @@ export default function Definicoes(): JSX.Element {
               <div className="silencioso">Base de dados</div>
               <code className="mono">{info?.caminhoBaseDados}</code>
             </div>
-            <div className="silencioso">
-              É gravada uma cópia de segurança (<code>.bak</code>) a cada arranque. Para levar tudo para outro
-              computador, copie a pasta inteira da aplicação.
+            <div>
+              <div className="silencioso">Esquema da base de dados</div>
+              <span>
+                versão {info?.versaoEsquema}
+                {info && info.versaoEsquema < info.versaoEsquemaConhecida && (
+                  <> · por atualizar para {info.versaoEsquemaConhecida}</>
+                )}
+              </span>
+              <div className="silencioso">
+                Ao instalar uma versão nova da aplicação por cima desta pasta, as alterações à base de dados
+                são aplicadas sozinhas no arranque — não é preciso recomeçar nem substituir o ficheiro.
+              </div>
             </div>
+            <div>
+              <div className="silencioso">Cópias de segurança</div>
+              <code className="mono">{info?.pastaCopias}</code>
+            </div>
+            <div className="silencioso">
+              É gravada uma cópia a cada arranque, antes de qualquer alteração, e guardam-se as 10 mais
+              recentes. Ficam fora da pasta da aplicação de propósito: essa pasta é substituída a cada versão
+              nova, e uma cópia lá dentro desaparecia com ela. Para repor, feche a aplicação e substitua o
+              ficheiro da base de dados pela cópia escolhida.
+            </div>
+            {copias.length > 0 && (
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Cópia</th>
+                    <th className="num">Tamanho</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {copias.map((copia) => (
+                    <tr key={copia.ficheiro}>
+                      <td className="mono">{copia.ficheiro}</td>
+                      <td className="num">{Math.max(1, Math.round(copia.bytes / 1024))} KB</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             <div className="linha">
               <button className="botao" onClick={() => window.api.app.abrirPastaDados()}>
                 Abrir pasta de dados
+              </button>
+              <button className="botao" onClick={() => window.api.app.abrirPastaCopias()}>
+                Abrir pasta de cópias
+              </button>
+              <button
+                className="botao"
+                onClick={async () => {
+                  const lista = await guardarCom(() => window.api.app.criarCopia(), 'Cópia de segurança criada.')
+                  if (lista) setCopias(lista)
+                }}
+              >
+                Criar cópia agora
               </button>
               <span className="silencioso">Versão {info?.versao}</span>
             </div>

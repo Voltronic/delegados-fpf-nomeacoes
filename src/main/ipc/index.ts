@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain, powerSaveBlocker, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain, powerSaveBlocker, shell } from 'electron'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type {
   CatalogoFpf,
@@ -17,7 +18,16 @@ import type {
   ProgressoSincronizacao,
   PropostaAutomatica
 } from '@shared/tipos'
-import { escreverConfig, lerConfig } from '../db'
+import {
+  copiaSeguranca,
+  escreverConfig,
+  lerConfig,
+  listarCopiasSeguranca,
+  obterBaseDados,
+  PASTA_COPIAS,
+  versaoConhecida,
+  versaoDoEsquema
+} from '../db'
 import * as repos from '../db/repos'
 import { ClienteFpf } from '../fpf/cliente'
 import {
@@ -26,6 +36,7 @@ import {
   obterCatalogo,
   sincronizar
 } from '../fpf/sincronizacao'
+import { exportarDelegados, importarDelegados } from '../delegados/servico'
 import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
@@ -62,7 +73,11 @@ export function fecharCliente(): void {
   clienteFpf = null
 }
 
-export function registarIpc(contexto: { versao: string; caminhoBaseDados: string }): void {
+export function registarIpc(contexto: {
+  versao: string
+  caminhoBaseDados: string
+  pastaCopias?: string
+}): void {
   const registar = <T extends unknown[], R>(canal: string, manipulador: (...args: T) => R | Promise<R>): void => {
     ipcMain.handle(canal, async (_evento, ...args) => manipulador(...(args as T)))
   }
@@ -72,10 +87,24 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
     versao: contexto.versao,
     caminhoBaseDados: contexto.caminhoBaseDados,
     pastaDados: dirname(contexto.caminhoBaseDados),
+    pastaCopias: contexto.pastaCopias ?? PASTA_COPIAS,
+    versaoEsquema: versaoDoEsquema(obterBaseDados()),
+    versaoEsquemaConhecida: versaoConhecida(),
     tilesUrl: lerConfig('mapa.tilesUrl') ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
   }))
   registar('app:abrirPastaDados', async () => {
     await shell.openPath(dirname(contexto.caminhoBaseDados))
+  })
+  registar('app:copias', () => listarCopiasSeguranca(contexto.pastaCopias ?? PASTA_COPIAS))
+  registar('app:criarCopia', () => {
+    const destino = copiaSeguranca(obterBaseDados(), contexto.pastaCopias ?? PASTA_COPIAS)
+    if (!destino) throw new Error('Não foi possível criar a cópia de segurança.')
+    return listarCopiasSeguranca(contexto.pastaCopias ?? PASTA_COPIAS)
+  })
+  registar('app:abrirPastaCopias', async () => {
+    const pasta = contexto.pastaCopias ?? PASTA_COPIAS
+    mkdirSync(pasta, { recursive: true })
+    await shell.openPath(pasta)
   })
 
   // -- Delegados ------------------------------------------------------------
@@ -92,6 +121,22 @@ export function registarIpc(contexto: { versao: string; caminhoBaseDados: string
   })
 
   registar('delegados:apagar', (id: number) => repos.apagarDelegado(id))
+
+  registar('delegados:exportar', () => exportarDelegados())
+  registar('delegados:importar', (conteudo: string) => importarDelegados(conteudo))
+  /** Grava a exportação num ficheiro à escolha do utilizador. */
+  registar('delegados:gravarFicheiro', async (): Promise<string | null> => {
+    const conteudo = exportarDelegados()
+    const hoje = new Date().toISOString().slice(0, 10)
+    const escolha = await dialog.showSaveDialog({
+      title: 'Guardar delegados',
+      defaultPath: `delegados-${hoje}.json`,
+      filters: [{ name: 'Delegados (JSON)', extensions: ['json'] }]
+    })
+    if (escolha.canceled || !escolha.filePath) return null
+    writeFileSync(escolha.filePath, conteudo, 'utf8')
+    return escolha.filePath
+  })
 
   registar('delegados:geocodificar', async (id: number) => {
     const delegado = repos.obterDelegado(id)

@@ -58,7 +58,24 @@ export interface InfoAplicacao {
   versao: string
   caminhoBaseDados: string
   pastaDados: string
+  pastaCopias: string
+  /** Versão do esquema desta base de dados e a que o executável conhece. */
+  versaoEsquema: number
+  versaoEsquemaConhecida: number
   tilesUrl: string
+}
+
+export interface ResultadoImportacaoDelegadosApi {
+  criados: number
+  atualizados: number
+  vetosSemClube: string[]
+}
+
+export interface CopiaSegurancaApi {
+  ficheiro: string
+  caminho: string
+  bytes: number
+  criadaEm: string
 }
 
 export interface ResultadoImportacaoCsvApi {
@@ -84,6 +101,11 @@ export interface Api {
   app: {
     info(): Promise<InfoAplicacao>
     abrirPastaDados(): Promise<void>
+    /** Cópias de segurança existentes, da mais recente para a mais antiga. */
+    copias(): Promise<CopiaSegurancaApi[]>
+    /** Cópia imediata, além da que é feita em cada arranque. */
+    criarCopia(): Promise<CopiaSegurancaApi[]>
+    abrirPastaCopias(): Promise<void>
   }
 
   geo: {
@@ -102,6 +124,12 @@ export interface Api {
     vetos(delegadoId: number): Promise<VetoClube[]>
     criarVeto(dados: { delegadoId: number; clubeId: number; motivo: string | null }): Promise<VetoClube[]>
     apagarVeto(id: number, delegadoId: number): Promise<VetoClube[]>
+    /** Conteúdo do ficheiro de delegados, para guardar fora da aplicação. */
+    exportar(): Promise<string>
+    /** Repõe delegados de um ficheiro exportado; nunca apaga os que faltarem. */
+    importar(conteudo: string): Promise<ResultadoImportacaoDelegadosApi>
+    /** Abre a janela de gravação e devolve o caminho escolhido (ou `null`). */
+    gravarFicheiro(): Promise<string | null>
   }
 
   clubes: {

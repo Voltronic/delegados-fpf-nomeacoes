@@ -15,7 +15,10 @@ const invocar =
 const api = {
   app: {
     info: invocar('app:info'),
-    abrirPastaDados: invocar('app:abrirPastaDados')
+    abrirPastaDados: invocar('app:abrirPastaDados'),
+    copias: invocar('app:copias'),
+    criarCopia: invocar('app:criarCopia'),
+    abrirPastaCopias: invocar('app:abrirPastaCopias')
   },
   geo: {
     procurar: invocar('geo:procurar')
@@ -23,6 +26,9 @@ const api = {
   delegados: {
     listar: invocar('delegados:listar'),
     guardar: invocar('delegados:guardar'),
+    exportar: invocar('delegados:exportar'),
+    importar: invocar('delegados:importar'),
+    gravarFicheiro: invocar('delegados:gravarFicheiro'),
     apagar: invocar('delegados:apagar'),
     geocodificar: invocar('delegados:geocodificar'),
     indisponibilidades: invocar('delegados:indisponibilidades'),

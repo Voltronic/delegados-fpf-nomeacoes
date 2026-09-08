@@ -8,9 +8,21 @@
 import { app } from 'electron'
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { abrirBaseDados, escreverConfig } from './db'
+import { dirname, join } from 'node:path'
+import Database from 'better-sqlite3'
+import {
+  abrirBaseDados,
+  escreverConfig,
+  listarCopiasSeguranca,
+  obterBaseDados,
+  versaoConhecida,
+  versaoDoEsquema
+} from './db'
 import * as repos from './db/repos'
+import { semearRecintos } from './db/semente'
+import { exportarDelegados, importarDelegados } from './delegados/servico'
+import { normalizarNome } from './fpf/html'
+import { RECINTOS_CONHECIDOS } from './geo/recintosConhecidos'
 import { candidatosParaJogo, nomear, propostaAutomatica } from './engine/servico'
 import { ClienteFpf } from './fpf/cliente'
 import { parseDetalhesCompeticao, parseEpocas, parseJogosJornada, parseOrganizacoes } from './fpf/parsers'
@@ -46,10 +58,139 @@ async function principal(): Promise<void> {
 
   try {
     log('\n1. Base de dados e migrações')
-    abrirBaseDados(caminho)
+    // As verificações usam pastas temporárias; as cópias de segurança não
+    // podem ir parar às do utilizador.
+    abrirBaseDados(caminho, { pastaCopias: join(pasta, 'backups'), semearRecintos: false })
     // Distâncias em linha reta, para a verificação não depender de serviços externos.
     escreverConfig('geo.osrmUrl', 'http://127.0.0.1:1')
     verificar('base de dados criada e migrada', repos.listarDelegados().length === 0)
+
+    // Reabrir a base de dados tem de deixar uma cópia de segurança utilizável:
+    // foi a falta de uma que fez perder dados reais.
+    const pastaCopias = join(pasta, 'backups')
+    repos.criarDelegado({
+      numero: '999',
+      nome: 'Delegado da cópia',
+      morada: 'morada de teste',
+      lat: 40,
+      lng: -8,
+      nivel: 'PRINCIPAL',
+      telefone: null,
+      email: null,
+      ativo: true,
+      notas: null,
+      coordsManuais: true
+    })
+    abrirBaseDados(caminho, { pastaCopias, semearRecintos: false })
+    const copias = listarCopiasSeguranca(pastaCopias)
+    verificar(
+      'o arranque deixa uma cópia de segurança fora da pasta da aplicação',
+      copias.length === 1 && !copias[0].caminho.startsWith(dirname(caminho)),
+      `→ ${copias.map((c) => c.ficheiro).join(', ') || 'nenhuma'}`
+    )
+    // A cópia só serve se os dados lá estiverem mesmo: abre-se e conta-se.
+    const daCopia = new Database(copias[0]?.caminho ?? ':memory:', { readonly: true })
+    const naCopia = daCopia.prepare('SELECT COUNT(*) AS n FROM delegado').get() as { n: number }
+    daCopia.close()
+    verificar('a cópia contém os dados que existiam no momento', naCopia.n === 1, `→ ${naCopia.n} delegado(s)`)
+    repos.apagarDelegado(repos.listarDelegados()[0].id)
+
+    // Entregar um executável novo por cima de uma base de dados antiga tem de
+    // ser suficiente: as migrações em falta correm sozinhas, e uma base de
+    // dados de uma versão futura é recusada em vez de ser corrompida.
+    verificar(
+      'o esquema fica na versão que este executável conhece',
+      versaoDoEsquema(obterBaseDados()) === versaoConhecida(),
+      `→ esquema ${versaoDoEsquema(obterBaseDados())} de ${versaoConhecida()}`
+    )
+    const caminhoFuturo = join(pasta, 'data', 'futura.db')
+    const futura = new Database(caminhoFuturo)
+    futura.exec('CREATE TABLE schema_versao (versao INTEGER PRIMARY KEY, aplicada_em TEXT NOT NULL)')
+    futura
+      .prepare('INSERT INTO schema_versao (versao, aplicada_em) VALUES (?, ?)')
+      .run(versaoConhecida() + 1, new Date().toISOString())
+    futura.close()
+    let recusou = ''
+    try {
+      abrirBaseDados(caminhoFuturo, { pastaCopias: join(pasta, 'backups') })
+    } catch (erro) {
+      recusou = (erro as Error).message
+    }
+    verificar(
+      'recusa uma base de dados de uma versão mais recente',
+      recusou.includes('versão mais recente'),
+      `→ ${recusou || 'abriu na mesma'}`
+    )
+    // A ligação anterior continua a valer: a recusa acontece antes de trocar.
+    verificar(
+      'a base de dados em uso não foi trocada pela recusada',
+      repos.listarDelegados(true).length === 0 && versaoDoEsquema(obterBaseDados()) === versaoConhecida()
+    )
+
+    // A semente de recintos confirmados: numa base de dados nova entram todos,
+    // e numa que já exista nunca substitui o que lá está.
+    const caminhoSemente = join(pasta, 'data', 'semente.db')
+    const semente = new Database(caminhoSemente)
+    semente.exec(
+      `CREATE TABLE recinto (
+         id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL,
+         nome_normalizado TEXT NOT NULL UNIQUE, morada TEXT, lat REAL, lng REAL,
+         coords_manuais INTEGER NOT NULL DEFAULT 0, geocodificado_em TEXT,
+         origem_coords TEXT, morada_resolvida TEXT, confianca TEXT,
+         confirmado INTEGER NOT NULL DEFAULT 0)`
+    )
+    const conhecido = RECINTOS_CONHECIDOS[0]
+    const outro = RECINTOS_CONHECIDOS[1]
+    // Um com coordenadas diferentes das da lista: tem de ficar como está.
+    semente
+      .prepare(
+        `INSERT INTO recinto (nome, nome_normalizado, morada, lat, lng, confirmado)
+         VALUES (?, ?, 'morada do coordenador', 1.5, 2.5, 1)`
+      )
+      .run(conhecido.nome, normalizarNome(conhecido.nome))
+    // E outro sem coordenadas nenhumas: esse é para preencher.
+    semente
+      .prepare('INSERT INTO recinto (nome, nome_normalizado) VALUES (?, ?)')
+      .run(outro.nome, normalizarNome(outro.nome))
+
+    const resultadoSemente = semearRecintos(semente)
+    const jaExistia = semente
+      .prepare('SELECT lat, lng, morada FROM recinto WHERE nome_normalizado = ?')
+      .get(normalizarNome(conhecido.nome)) as { lat: number; lng: number; morada: string }
+    const preenchido = semente
+      .prepare('SELECT lat, lng, confirmado FROM recinto WHERE nome_normalizado = ?')
+      .get(normalizarNome(outro.nome)) as { lat: number | null; lng: number | null; confirmado: number }
+    const totalSemeado = (semente.prepare('SELECT COUNT(*) AS n FROM recinto').get() as { n: number }).n
+    const semCoordenadas = (
+      semente.prepare('SELECT COUNT(*) AS n FROM recinto WHERE lat IS NULL').get() as { n: number }
+    ).n
+
+    verificar(
+      'a semente cria os recintos que faltam e conta certo',
+      totalSemeado === RECINTOS_CONHECIDOS.length &&
+        resultadoSemente.criados === RECINTOS_CONHECIDOS.length - 2 &&
+        resultadoSemente.preenchidos === 1,
+      `→ ${totalSemeado} recintos, ${resultadoSemente.criados} criados, ${resultadoSemente.preenchidos} preenchidos`
+    )
+    verificar(
+      'nunca mexe num recinto que já tem coordenadas',
+      jaExistia.lat === 1.5 && jaExistia.lng === 2.5 && jaExistia.morada === 'morada do coordenador',
+      `→ ${jaExistia.lat}, ${jaExistia.lng}`
+    )
+    verificar(
+      'preenche o que existia sem ponto no mapa',
+      preenchido.lat === outro.lat && preenchido.lng === outro.lng && preenchido.confirmado === 1
+    )
+    verificar('não fica nenhum recinto por localizar', semCoordenadas === 0, `→ ${semCoordenadas} sem coordenadas`)
+    // Arrancar outra vez não pode voltar a mexer em nada.
+    const segundaSemente = semearRecintos(semente)
+    verificar(
+      'arrancar outra vez não repete nem duplica',
+      segundaSemente.criados === 0 &&
+        segundaSemente.preenchidos === 0 &&
+        (semente.prepare('SELECT COUNT(*) AS n FROM recinto').get() as { n: number }).n === totalSemeado
+    )
+    semente.close()
 
     log('\n2. Delegados, clubes e recintos')
     const delegados = [
@@ -228,6 +369,31 @@ async function principal(): Promise<void> {
       comBloqueios.find((c) => c.nome === 'Delegado Lisboa')?.bloqueios[0]?.codigo === 'VETO_CLUBE'
     )
     verificar('bloqueados vão para o fim', !comBloqueios[0].bloqueios.length)
+
+    log('\n6b. Exportação e importação de delegados')
+    const ficheiro = exportarDelegados()
+    const antes = repos.listarDelegados(true).length
+    // Reimportar o mesmo ficheiro tem de ser inofensivo: atualiza, não duplica.
+    const repetida = importarDelegados(ficheiro)
+    verificar(
+      'reimportar o mesmo ficheiro não duplica ninguém',
+      repos.listarDelegados(true).length === antes && repetida.criados === 0,
+      `→ ${repetida.criados} criados, ${repetida.atualizados} atualizados`
+    )
+    verificar(
+      'indisponibilidades e vetos sobrevivem à ida e volta',
+      repos.listarIndisponibilidades(delegados[2].id).length === 1 &&
+        repos.listarVetos(delegados[3].id).length === 1
+    )
+    // Um delegado apagado por engano volta do ficheiro, com tudo o que tinha.
+    repos.apagarDelegado(delegados[3].id)
+    const reposto = importarDelegados(ficheiro)
+    const voltou = repos.listarDelegados(true).find((d) => d.nome === 'Delegado Lisboa')
+    verificar(
+      'um delegado apagado volta do ficheiro',
+      reposto.criados === 1 && !!voltou && repos.listarVetos(voltou.id).length === 1,
+      `→ ${reposto.criados} criado(s), ${voltou ? repos.listarVetos(voltou.id).length : 0} veto(s)`
+    )
 
     log('\n7. Proposta automática')
     const { propostas: proposta, semSugestao } = await propostaAutomatica(jogoIds)

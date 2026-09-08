@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Clube, Delegado, Indisponibilidade, NivelDelegado, VetoClube } from '@shared/tipos'
 import Mapa from '../components/Mapa'
 import { classes, formatarData } from '../lib/formato'
-import { avisar, guardarCom } from '../lib/avisos'
+import { avisar, guardarCom, mensagemDeErro } from '../lib/avisos'
 
 const VAZIO: Omit<Delegado, 'id'> = {
   numero: '',
@@ -122,6 +122,33 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
 
   const semCoordenadas = delegados.filter((d) => d.ativo && (d.lat == null || d.lng == null)).length
 
+  /**
+   * Guardar a lista fora da aplicação é a única defesa real contra perder a
+   * pasta de dados — e a pasta da aplicação é substituída a cada versão nova.
+   */
+  async function exportar(): Promise<void> {
+    try {
+      const caminho = await window.api.delegados.gravarFicheiro()
+      if (caminho) avisar(`${delegados.length} delegados guardados em ${caminho}`)
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+    }
+  }
+
+  async function importar(ficheiro: File): Promise<void> {
+    try {
+      const resultado = await window.api.delegados.importar(await ficheiro.text())
+      await carregar()
+      const partes = [`${resultado.criados} criados`, `${resultado.atualizados} atualizados`]
+      if (resultado.vetosSemClube.length > 0) {
+        partes.push(`vetos por repor (clube desconhecido): ${resultado.vetosSemClube.join(', ')}`)
+      }
+      avisar(partes.join(' · '))
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+    }
+  }
+
   return (
     <>
       <div className="cabecalho-ecra">
@@ -131,6 +158,22 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
           {semCoordenadas > 0 && ` · ${semCoordenadas} sem morada geocodificada`}
         </div>
         <div className="espacador" />
+        <button className="botao" onClick={exportar}>
+          Exportar
+        </button>
+        <label className="botao" style={{ marginRight: 8 }}>
+          Importar
+          <input
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const ficheiro = e.target.files?.[0]
+              e.target.value = ''
+              if (ficheiro) void importar(ficheiro)
+            }}
+          />
+        </label>
         <button className="botao primario" onClick={() => setSelecionado('novo')}>
           Novo delegado
         </button>

@@ -1,7 +1,12 @@
-import { existsSync, mkdirSync, copyFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import Database from 'better-sqlite3'
 import { MIGRACOES } from './schema'
+import { semearRecintos } from './semente'
+import * as COPIAS from './copias'
+import { PASTA_COPIAS } from './copias'
+
+export { MAX_COPIAS, PASTA_COPIAS } from './copias'
 import { PESOS_POR_OMISSAO } from '../engine/pesos'
 
 let db: Database.Database | null = null
@@ -14,10 +19,17 @@ export function caminhoBaseDados(raizPortatil: string): string {
   return join(raizPortatil, 'data', 'delegados.db')
 }
 
-export function abrirBaseDados(caminho: string): Database.Database {
+export interface OpcoesBaseDados {
+  /** Onde ficam as cópias de segurança. As verificações usam pastas próprias. */
+  pastaCopias?: string
+  /** Semear os recintos já confirmados. Desligado nas verificações, que montam os seus. */
+  semearRecintos?: boolean
+}
+
+export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): Database.Database {
+  const { pastaCopias = PASTA_COPIAS, semearRecintos: comRecintos = true } = opcoes
   mkdirSync(dirname(caminho), { recursive: true })
   const existia = existsSync(caminho)
-  if (existia) copiaSeguranca(caminho)
 
   const conn = new Database(caminho)
   conn.pragma('journal_mode = WAL')
@@ -26,26 +38,100 @@ export function abrirBaseDados(caminho: string): Database.Database {
   // energia pode perder a última transação) e evita um fsync por escrita —
   // é a diferença entre uma importação fluida e a interface a engasgar.
   conn.pragma('synchronous = NORMAL')
+  // Antes das migrações: se alguma correr mal, a cópia é de um estado bom.
+  if (existia) copiaSeguranca(conn, pastaCopias)
   aplicarMigracoes(conn)
   semearConfiguracao(conn)
+  // Recintos já confirmados: entram numa base de dados nova, e numa que já
+  // exista só preenchem o que estiver em falta.
+  if (comRecintos) {
+    const semente = semearRecintos(conn)
+    if (semente.criados || semente.preenchidos) {
+      console.log(`Recintos conhecidos: ${semente.criados} criados, ${semente.preenchidos} preenchidos`)
+    }
+  }
   db = conn
   return conn
 }
 
-/** Guarda uma cópia da BD antes de cada arranque (mantém a última). */
-function copiaSeguranca(caminho: string): void {
+/**
+ * Guarda uma cópia da base de dados a cada arranque e mantém as `MAX_COPIAS` mais
+ * recentes. Usa `VACUUM INTO`, que produz um ficheiro coerente com o WAL
+ * já incorporado — copiar o ficheiro à mão podia deixar de fora as últimas
+ * transações, que vivem no `-wal`.
+ */
+export function copiaSeguranca(conn: Database.Database, pasta = PASTA_COPIAS): string | null {
   try {
-    copyFileSync(caminho, `${caminho}.bak`)
+    mkdirSync(pasta, { recursive: true })
+    const destino = join(pasta, COPIAS.nomeDaCopia())
+    if (!existsSync(destino)) conn.prepare('VACUUM INTO ?').run(destino)
+    for (const nome of COPIAS.copiasAApagar(readdirSync(pasta))) {
+      try {
+        rmSync(join(pasta, nome), { force: true })
+      } catch {
+        /* se o ficheiro estiver bloqueado, fica para a próxima */
+      }
+    }
+    return destino
   } catch (erro) {
+    // Uma cópia falhada nunca pode impedir a aplicação de abrir.
     console.warn('Não foi possível criar cópia de segurança da base de dados:', erro)
+    return null
   }
 }
 
+export interface CopiaSegurancaInfo {
+  ficheiro: string
+  caminho: string
+  bytes: number
+  criadaEm: string
+}
+
+export function listarCopiasSeguranca(pasta = PASTA_COPIAS): CopiaSegurancaInfo[] {
+  if (!existsSync(pasta)) return []
+  return COPIAS.copiasPorData(readdirSync(pasta)).map((ficheiro) => {
+    const caminho = join(pasta, ficheiro)
+    const info = statSync(caminho)
+    return { ficheiro, caminho, bytes: info.size, criadaEm: info.mtime.toISOString() }
+  })
+}
+
+/** Erro com uma explicação que se pode mostrar ao utilizador tal como está. */
+export class ErroBaseDados extends Error {}
+
+export function versaoDoEsquema(conn: Database.Database): number {
+  const linha = conn.prepare('SELECT MAX(versao) AS v FROM schema_versao').get() as { v: number | null }
+  return linha?.v ?? 0
+}
+
+/** A versão que esta compilação da aplicação sabe produzir. */
+export function versaoConhecida(): number {
+  return MIGRACOES.reduce((maior, m) => Math.max(maior, m.versao), 0)
+}
+
+/**
+ * Leva o esquema até à versão desta compilação. É isto que permite entregar um
+ * executável novo por cima de uma base de dados antiga: as migrações em falta
+ * correm sozinhas no arranque, uma a uma, cada uma na sua transação. Repetir o
+ * arranque não repete nada — o que já foi aplicado fica registado.
+ */
 function aplicarMigracoes(conn: Database.Database): void {
   conn.exec('CREATE TABLE IF NOT EXISTS schema_versao (versao INTEGER PRIMARY KEY, aplicada_em TEXT NOT NULL)')
   const aplicadas = new Set(
     conn.prepare('SELECT versao FROM schema_versao').all().map((l) => (l as { versao: number }).versao)
   )
+
+  // Base de dados de uma versão mais recente do que o executável: parar já. Se
+  // continuássemos, escrevíamos com o esquema antigo por cima de dados novos.
+  const jaAplicada = versaoDoEsquema(conn)
+  if (jaAplicada > versaoConhecida()) {
+    throw new ErroBaseDados(
+      `Esta base de dados foi criada por uma versão mais recente da aplicação ` +
+        `(esquema ${jaAplicada}; este executável conhece até ${versaoConhecida()}). ` +
+        `Instale a versão mais recente — abrir assim corromperia os dados.`
+    )
+  }
+
   for (const migracao of MIGRACOES) {
     if (aplicadas.has(migracao.versao)) continue
     const correr = conn.transaction(() => {
@@ -54,7 +140,16 @@ function aplicarMigracoes(conn: Database.Database): void {
         .prepare('INSERT INTO schema_versao (versao, aplicada_em) VALUES (?, ?)')
         .run(migracao.versao, new Date().toISOString())
     })
-    correr()
+    try {
+      correr()
+    } catch (erro) {
+      // A transação já reverteu esta migração; o resto da base de dados está
+      // como estava. Vale mais parar do que continuar com o esquema a meio.
+      throw new ErroBaseDados(
+        `A atualização da base de dados falhou na migração ${migracao.versao} ` +
+          `(${migracao.descricao}): ${(erro as Error).message}`
+      )
+    }
     console.log(`Migração ${migracao.versao} aplicada: ${migracao.descricao}`)
   }
 }

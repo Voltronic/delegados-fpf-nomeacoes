@@ -1,6 +1,6 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join, dirname } from 'node:path'
-import { abrirBaseDados, caminhoBaseDados } from './db'
+import { abrirBaseDados, caminhoBaseDados, PASTA_COPIAS } from './db'
 import { clienteFpfPartilhado, fecharCliente, registarIpc } from './ipc'
 import { iniciarAgendador, pararAgendador } from './sync/agendador'
 
@@ -59,8 +59,23 @@ function criarJanela(): void {
 
 app.whenReady().then(() => {
   const caminho = caminhoBaseDados(raizPortatil())
-  abrirBaseDados(caminho)
-  registarIpc({ versao: app.getVersion(), caminhoBaseDados: caminho })
+  try {
+    // Abrir a base de dados aplica as migrações em falta. É assim que um
+    // executável novo pega numa base de dados antiga sem ninguém fazer nada.
+    abrirBaseDados(caminho)
+  } catch (erro) {
+    // Sem base de dados não há aplicação; o que se pode fazer é explicar o que
+    // aconteceu e dizer onde estão as cópias, em vez de fechar em silêncio.
+    dialog.showErrorBox(
+      'Não foi possível abrir a base de dados',
+      `${(erro as Error).message}\n\n` +
+        `Base de dados: ${caminho}\n` +
+        `Cópias de segurança: ${PASTA_COPIAS}`
+    )
+    app.exit(1)
+    return
+  }
+  registarIpc({ versao: app.getVersion(), caminhoBaseDados: caminho, pastaCopias: PASTA_COPIAS })
 
   criarJanela()
   iniciarAgendador(clienteFpfPartilhado)

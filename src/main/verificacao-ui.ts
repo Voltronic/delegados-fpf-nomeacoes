@@ -102,7 +102,9 @@ function semear(): void {
 app.whenReady().then(async () => {
   const pasta = mkdtempSync(join(tmpdir(), 'delegados-ui-'))
   const caminho = join(pasta, 'data', 'teste.db')
-  abrirBaseDados(caminho)
+  // As verificações usam pastas temporárias; as cópias de segurança não
+  // podem ir parar às do utilizador.
+  abrirBaseDados(caminho, { pastaCopias: join(pasta, 'backups'), semearRecintos: false })
   escreverConfig('geo.osrmUrl', 'http://127.0.0.1:1') // distâncias em linha reta
   semear()
   registarIpc({ versao: app.getVersion(), caminhoBaseDados: caminho })

@@ -196,5 +196,38 @@ pontuados, o que o torna testável em isolamento. Acrescentar um critério novo 
 
 ### Onde ficam os dados
 
-Em `data/delegados.db`, ao lado do executável. É gravada uma cópia (`.bak`) a cada arranque. Para
-levar tudo para outro computador, copiar a pasta inteira.
+Em `data/delegados.db`, **ao lado do executável** — ou seja, em `release/data/delegados.db` na
+compilação portátil. Para levar tudo para outro computador, copiar a pasta inteira.
+
+> **Nunca apagar `release/` nem `data/`.** Não são apenas saída de compilação: contêm os dados reais
+> do coordenador. O `electron-builder` escreve por cima do que precisa sem que seja preciso limpar
+> nada antes. Já se perdeu uma base de dados assim.
+
+### Cópias de segurança
+
+Ficam em `C:\Temp\delegados-fpf-nomeacoes\backups`, de propósito **fora** da pasta da aplicação:
+essa pasta é substituída a cada versão nova, e uma cópia lá dentro desaparecia com ela. É gravada uma
+cópia a cada arranque, antes de qualquer migração, e guardam-se as 10 mais recentes. O ecrã de
+Definições mostra a pasta e a lista, e permite criar uma cópia a qualquer momento.
+
+Para repor: fechar a aplicação e substituir `data/delegados.db` pela cópia escolhida (apagando também
+os ficheiros `-wal` e `-shm` que estejam ao lado).
+
+### Atualizar a versão do coordenador
+
+Para entregar uma versão nova basta **substituir o executável** e manter a pasta `data/` onde está.
+No arranque, a aplicação leva a base de dados existente até ao esquema da versão nova, aplicando as
+migrações em falta uma a uma — sem intervenção de ninguém e sem recomeçar do zero. A versão do
+esquema aparece em **Definições**.
+
+Antes de aplicar seja o que for é gravada uma cópia de segurança. Se uma migração falhar, é revertida
+inteira e a aplicação explica o que aconteceu em vez de abrir com o esquema a meio. Uma base de dados
+criada por uma versão **mais recente** do que o executável é recusada, para não ser corrompida por
+uma versão antiga.
+
+### Delegados em ficheiro
+
+O ecrã de Delegados exporta e importa a lista completa em JSON — morada, coordenadas, nível,
+contactos, notas, indisponibilidades e clubes vetados. É a defesa que não depende de pasta nenhuma:
+guardar esse ficheiro fora do computador repõe tudo em segundos. A importação usa o número do
+delegado como chave (atualiza quem existe, cria quem falta) e nunca apaga quem não vier no ficheiro.
