@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CORRECOES, correcaoParaRecinto } from '../src/main/geo/correcoes'
+import { eRecintoPorIndicar } from '../src/main/fpf/recintoPorIndicar'
 
 /**
  * Os nomes à esquerda são exatamente os que estão gravados na base de dados do
@@ -49,5 +50,27 @@ describe('correções confirmadas de recintos', () => {
       expect(c.lng, c.nome).toBeGreaterThan(-31.5)
       expect(c.lng, c.nome).toBeLessThan(-6)
     }
+  })
+})
+
+describe('recintos por indicar', () => {
+  it('reconhece o marcador que a FPF usa quando o local não está decidido', () => {
+    expect(eRecintoPorIndicar('Recinto A Indicar')).toBe(true)
+    expect(eRecintoPorIndicar('RECINTO A INDICAR')).toBe(true)
+    expect(eRecintoPorIndicar('A Designar')).toBe(true)
+    expect(eRecintoPorIndicar('Sem recinto')).toBe(true)
+  })
+
+  it('trata a ausência de texto como sem recinto', () => {
+    expect(eRecintoPorIndicar(null)).toBe(true)
+    expect(eRecintoPorIndicar('')).toBe(true)
+    expect(eRecintoPorIndicar('   ')).toBe(true)
+  })
+
+  it('não confunde recintos verdadeiros com o marcador', () => {
+    expect(eRecintoPorIndicar('Estádio Municipal de Vila Meã')).toBe(false)
+    expect(eRecintoPorIndicar('Campo da Mata')).toBe(false)
+    // Um recinto que por acaso tenha "indicar" no nome continua a ser recinto.
+    expect(eRecintoPorIndicar('Campo do Indicador')).toBe(false)
   })
 })

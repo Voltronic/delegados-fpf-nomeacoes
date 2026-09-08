@@ -236,7 +236,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   <div className="equipas">
                     {j.clubeCasaNome} <span className="silencioso">×</span> {j.clubeForaNome}
                   </div>
-                  <div className="local">{j.recintoNome ?? 'recinto por definir'}</div>
+                  <div className="local">{j.recintoNome ?? 'recinto por indicar'}</div>
                   {j.nomeacoes.length > 0 && (
                     <div className="chips">
                       {j.nomeacoes.map((n) => (
@@ -266,7 +266,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                       {jogo.clubeCasaNome} × {jogo.clubeForaNome}
                     </b>
                     <div className="silencioso">
-                      {formatarDataHora(jogo.dataHora)} · {jogo.recintoNome ?? 'recinto por definir'}
+                      {formatarDataHora(jogo.dataHora)} · {jogo.recintoNome ?? 'recinto por indicar'}
                       {jogo.jornada && ` · jornada ${jogo.jornada}`}
                     </div>
                   </div>
@@ -283,8 +283,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
               {jogo && jogo.recintoId == null && (
                 <div className="aviso-caixa alerta">
-                  Este jogo não tem recinto associado, por isso não há distâncias. Defina o recinto do clube
-                  em <b>Clubes e recintos</b>.
+                  A FPF ainda não indicou o recinto deste jogo, por isso não há distâncias nem ordenação
+                  por proximidade. Aparecerá numa atualização seguinte, quando o local for anunciado.
                 </div>
               )}
 

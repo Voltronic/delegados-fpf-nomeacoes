@@ -20,6 +20,7 @@ import {
   type JogoJornadaFpf
 } from './parsers'
 import { normalizarNome } from './html'
+import { eRecintoPorIndicar } from './recintoPorIndicar'
 import { lerCsv } from './csv'
 import {
   definirRecintoDoClube,
@@ -380,11 +381,17 @@ export function aplicarSincronizacao(chaves: string[]): { aplicados: number; ign
     const casa = encontrarOuCriarClube(p.clubeCasa)
     const fora = encontrarOuCriarClube(p.clubeFora)
 
-    let recintoId = recintoDoClube(casa.id, p.competicaoId)
-    if (recintoId == null && p.recintoTexto) {
-      const recinto = encontrarOuCriarRecinto(p.recintoTexto)
-      definirRecintoDoClube(casa.id, null, recinto.id)
-      recintoId = recinto.id
+    // "Recinto A Indicar" quer dizer que o local ainda não está decidido. Fica
+    // sem recinto, e não se assume o campo habitual do clube: a FPF está
+    // explicitamente a dizer que ainda não se sabe onde se joga.
+    let recintoId: number | null = null
+    if (!eRecintoPorIndicar(p.recintoTexto)) {
+      recintoId = recintoDoClube(casa.id, p.competicaoId)
+      if (recintoId == null && p.recintoTexto) {
+        const recinto = encontrarOuCriarRecinto(p.recintoTexto)
+        definirRecintoDoClube(casa.id, null, recinto.id)
+        recintoId = recinto.id
+      }
     }
 
     guardarJogo({
@@ -469,8 +476,8 @@ export function importarCsv(texto: string, seasonId: number, descricaoEpoca: str
     const casa = encontrarOuCriarClube(linha.clubeCasa)
     const fora = encontrarOuCriarClube(linha.clubeFora)
 
-    let recintoId = recintoDoClube(casa.id, competicao.id)
-    if (linha.recinto) {
+    let recintoId = eRecintoPorIndicar(linha.recinto) ? null : recintoDoClube(casa.id, competicao.id)
+    if (linha.recinto && !eRecintoPorIndicar(linha.recinto)) {
       const recinto = encontrarOuCriarRecinto(linha.recinto)
       if (recintoId == null) definirRecintoDoClube(casa.id, null, recinto.id)
       recintoId = recinto.id

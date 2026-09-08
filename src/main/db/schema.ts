@@ -219,5 +219,30 @@ export const MIGRACOES: Migracao[] = [
       -- ilhas, o que não faz sentido. É só cache: apaga-se e recalcula-se.
       DELETE FROM distancia_cache;
     `
+  },
+  {
+    versao: 7,
+    descricao: 'Remover recintos que são apenas o marcador "a indicar"',
+    sql: `
+      -- "Recinto A Indicar" é a FPF a dizer que o local ainda não está
+      -- decidido, não o nome de um campo. Tinha sido criado como recinto real,
+      -- partilhado por jogos de pontos diferentes do país, e chegou a receber
+      -- coordenadas nos Açores — o que estragava as distâncias desses jogos.
+      CREATE TEMP TABLE marcadores AS
+        SELECT id FROM recinto
+        WHERE nome_normalizado IN (
+          'recinto a indicar', 'a indicar', 'por indicar',
+          'recinto a designar', 'a designar', 'por designar',
+          'recinto a definir', 'a definir', 'por definir',
+          'sem recinto', 'nao definido', 'n d'
+        );
+
+      UPDATE jogo SET recinto_id = NULL WHERE recinto_id IN (SELECT id FROM marcadores);
+      DELETE FROM clube_recinto WHERE recinto_id IN (SELECT id FROM marcadores);
+      DELETE FROM distancia_cache WHERE recinto_id IN (SELECT id FROM marcadores);
+      DELETE FROM recinto WHERE id IN (SELECT id FROM marcadores);
+
+      DROP TABLE marcadores;
+    `
   }
 ]
