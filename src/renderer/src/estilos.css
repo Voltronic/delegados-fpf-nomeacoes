@@ -293,12 +293,13 @@ button.botao.pequeno {
   color: #fff;
 }
 
-input[type='text'],
-input[type='date'],
-input[type='datetime-local'],
-input[type='number'],
-input[type='search'],
-input[type='email'],
+/*
+ * Enumerar os `type` deixava de fora um `<input>` sem atributo `type` (que é um
+ * campo de texto na mesma) — esses ficavam com o aspeto do sistema e mais
+ * baixos do que os `select` ao lado. Estilizam-se todos os campos de escrita, e
+ * excluem-se os que têm desenho próprio.
+ */
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']),
 select,
 textarea {
   font: inherit;
@@ -310,6 +311,17 @@ textarea {
   color: var(--texto);
   width: 100%;
   min-width: 0;
+}
+
+/*
+ * Altura igual para tudo o que fica lado a lado numa linha de filtros: sem
+ * isto, um `select` e um `input` do mesmo tamanho de letra ficam com alturas
+ * diferentes, porque cada um calcula a sua a partir do desenho do sistema.
+ */
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']),
+select {
+  height: 28px;
+  line-height: 1.2;
 }
 
 input:focus,

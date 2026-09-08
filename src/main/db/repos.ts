@@ -590,11 +590,22 @@ export function esconderJogo(id: number, escondido: boolean): void {
 }
 
 /**
+ * A fronteira entre o que está por fazer e o que já ficou para trás é o início
+ * do dia de hoje, não o instante atual: um jogo das 15h não pode sair da lista
+ * de trabalho às 15h01, com o coordenador ainda a tratar dele. Só no dia
+ * seguinte é que passa a histórico.
+ */
+export function inicioDeHoje(referencia = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${referencia.getFullYear()}-${p(referencia.getMonth() + 1)}-${p(referencia.getDate())}T00:00`
+}
+
+/**
  * Jogos escondidos que ainda estão para acontecer. Os que já passaram deixam de
  * aparecer — foram escondidos por não interessarem, e depois da data deixam de
  * poder interessar de todo.
  */
-export function jogosEscondidos(desde = agora().slice(0, 16)): JogoDetalhado[] {
+export function jogosEscondidos(desde = inicioDeHoje()): JogoDetalhado[] {
   return listarJogos({ escondidos: true, de: desde })
 }
 
@@ -604,7 +615,7 @@ export function jogosEscondidos(desde = agora().slice(0, 16)): JogoDetalhado[] {
  * não aparece aqui.
  */
 export function historicoJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
-  const ate = filtro.ate ?? agora().slice(0, 16)
+  const ate = filtro.ate ?? inicioDeHoje()
   return listarJogos({ ...filtro, ate })
     .filter((j) => j.nomeacoes.length > 0)
     .reverse()

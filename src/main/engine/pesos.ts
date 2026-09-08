@@ -28,6 +28,18 @@ export const PESOS_POR_OMISSAO: PesoComponente[] = [
     ativo: true
   },
   {
+    componente: 'custoAviao',
+    etiqueta: 'Custo de avião',
+    descricao:
+      'Penaliza fortemente as deslocações que exigem avião — o voo custa à FPF muito mais do que os km mostram.',
+    // Deliberadamente maior do que a soma dos outros pesos ativos (45+35+20):
+    // um voo não se compensa com poucos km na época nem com um aeroporto ao
+    // lado de casa. Na prática, só se manda alguém de avião quando não há
+    // ninguém que possa ir por estrada — que é o que se pretende.
+    peso: 120,
+    ativo: true
+  },
+  {
     componente: 'adequacaoNivel',
     etiqueta: 'Adequação do nível',
     descricao: 'Reserva os delegados de elite para os jogos que os exigem.',

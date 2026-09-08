@@ -140,6 +140,10 @@ export default function Mapa({
   // Realce sincronizado com a lista de candidatos.
   useEffect(() => {
     for (const [id, marcador] of marcadores.current) {
+      // Fechar a tooltip de todos menos o realçado: sem isto, passar o rato por
+      // vários candidatos deixava o mapa cheio de balões abertos, porque nada
+      // fechava o do candidato anterior.
+      if (id !== realcado) marcador.closeTooltip()
       const elemento = marcador.getElement()
       if (!elemento) continue
       elemento.style.transform =

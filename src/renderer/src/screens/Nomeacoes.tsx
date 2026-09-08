@@ -3,6 +3,7 @@ import type {
   Candidato,
   Competicao,
   JogoDetalhado,
+  NivelDelegado,
   PapelNomeacao,
   ResultadoPropostaAutomatica
 } from '@shared/tipos'
@@ -23,6 +24,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [semana, setSemana] = useState(() => inicioDaSemana(new Date()))
   const [competicaoId, setCompeticaoId] = useState<number | ''>('')
   const [estado, setEstado] = useState<EstadoNomeacao>('TODOS')
+  const [nivel, setNivel] = useState<'TODOS' | NivelDelegado>('TODOS')
   const [texto, setTexto] = useState('')
 
   const [competicoes, setCompeticoes] = useState<Competicao[]>([])
@@ -35,6 +37,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [aPropor, setAPropor] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
+  // Início do dia de hoje: a fronteira entre o que falta fazer e o histórico.
+  const hoje = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
+
   const fim = useMemo(() => {
     const d = new Date(semana)
     d.setDate(d.getDate() + 7)
@@ -46,8 +55,11 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   }, [versaoDados])
 
   const carregarJogos = useCallback(async () => {
+    // Um jogo que já se realizou não é trabalho por fazer: sai daqui e passa ao
+    // Histórico no dia seguinte. Por isso a semana nunca começa antes de hoje.
+    const inicio = semana.getTime() < hoje.getTime() ? hoje : semana
     const lista = await window.api.jogos.listar({
-      de: paraDataIso(semana),
+      de: paraDataIso(inicio),
       ate: `${paraDataIso(fim)}T23:59`,
       competicaoId: competicaoId === '' ? undefined : competicaoId,
       estadoNomeacao: estado,
@@ -55,7 +67,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     })
     setJogos(lista)
     setSelecionado((atual) => (atual && lista.some((j) => j.id === atual) ? atual : (lista[0]?.id ?? null)))
-  }, [semana, fim, competicaoId, estado, texto])
+  }, [semana, hoje, fim, competicaoId, estado, texto])
 
   useEffect(() => {
     void carregarJogos()
@@ -140,14 +152,19 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     if (selecionado != null) await carregarCandidatos(selecionado)
   }
 
-  const elegiveis = candidatos.filter((c) => c.elegivel)
-  const bloqueados = candidatos.filter((c) => !c.elegivel)
+  // O filtro de nível é só de apresentação: a ordenação e a pontuação continuam
+  // a ser feitas com todos os delegados, para as posições não mudarem de
+  // significado conforme o que está a ser mostrado.
+  const visiveis = nivel === 'TODOS' ? candidatos : candidatos.filter((c) => c.nivel === nivel)
+  const elegiveis = visiveis.filter((c) => c.elegivel)
+  const bloqueados = visiveis.filter((c) => !c.elegivel)
   const kmMaximo = Math.max(1, ...candidatos.map((c) => c.kmEpoca))
+  const escondidosPeloNivel = candidatos.length - visiveis.length
 
-  const pontos: PontoMapa[] = candidatos
+  const pontos: PontoMapa[] = visiveis
     .filter((c): c is Candidato & { lat: number; lng: number } => c.lat != null && c.lng != null)
     .map((c) => {
-      const posicao = elegiveis.indexOf(c) + 1
+      const posicao = candidatos.filter((o) => o.elegivel).indexOf(c) + 1
       return {
         id: c.delegadoId,
         lat: c.lat,
@@ -249,9 +266,19 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
             <div className="painel-corpo">
               {jogos.length === 0 && (
                 <div className="vazio">
-                  Sem jogos nesta semana com os filtros atuais.
-                  <br />
-                  Importe competições no ecrã <b>Importação</b>.
+                  {fim.getTime() <= hoje.getTime() ? (
+                    <>
+                      Esta semana já passou.
+                      <br />
+                      Os jogos que já se realizaram estão no ecrã <b>Histórico</b>.
+                    </>
+                  ) : (
+                    <>
+                      Sem jogos por realizar nesta semana com os filtros atuais.
+                      <br />
+                      Importe competições no ecrã <b>Importação</b>.
+                    </>
+                  )}
                 </div>
               )}
               {jogos.map((j) => (
@@ -310,7 +337,17 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
             <div className="painel-cabecalho">
               {jogo ? (
                 <>
-                  <h2>Candidatos</h2>
+                  <div className="linha">
+                    <h2>Candidatos</h2>
+                    <div className="espacador" style={{ marginLeft: 'auto' }} />
+                    <div className="grupo-botoes">
+                      {(['TODOS', 'ELITE', 'PRINCIPAL'] as const).map((n) => (
+                        <button key={n} className={classes(nivel === n && 'ativo')} onClick={() => setNivel(n)}>
+                          {{ TODOS: 'Todos', ELITE: 'Elite', PRINCIPAL: 'Principais' }[n]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div style={{ marginTop: 4 }}>
                     <b>
                       {jogo.clubeCasaNome} × {jogo.clubeForaNome}
@@ -361,6 +398,14 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
               )}
 
               {aCarregarCandidatos && <div className="vazio">A calcular distâncias e prioridades…</div>}
+
+              {!aCarregarCandidatos && jogo && escondidosPeloNivel > 0 && (
+                <div className="silencioso" style={{ marginBottom: 8 }}>
+                  {escondidosPeloNivel}{' '}
+                  {escondidosPeloNivel === 1 ? 'delegado escondido' : 'delegados escondidos'} pelo filtro de
+                  nível. A posição de cada um continua a ser a do ranking completo.
+                </div>
+              )}
 
               {!aCarregarCandidatos &&
                 jogo &&

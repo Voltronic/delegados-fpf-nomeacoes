@@ -101,6 +101,44 @@ describe('ordenação de candidatos', () => {
     expect(candidatos[0].nome).toBe('Longe')
   })
 
+  /**
+   * Um voo custa à FPF muito mais do que os km mostram: numa ida a uma ilha só
+   * contam os quilómetros até ao aeroporto, o que faria o jogo parecer barato.
+   */
+  it('afunda quem precisa de avião, mesmo tendo a viagem mais curta e zero km na época', () => {
+    const daIlha = estado(delegado(1, 'Da Ilha'), { kmEpoca: 0 })
+    const doContinente = estado(delegado(2, 'Do Continente'), { kmEpoca: 2000 })
+    const distancias = new Map<number, Distancia>([
+      // 20 km até ao aeroporto: pela distância, seria o candidato ideal.
+      [1, { km: 20, minutos: 25, fonte: 'AVIAO' }],
+      [2, { km: 300, minutos: 180, fonte: 'OSRM' }]
+    ])
+    const candidatos = avaliarCandidatos(entrada([daIlha, doContinente], {}, { distancias }))
+    expect(candidatos[0].nome).toBe('Do Continente')
+    const ilha = candidatos.find((c) => c.nome === 'Da Ilha')!
+    expect(ilha.elegivel, 'o avião penaliza, não bloqueia').toBe(true)
+    expect(ilha.componentes.find((c) => c.componente === 'custoAviao')!.detalhe).toContain('avião')
+  })
+
+  it('a penalização do avião pesa mais do que tudo o resto somado', () => {
+    const aviao = PESOS_POR_OMISSAO.find((p) => p.componente === 'custoAviao')!
+    const resto = PESOS_POR_OMISSAO.filter((p) => p.ativo && p.componente !== 'custoAviao').reduce(
+      (soma, p) => soma + p.peso,
+      0
+    )
+    expect(aviao.ativo).toBe(true)
+    // É isto que garante que um voo não se compensa com km baixos mais
+    // proximidade ao aeroporto — o caso que fazia a ilha ganhar.
+    expect(aviao.peso).toBeGreaterThan(resto)
+  })
+
+  it('não penaliza quando não se sabe a distância', () => {
+    const a = estado(delegado(1, 'Ana'))
+    const [candidato] = avaliarCandidatos(entrada([a], {}))
+    const componente = candidato.componentes.find((c) => c.componente === 'custoAviao')!
+    expect(componente.normalizado).toBe(1)
+  })
+
   it('calcula km de viagem como ida e volta', () => {
     const a = estado(delegado(1, 'Ana'))
     const [candidato] = avaliarCandidatos(entrada([a], { 1: 120 }))
@@ -113,7 +151,8 @@ describe('ordenação de candidatos', () => {
     expect(candidato.componentes.map((c) => c.componente)).toEqual([
       'equilibrioKm',
       'novidadeClube',
-      'proximidade'
+      'proximidade',
+      'custoAviao'
     ])
     expect(candidato.componentes[1].detalhe).toBe('nunca fez estes clubes')
   })

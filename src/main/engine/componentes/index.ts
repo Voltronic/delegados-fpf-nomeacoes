@@ -122,7 +122,35 @@ const descanso: Componente = {
   }
 }
 
+/**
+ * Penaliza pesadamente as deslocações que exigem avião.
+ *
+ * Um voo custa à FPF muito mais do que qualquer viagem por estrada, e os km
+ * contabilizados não o mostram: numa ida a uma ilha só contam os quilómetros
+ * até ao aeroporto, o que faz um jogo nos Açores parecer mais barato do que
+ * uma ida ao Algarve. Este componente repõe a verdade — quem não precisa de
+ * voar recebe o peso todo, quem precisa recebe zero.
+ *
+ * Não é um bloqueio: alguém tem de ir. É uma desvantagem grande, que só se
+ * compensa quando não há mesmo alternativa razoável.
+ */
+const custoAviao: Componente = {
+  id: 'custoAviao',
+  avaliar({ distancia }: ContextoAvaliacao): ResultadoComponente {
+    // Sem distância não se sabe se há voo (recinto por localizar): não se
+    // penaliza por suspeita.
+    if (!distancia) return { valorBruto: 0, normalizado: 1, detalhe: 'sem distância conhecida' }
+    const deAviao = distancia.fonte === 'AVIAO'
+    return {
+      valorBruto: deAviao ? 1 : 0,
+      normalizado: deAviao ? 0 : 1,
+      detalhe: deAviao ? 'exige viagem de avião' : 'viagem por estrada'
+    }
+  }
+}
+
 export const COMPONENTES: Componente[] = [
+  custoAviao,
   equilibrioKm,
   novidadeClube,
   proximidade,
