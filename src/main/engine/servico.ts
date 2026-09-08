@@ -3,7 +3,8 @@ import type {
   ConfiguracaoMotor,
   JogoDetalhado,
   PapelNomeacao,
-  PropostaAutomatica
+  PropostaAutomatica,
+  ResultadoPropostaAutomatica
 } from '@shared/tipos'
 import { escreverConfig, lerConfig } from '../db'
 import {
@@ -184,10 +185,11 @@ export async function nomear(pedido: PedidoNomeacao): Promise<JogoDetalhado | nu
  * Proposta automática para um conjunto de jogos. Devolve apenas sugestões — nada
  * é gravado até o coordenador aceitar no ecrã de revisão.
  */
-export async function propostaAutomatica(jogoIds: number[]): Promise<PropostaAutomatica[]> {
+export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPropostaAutomatica> {
+  const vazio: ResultadoPropostaAutomatica = { propostas: [], semSugestao: [], jaCompletos: 0 }
   const todos = listarJogos()
   const jogos = todos.filter((j) => jogoIds.includes(j.id))
-  if (!jogos.length) return []
+  if (!jogos.length) return vazio
 
   const competicoes = listarCompeticoes()
   const seasonId = competicoes.find((c) => c.id === jogos[0].competicaoId)?.seasonId
@@ -195,10 +197,14 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<PropostaAut
   const config = obterConfiguracaoMotor()
 
   const entradas: EntradaMotor[] = []
+  let jaCompletos = 0
   for (const jogo of jogos) {
     // Salta os jogos já totalmente nomeados.
     const usaCampo = competicoes.find((c) => c.id === jogo.competicaoId)?.usaDelegadoCampo ?? false
-    if (jogo.nomeacoes.length >= (usaCampo ? 2 : 1)) continue
+    if (jogo.nomeacoes.length >= (usaCampo ? 2 : 1)) {
+      jaCompletos++
+      continue
+    }
     entradas.push({
       jogo: contextoDoJogo(jogo),
       delegados: estados,
@@ -209,7 +215,7 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<PropostaAut
     })
   }
 
-  const atribuicoes = gerarProposta({
+  const { atribuicoes, semSugestao } = gerarProposta({
     jogos: entradas,
     usaDelegadoCampo: (jogoId) => {
       const jogo = jogos.find((j) => j.id === jogoId)
@@ -238,7 +244,31 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<PropostaAut
     else proposta.campo = entrada
   }
 
-  return [...propostas.values()].sort((a, b) => (a.dataHora ?? '').localeCompare(b.dataHora ?? ''))
+  // Agrupar os papéis em falta do mesmo jogo numa só linha de explicação.
+  const faltas = new Map<number, string[]>()
+  for (const s of semSugestao) {
+    const atual = faltas.get(s.jogoId) ?? []
+    for (const m of s.motivos) if (!atual.includes(m)) atual.push(m)
+    faltas.set(s.jogoId, atual)
+  }
+
+  return {
+    propostas: [...propostas.values()].sort((a, b) =>
+      (a.dataHora ?? '').localeCompare(b.dataHora ?? '')
+    ),
+    semSugestao: [...faltas.entries()]
+      .map(([jogoId, motivos]) => {
+        const jogo = jogos.find((j) => j.id === jogoId)!
+        return {
+          jogoId,
+          descricaoJogo: `${jogo.competicaoNome}: ${jogo.clubeCasaNome} × ${jogo.clubeForaNome}`,
+          dataHora: jogo.dataHora,
+          motivos
+        }
+      })
+      .sort((a, b) => (a.dataHora ?? '').localeCompare(b.dataHora ?? '')),
+    jaCompletos
+  }
 }
 
 /** Aplica uma proposta previamente revista pelo coordenador. */

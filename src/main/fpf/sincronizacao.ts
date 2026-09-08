@@ -123,8 +123,12 @@ export async function sincronizar(
   const erros: string[] = []
   const resumo: ResultadoSincronizacao['competicoes'] = []
 
-  // 1) Garantir que cada competição existe em base de dados.
-  const competicoes = pedido.competicoes.map((c) =>
+  // 1) Garantir que cada competição existe em base de dados. O `distintas` é
+  //    uma rede de segurança: uma competição repetida aqui multiplicava o
+  //    trabalho e estragava o contador de progresso.
+  const distintas = new Map<number, (typeof pedido.competicoes)[number]>()
+  for (const c of pedido.competicoes) distintas.set(c.competitionId, c)
+  const competicoes = [...distintas.values()].map((c) =>
     guardarCompeticao({
       fpfCompetitionId: c.competitionId,
       seasonId: pedido.seasonId,
@@ -135,7 +139,7 @@ export async function sincronizar(
       nivelMinimo: c.nivelMinimo as never,
       usaDelegadoCampo: c.usaDelegadoCampo
     })
-  )
+  ).filter((c, i, todas) => todas.findIndex((o) => o.id === c.id) === i)
 
   // 2) Ler a estrutura de cada competição. As competições por pontos têm
   //    jornadas a ir buscar à parte; as de eliminatórias já trazem os jogos

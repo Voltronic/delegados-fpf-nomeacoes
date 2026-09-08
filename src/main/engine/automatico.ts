@@ -20,16 +20,34 @@ export interface EntradaAutomatica {
   usaDelegadoCampo: (jogoId: number) => boolean
 }
 
+export interface JogoSemSugestao {
+  jogoId: number
+  papel: PapelNomeacao
+  /** Porque nenhum delegado serviu — os motivos mais frequentes primeiro. */
+  motivos: string[]
+}
+
+export interface ResultadoProposta {
+  atribuicoes: AtribuicaoAutomatica[]
+  semSugestao: JogoSemSugestao[]
+}
+
 /**
  * Gera uma proposta de nomeações para um conjunto de jogos.
  *
- * Estratégia: trata primeiro os jogos com menos candidatos elegíveis (os mais
- * difíceis de preencher), e vai atualizando o estado dos delegados à medida que
- * atribui, para que o equilíbrio de km seja recalculado dentro da própria
- * proposta e não fique tudo em cima dos mesmos dois ou três nomes.
+ * Trata primeiro os jogos com menos candidatos elegíveis — os mais difíceis de
+ * preencher — e vai atualizando o estado dos delegados à medida que atribui,
+ * para que o equilíbrio de km seja recalculado dentro da própria proposta e não
+ * fique tudo em cima dos mesmos dois ou três nomes.
+ *
+ * Nem todos os jogos ficam cobertos, e isso não é um defeito: com poucos
+ * delegados e muitos jogos à mesma hora, esgotam-se os elegíveis. Os que ficam
+ * de fora vêm em `semSugestao`, com o motivo, para o coordenador perceber
+ * porquê em vez de ficar a olhar para uma lista mais curta do que esperava.
  */
-export function gerarProposta(entrada: EntradaAutomatica): AtribuicaoAutomatica[] {
+export function gerarProposta(entrada: EntradaAutomatica): ResultadoProposta {
   const atribuicoes: AtribuicaoAutomatica[] = []
+  const semSugestao: JogoSemSugestao[] = []
   // Estado partilhado e mutável ao longo da proposta, indexado por delegado.
   const estados = new Map<number, EstadoDelegado>()
   for (const jogo of entrada.jogos) {
@@ -59,7 +77,21 @@ export function gerarProposta(entrada: EntradaAutomatica): AtribuicaoAutomatica[
         delegados: jogoEntrada.delegados.map((e) => estados.get(e.delegado.id)!)
       })
       const escolhido = candidatos.find((c) => c.elegivel)
-      if (!escolhido) continue
+      if (!escolhido) {
+        // Explicar porquê é o que evita que a proposta pareça arbitrária.
+        const contagem = new Map<string, number>()
+        for (const c of candidatos) {
+          for (const b of c.bloqueios) contagem.set(b.codigo, (contagem.get(b.codigo) ?? 0) + 1)
+        }
+        semSugestao.push({
+          jogoId: jogoEntrada.jogo.jogoId,
+          papel,
+          motivos: [...contagem.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([codigo, n]) => `${n} ${descreverBloqueio(codigo)}`)
+        })
+        continue
+      }
 
       atribuicoes.push({
         jogoId: jogoEntrada.jogo.jogoId,
@@ -76,7 +108,25 @@ export function gerarProposta(entrada: EntradaAutomatica): AtribuicaoAutomatica[
     }
   }
 
-  return atribuicoes.sort((a, b) => a.jogoId - b.jogoId)
+  return {
+    atribuicoes: atribuicoes.sort((a, b) => a.jogoId - b.jogoId),
+    semSugestao
+  }
+}
+
+const MOTIVOS: Record<string, string> = {
+  CONFLITO_HORARIO: 'já com outro jogo à mesma hora',
+  INDISPONIVEL: 'indisponíveis nessa data',
+  VETO_CLUBE: 'com veto a um dos clubes',
+  NIVEL_INSUFICIENTE: 'sem o nível exigido',
+  DISTANCIA_EXCESSIVA: 'acima do limite de distância',
+  JA_NOMEADO: 'já nomeados para este jogo',
+  INATIVO: 'inativos',
+  SEM_COORDENADAS: 'sem coordenadas'
+}
+
+function descreverBloqueio(codigo: string): string {
+  return MOTIVOS[codigo] ?? codigo.toLowerCase()
 }
 
 function contarElegiveis(entrada: EntradaMotor, estados: Map<number, EstadoDelegado>): number {

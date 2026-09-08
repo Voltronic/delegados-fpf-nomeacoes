@@ -86,6 +86,9 @@ function calcularAvisos(entrada: EntradaMotor, estado: EstadoDelegado): string[]
   } else if (distancia?.fonte === 'HAVERSINE') {
     avisos.push('Distância estimada em linha reta (sem acesso ao serviço de rotas)')
   }
+  if (distancia?.fonte === 'AVIAO') {
+    avisos.push('Viagem de avião — só contam os km de casa ao aeroporto, ida e volta')
+  }
   return avisos
 }
 

@@ -415,7 +415,11 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
     ).run({ ...params, id: dados.id })
     return listarCompeticoes().find((c) => c.id === dados.id)!
   }
-  const info = db
+  // `RETURNING` é essencial aqui: num `ON CONFLICT DO UPDATE` o SQLite não mexe
+  // no `last_insert_rowid()`, que fica com o valor de um INSERT anterior. Com a
+  // leitura antiga, resincronizar devolvia a mesma competição várias vezes — o
+  // contador de progresso disparava e só uma competição era lida de facto.
+  const linha = db
     .prepare(
       `INSERT INTO competicao (fpf_competition_id, season_id, season_descricao, nome, organizacao,
          ativa, nivel_minimo, usa_delegado_campo)
@@ -423,14 +427,16 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
          @nivelMinimo, @usaDelegadoCampo)
        ON CONFLICT(fpf_competition_id, season_id) DO UPDATE SET
          nome = excluded.nome, organizacao = excluded.organizacao, ativa = excluded.ativa,
-         season_descricao = COALESCE(excluded.season_descricao, competicao.season_descricao)`
+         season_descricao = COALESCE(excluded.season_descricao, competicao.season_descricao)
+       RETURNING id`
     )
-    .run(params)
+    .get(params) as { id: number } | undefined
+
   const id =
-    Number(info.lastInsertRowid) ||
+    linha?.id ??
     (
       db
-        .prepare('SELECT id FROM competicao WHERE fpf_competition_id = ? AND season_id = ?')
+        .prepare('SELECT id FROM competicao WHERE fpf_competition_id IS ? AND season_id = ?')
         .get(dados.fpfCompetitionId, dados.seasonId) as { id: number }
     ).id
   return listarCompeticoes().find((c) => c.id === id)!

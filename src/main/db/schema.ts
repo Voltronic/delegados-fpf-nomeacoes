@@ -198,5 +198,26 @@ export const MIGRACOES: Migracao[] = [
       UPDATE recinto SET confirmado = 1, origem_coords = 'MANUAL'
       WHERE coords_manuais = 1 AND lat IS NOT NULL;
     `
+  },
+  {
+    versao: 5,
+    descricao: 'Descrição da época para as competições já importadas',
+    sql: `
+      -- As competições importadas antes de existir esta coluna ficaram com a
+      -- época a NULL, e a interface mostrava o id interno ("Época 106"). O
+      -- seasonId da FPF segue a sequência ano − 1920 (106 = 2026-2027).
+      UPDATE competicao
+      SET season_descricao = (season_id + 1920) || '-' || (season_id + 1921)
+      WHERE season_descricao IS NULL AND season_id BETWEEN 60 AND 200;
+    `
+  },
+  {
+    versao: 6,
+    descricao: 'Limpar a cache de distâncias depois da regra das ilhas',
+    sql: `
+      -- As distâncias já calculadas incluíam o "percurso por estrada" até às
+      -- ilhas, o que não faz sentido. É só cache: apaga-se e recalcula-se.
+      DELETE FROM distancia_cache;
+    `
   }
 ]

@@ -204,7 +204,7 @@ async function principal(): Promise<void> {
     verificar('bloqueados vão para o fim', !comBloqueios[0].bloqueios.length)
 
     log('\n7. Proposta automática')
-    const proposta = await propostaAutomatica(jogoIds)
+    const { propostas: proposta, semSugestao } = await propostaAutomatica(jogoIds)
     const usados = new Set(proposta.flatMap((p) => [p.principal?.delegadoId, p.campo?.delegadoId]).filter(Boolean))
     verificar('propõe para os jogos ainda por nomear', proposta.length === 7, `→ ${proposta.length} jogos`)
     verificar('distribui por mais do que um delegado', usados.size >= 2, `→ ${usados.size} delegados usados`)
@@ -213,6 +213,11 @@ async function principal(): Promise<void> {
       proposta.every((p) => !p.principal || !p.campo || p.principal.delegadoId !== p.campo.delegadoId)
     )
     verificar('explica cada sugestão', proposta.every((p) => p.motivo.length > 0))
+    verificar(
+      'explica também os jogos que ficaram sem sugestão',
+      semSugestao.every((s) => s.motivos.length > 0),
+      `→ ${semSugestao.length} sem sugestão${semSugestao[0] ? `: ${semSugestao[0].motivos.join(', ')}` : ''}`
+    )
 
     log('\n8. Endpoints reais da FPF')
     try {

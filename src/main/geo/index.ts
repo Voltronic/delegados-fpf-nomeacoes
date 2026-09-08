@@ -1,6 +1,7 @@
 import { net } from 'electron'
 import { lerConfig, obterBaseDados } from '../db'
 import type { FonteDistancia } from '@shared/tipos'
+import { aeroportoDePartida, exigeAviao } from './ilhas'
 
 export interface Coordenadas {
   lat: number
@@ -142,11 +143,7 @@ export async function obterDistancia(
 
   if (!origem || !destino) return null
 
-  const rota = await distanciaRodoviaria(origem, destino)
-  const fator = Number(lerConfig('geo.fatorHaversine') ?? '1.25')
-  const resultado: ResultadoDistancia = rota
-    ? { km: rota.km, minutos: rota.minutos, fonte: 'OSRM' }
-    : { km: haversineKm(origem, destino) * fator, minutos: null, fonte: 'HAVERSINE' }
+  const resultado = await calcularDistancia(origem, destino)
 
   db.prepare(
     `INSERT INTO distancia_cache (delegado_id, recinto_id, km, minutos, fonte, atualizado_em)
@@ -157,6 +154,44 @@ export async function obterDistancia(
   ).run(delegadoId, recintoId, resultado.km, resultado.minutos, resultado.fonte, new Date().toISOString())
 
   return resultado
+}
+
+/**
+ * Distância a contabilizar entre dois pontos.
+ *
+ * Quando há mar pelo meio, só contam os quilómetros de casa até ao aeroporto e
+ * de volta: o voo não é estrada percorrida pelo delegado, e contá-lo arruinava
+ * o equilíbrio de quem calhasse ir a uma ilha.
+ */
+export async function calcularDistancia(
+  origem: Coordenadas,
+  destino: Coordenadas
+): Promise<ResultadoDistancia> {
+  const fator = Number(lerConfig('geo.fatorHaversine') ?? '1.25')
+
+  const porEstrada = async (a: Coordenadas, b: Coordenadas): Promise<{ km: number; minutos: number | null; estimado: boolean }> => {
+    const rota = await distanciaRodoviaria(a, b)
+    return rota
+      ? { km: rota.km, minutos: rota.minutos, estimado: false }
+      : { km: haversineKm(a, b) * fator, minutos: null, estimado: true }
+  }
+
+  if (exigeAviao(origem, destino)) {
+    const aeroporto = aeroportoDePartida(origem)
+    if (aeroporto) {
+      const ate = await porEstrada(origem, aeroporto)
+      return { km: ate.km, minutos: ate.minutos, fonte: 'AVIAO' }
+    }
+    // Sem aeroporto conhecido na região do delegado não se inventa nada.
+    return { km: 0, minutos: null, fonte: 'AVIAO' }
+  }
+
+  const estrada = await porEstrada(origem, destino)
+  return {
+    km: estrada.km,
+    minutos: estrada.minutos,
+    fonte: estrada.estimado ? 'HAVERSINE' : 'OSRM'
+  }
 }
 
 /** Apaga a cache de distâncias de um delegado ou recinto (após mudar coordenadas). */

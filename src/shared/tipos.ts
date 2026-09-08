@@ -3,7 +3,7 @@
 export type NivelDelegado = 'ELITE' | 'PRINCIPAL'
 export type PapelNomeacao = 'PRINCIPAL' | 'CAMPO'
 export type EstadoNomeacao = 'SUGERIDA' | 'CONFIRMADA' | 'CANCELADA'
-export type FonteDistancia = 'OSRM' | 'HAVERSINE' | 'MANUAL'
+export type FonteDistancia = 'OSRM' | 'HAVERSINE' | 'MANUAL' | 'AVIAO'
 export type EstadoJogo = 'AGENDADO' | 'REALIZADO' | 'ADIADO' | 'CANCELADO'
 
 export interface Delegado {
@@ -378,6 +378,22 @@ export interface MatrizDashboard {
   colunas: { chave: string; etiqueta: string }[]
   linhas: { delegadoId: number; numero: string; nome: string }[]
   celulas: { delegadoId: number; chaveColuna: string; valor: number }[]
+}
+
+export interface JogoSemProposta {
+  jogoId: number
+  descricaoJogo: string
+  dataHora: string | null
+  /** Porque nenhum delegado servia, já contado (ex.: "3 já com outro jogo à mesma hora"). */
+  motivos: string[]
+}
+
+export interface ResultadoPropostaAutomatica {
+  propostas: PropostaAutomatica[]
+  /** Jogos para os quais não houve ninguém elegível, com o motivo. */
+  semSugestao: JogoSemProposta[]
+  /** Jogos que já tinham os delegados todos e por isso nem foram considerados. */
+  jaCompletos: number
 }
 
 export interface PropostaAutomatica {

@@ -4,7 +4,7 @@ import type {
   Competicao,
   JogoDetalhado,
   PapelNomeacao,
-  PropostaAutomatica
+  ResultadoPropostaAutomatica
 } from '@shared/tipos'
 import CartaoCandidato from '../components/CartaoCandidato'
 import Mapa, { type PontoMapa } from '../components/Mapa'
@@ -30,7 +30,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [candidatos, setCandidatos] = useState<Candidato[]>([])
   const [realcado, setRealcado] = useState<number | null>(null)
   const [aCarregarCandidatos, setACarregarCandidatos] = useState(false)
-  const [proposta, setProposta] = useState<PropostaAutomatica[] | null>(null)
+  const [proposta, setProposta] = useState<ResultadoPropostaAutomatica | null>(null)
   const [aPropor, setAPropor] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -116,7 +116,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   async function aplicarProposta(): Promise<void> {
     if (!proposta) return
-    await window.api.nomeacoes.aplicarProposta(proposta)
+    await window.api.nomeacoes.aplicarProposta(proposta.propostas)
     setProposta(null)
     await carregarJogos()
     if (selecionado != null) await carregarCandidatos(selecionado)
@@ -388,7 +388,9 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           proposta={proposta}
           aoFechar={() => setProposta(null)}
           aoAplicar={aplicarProposta}
-          aoRemover={(jogoId) => setProposta(proposta.filter((p) => p.jogoId !== jogoId))}
+          aoRemover={(jogoId) =>
+            setProposta({ ...proposta, propostas: proposta.propostas.filter((p) => p.jogoId !== jogoId) })
+          }
         />
       )}
     </>
@@ -401,22 +403,39 @@ function RevisaoProposta({
   aoAplicar,
   aoRemover
 }: {
-  proposta: PropostaAutomatica[]
+  proposta: ResultadoPropostaAutomatica
   aoFechar: () => void
   aoAplicar: () => void
   aoRemover: (jogoId: number) => void
 }): JSX.Element {
+  const { propostas, semSugestao, jaCompletos } = proposta
   return (
     <div className="modal-fundo" onClick={aoFechar}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <header>
           <h2>Proposta automática</h2>
           <span className="silencioso">
-            {proposta.length} jogos · nada é gravado até confirmar
+            {propostas.length} jogos com sugestão · nada é gravado até confirmar
           </span>
         </header>
         <div className="modal-corpo">
-          {proposta.length === 0 ? (
+          {(semSugestao.length > 0 || jaCompletos > 0) && (
+            <div className="aviso-caixa alerta">
+              <b>Porque não são todos os jogos da semana:</b>
+              <ul style={{ margin: '6px 0 0 16px' }}>
+                {jaCompletos > 0 && <li>{jaCompletos} já tinham os delegados todos nomeados.</li>}
+                {semSugestao.length > 0 && (
+                  <li>
+                    {semSugestao.length} não tinham ninguém elegível. Com poucos delegados e vários jogos
+                    à mesma hora, os candidatos esgotam-se — cada nomeação bloqueia esse delegado para os
+                    outros jogos do mesmo horário.
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {propostas.length === 0 ? (
             <div className="vazio">
               Não há sugestões a fazer: ou os jogos já estão nomeados, ou nenhum delegado é elegível.
             </div>
@@ -433,7 +452,7 @@ function RevisaoProposta({
                 </tr>
               </thead>
               <tbody>
-                {proposta.map((p) => (
+                {propostas.map((p) => (
                   <tr key={p.jogoId}>
                     <td>{p.descricaoJogo}</td>
                     <td>{formatarDataHora(p.dataHora)}</td>
@@ -468,13 +487,32 @@ function RevisaoProposta({
               </tbody>
             </table>
           )}
+
+          {semSugestao.length > 0 && (
+            <details style={{ marginTop: 14 }}>
+              <summary className="silencioso" style={{ cursor: 'pointer' }}>
+                Ver os {semSugestao.length} jogos sem sugestão e porquê
+              </summary>
+              <table className="tabela" style={{ marginTop: 8 }}>
+                <tbody>
+                  {semSugestao.map((s) => (
+                    <tr key={s.jogoId}>
+                      <td>{s.descricaoJogo}</td>
+                      <td>{formatarDataHora(s.dataHora)}</td>
+                      <td className="silencioso">{s.motivos.join(' · ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
         </div>
         <footer>
           <button className="botao" onClick={aoFechar}>
             Cancelar
           </button>
-          <button className="botao primario" onClick={aoAplicar} disabled={proposta.length === 0}>
-            Aplicar {proposta.length} nomeações
+          <button className="botao primario" onClick={aoAplicar} disabled={propostas.length === 0}>
+            Aplicar {propostas.length} nomeações
           </button>
         </footer>
       </div>

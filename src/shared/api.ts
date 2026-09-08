@@ -19,6 +19,7 @@ import type {
   Recinto,
   ResultadoAtualizacao,
   ResultadoGeocodificacaoLote,
+  ResultadoPropostaAutomatica,
   ResultadoSincronizacao,
   VetoClube
 } from './tipos'
@@ -155,7 +156,7 @@ export interface Api {
       motivoOverride?: string | null
     }): Promise<JogoDetalhado | null>
     remover(jogoId: number, papel: PapelNomeacao): Promise<JogoDetalhado | null>
-    proposta(jogoIds: number[]): Promise<PropostaAutomatica[]>
+    proposta(jogoIds: number[]): Promise<ResultadoPropostaAutomatica>
     aplicarProposta(propostas: PropostaAutomatica[]): Promise<number>
   }
 
