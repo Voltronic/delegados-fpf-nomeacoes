@@ -56,7 +56,13 @@ const paraDelegado = (l: LinhaDelegado): Delegado => ({
 })
 
 export function listarDelegados(incluirInativos = true): Delegado[] {
-  const sql = `SELECT * FROM delegado ${incluirInativos ? '' : 'WHERE ativo = 1'} ORDER BY nome`
+  // Por número, e numericamente: com ordenação de texto o 1084 vinha antes do
+  // 109. O `CAST` dá 0 a números não numéricos, que ficam no início ordenados
+  // pelo próprio texto.
+  const sql = `
+    SELECT * FROM delegado ${incluirInativos ? '' : 'WHERE ativo = 1'}
+    ORDER BY CAST(numero AS INTEGER), numero, nome
+  `
   return (obterBaseDados().prepare(sql).all() as LinhaDelegado[]).map(paraDelegado)
 }
 

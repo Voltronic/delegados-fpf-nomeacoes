@@ -74,6 +74,32 @@ async function principal(): Promise<void> {
     )
     verificar('4 delegados criados', repos.listarDelegados().length === 4)
 
+    // Ordenação por número, numericamente: por texto, "1084" vinha antes de "109".
+    for (const n of ['1084', '109', '9']) {
+      repos.criarDelegado({
+        numero: n,
+        nome: `Ordem ${n}`,
+        morada: null,
+        lat: null,
+        lng: null,
+        nivel: 'PRINCIPAL',
+        telefone: null,
+        email: null,
+        ativo: true,
+        notas: null,
+        coordsManuais: false
+      })
+    }
+    const ordem = repos.listarDelegados().map((d) => d.numero)
+    verificar(
+      'a lista sai por ordem crescente de número',
+      ordem.join(',') === '9,101,102,103,104,109,1084',
+      `→ ${ordem.join(', ')}`
+    )
+    for (const d of repos.listarDelegados().filter((x) => x.nome.startsWith('Ordem '))) {
+      repos.apagarDelegado(d.id)
+    }
+
     const competicao = repos.guardarCompeticao({
       fpfCompetitionId: 99999,
       seasonId: 106,
