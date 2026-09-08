@@ -112,7 +112,15 @@ app.whenReady().then(async () => {
     width: 1600,
     height: 980,
     show: false,
-    webPreferences: { preload: join(__dirname, '../preload/index.mjs'), sandbox: false, contextIsolation: true }
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.mjs'),
+      sandbox: false,
+      contextIsolation: true,
+      // A janela está oculta, e o Chromium trava as animações nesse caso. Sem
+      // isto, o zoom do Leaflet nunca chega ao fim e o teste do mapa não mede
+      // nada — passaria mesmo com o defeito presente.
+      backgroundThrottling: false
+    }
   })
 
   janela.webContents.on('console-message', (_e, nivel, mensagem) => {
@@ -163,6 +171,50 @@ app.whenReady().then(async () => {
       "document.querySelectorAll('.leaflet-container .pino').length"
     )) as number
     verificar('o mapa desenha os pinos', mapa > 0, `→ ${mapa} pinos (recinto + delegados)`)
+
+    // O zoom lê-se do atributo `data-zoom`, que o componente do mapa mantém a
+    // partir do estado do Leaflet. Os tiles não servem: numa janela oculta o
+    // Chromium não os volta a carregar, e o nível lido ficava sempre igual.
+    const zoomDoMapa = async (): Promise<string> =>
+      (await janela.webContents.executeJavaScript(
+        "document.querySelector('.leaflet-container')?.getAttribute('data-zoom') ?? ''"
+      )) as string
+
+    // Numa janela oculta a animação do Leaflet demora mais de um segundo a
+    // terminar, por isso espera-se pela mudança em vez de adivinhar um tempo.
+    const esperarZoomDiferenteDe = async (anterior: string, limiteMs = 8000): Promise<string> => {
+      const fim = Date.now() + limiteMs
+      let atual = await zoomDoMapa()
+      while (atual === anterior && Date.now() < fim) {
+        await new Promise((r) => setTimeout(r, 200))
+        atual = await zoomDoMapa()
+      }
+      return atual
+    }
+
+    const zoomInicial = await zoomDoMapa()
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.leaflet-control-zoom-in')?.click()"
+    )
+    const zoomAntes = await esperarZoomDiferenteDe(zoomInicial)
+    // Sem isto o teste seria vazio: se o zoom não tivesse mudado, comparar
+    // antes com depois passaria mesmo com o defeito presente.
+    verificar(
+      'o botão de zoom altera mesmo o nível do mapa',
+      zoomInicial !== '' && zoomAntes !== '' && Number(zoomAntes) > Number(zoomInicial),
+      `→ ${zoomInicial} para ${zoomAntes}`
+    )
+
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.leaflet-marker-icon')?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))"
+    )
+    await new Promise((r) => setTimeout(r, 2500))
+    const zoomDepois = await zoomDoMapa()
+    verificar(
+      'passar o rato num pino não mexe no zoom',
+      zoomAntes !== '' && zoomAntes === zoomDepois,
+      `→ antes ${zoomAntes}, depois ${zoomDepois}`
+    )
 
     log('\n3. Navegação por todos os ecrãs')
     for (const nome of ECRAS.slice(1)) {
@@ -265,7 +317,13 @@ app.whenReady().then(async () => {
     verificar('percurso completo sem exceções', false, `→ ${(erro as Error).message}`)
   } finally {
     janela.destroy()
-    rmSync(pasta, { recursive: true, force: true })
+    // O SQLite ainda tem o ficheiro aberto; se o Windows o bloquear, a pasta
+    // temporária fica para trás e não vale a pena falhar a verificação por isso.
+    try {
+      rmSync(pasta, { recursive: true, force: true })
+    } catch {
+      /* pasta temporária, o sistema limpa-a depois */
+    }
   }
 
   log(falhas === 0 ? '\nInterface verificada sem falhas.\n' : `\n${falhas} verificações falharam.\n`)

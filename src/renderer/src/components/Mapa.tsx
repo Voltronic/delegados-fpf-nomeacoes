@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import L from 'leaflet'
 
 export interface PontoMapa {
@@ -38,6 +38,24 @@ export default function Mapa({
   const camada = useRef<L.LayerGroup | null>(null)
   const marcadores = useRef<Map<number, L.Marker>>(new Map())
 
+  // As funções e o array de pontos são recriados a cada render de quem nos usa.
+  // Se o efeito que redesenha dependesse deles, passar o rato num pino voltava a
+  // correr o `fitBounds` e desfazia o zoom que a pessoa tinha feito.
+  const aoSelecionarRef = useRef(aoSelecionar)
+  const aoRealcarRef = useRef(aoRealcar)
+  aoSelecionarRef.current = aoSelecionar
+  aoRealcarRef.current = aoRealcar
+
+  // Só o conteúdo conta: enquanto os pontos forem os mesmos, o mapa não mexe.
+  const assinatura = useMemo(
+    () =>
+      JSON.stringify({
+        recinto: recinto ? [recinto.lat, recinto.lng, recinto.titulo] : null,
+        pontos: pontos.map((p) => [p.id, p.lat, p.lng, p.etiqueta, p.classe, p.titulo])
+      }),
+    [recinto, pontos]
+  )
+
   useEffect(() => {
     if (!contentor.current || mapa.current) return
     mapa.current = L.map(contentor.current, { zoomControl: true, attributionControl: true }).setView(
@@ -49,6 +67,15 @@ export default function Mapa({
       attribution: '© OpenStreetMap'
     }).addTo(mapa.current)
     camada.current = L.layerGroup().addTo(mapa.current)
+
+    // Espelha o nível de zoom num atributo do DOM. É o que permite à
+    // verificação automática medir o zoom real do Leaflet sem depender dos
+    // tiles, que numa janela oculta não chegam a ser recarregados.
+    const marcarZoom = (): void => {
+      contentor.current?.setAttribute('data-zoom', String(mapa.current?.getZoom() ?? ''))
+    }
+    mapa.current.on('zoom zoomend', marcarZoom)
+    marcarZoom()
 
     return () => {
       mapa.current?.remove()
@@ -89,9 +116,9 @@ export default function Mapa({
       const marcador = L.marker([ponto.lat, ponto.lng], { icon: icone })
         .bindTooltip(ponto.titulo, { direction: 'top' })
         .addTo(grupo)
-      marcador.on('click', () => aoSelecionar?.(ponto.id))
-      marcador.on('mouseover', () => aoRealcar?.(ponto.id))
-      marcador.on('mouseout', () => aoRealcar?.(null))
+      marcador.on('click', () => aoSelecionarRef.current?.(ponto.id))
+      marcador.on('mouseover', () => aoRealcarRef.current?.(ponto.id))
+      marcador.on('mouseout', () => aoRealcarRef.current?.(null))
       marcadores.current.set(ponto.id, marcador)
       coordenadas.push([ponto.lat, ponto.lng])
     }
@@ -101,7 +128,10 @@ export default function Mapa({
     } else if (coordenadas.length === 1) {
       m.setView(coordenadas[0], 11)
     }
-  }, [recinto, pontos, aoSelecionar, aoRealcar])
+    // Depende só da assinatura: redesenha e reenquadra quando os pontos mudam
+    // de facto (outro jogo, outro delegado), nunca por causa de um realce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assinatura])
 
   // Realce sincronizado com a lista de candidatos.
   useEffect(() => {
