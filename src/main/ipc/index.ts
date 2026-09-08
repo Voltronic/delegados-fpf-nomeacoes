@@ -336,6 +336,13 @@ export function registarIpc(contexto: {
     return repos.obterJogoDetalhado(id)
   })
   registar('jogos:apagar', (id: number) => repos.apagarJogo(id))
+  registar('jogos:esconder', (id: number, escondido: boolean) => {
+    repos.esconderJogo(id, escondido)
+    return repos.obterJogoDetalhado(id)
+  })
+  registar('jogos:escondidos', () => repos.jogosEscondidos())
+  registar('jogos:historico', (filtro?: FiltroJogosApi) => repos.historicoJogos(filtro ?? {}))
+
   registar('jogos:importarCsv', (texto: string, seasonId: number, descricaoEpoca: string) =>
     importarCsv(texto, seasonId, descricaoEpoca)
   )

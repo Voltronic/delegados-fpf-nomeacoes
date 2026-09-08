@@ -126,6 +126,9 @@ export interface Jogo {
   estado: EstadoJogo
   importadoEm: string | null
   alteradoEm: string | null
+  /** Retirado da lista pelo coordenador; recuperável no ecrã Escondidos. */
+  escondido: boolean
+  escondidoEm: string | null
 }
 
 /** Jogo com os nomes já resolvidos, para listagem na UI. */
@@ -319,7 +322,7 @@ export interface ResultadoSincronizacao {
 // Alertas
 // ---------------------------------------------------------------------------
 
-export type TipoAlerta = 'ALTERADO' | 'DESAPARECIDO' | 'CONFLITO'
+export type TipoAlerta = 'ALTERADO' | 'DESAPARECIDO' | 'CONFLITO' | 'RECINTO_SEM_COORDENADAS'
 
 export interface Alerta {
   id: number
@@ -327,6 +330,8 @@ export interface Alerta {
   chave: string
   tipo: TipoAlerta
   jogoId: number | null
+  /** Preenchido nos alertas de recinto sem coordenadas. */
+  recintoId: number | null
   competicao: string | null
   /** Ex.: "Sc Braga B × Cdc Montalegre". */
   descricao: string

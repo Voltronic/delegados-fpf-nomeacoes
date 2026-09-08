@@ -88,6 +88,10 @@ export default function Mapa({
     const grupo = camada.current
     if (!m || !grupo) return
 
+    // Fechar as tooltips antes de limpar: uma tooltip aberta sobre um marcador
+    // que desaparece continua a tentar posicionar-se e rebenta no Leaflet
+    // ("_leaflet_pos"). Acontecia ao esconder um jogo com o rato sobre um pino.
+    for (const marcador of marcadores.current.values()) marcador.closeTooltip()
     grupo.clearLayers()
     marcadores.current.clear()
 
@@ -142,7 +146,10 @@ export default function Mapa({
         `${elemento.style.transform.replace(/ scale\([^)]*\)/, '')}${id === realcado ? ' scale(1.45)' : ''}`
       elemento.style.zIndex = id === realcado ? '900' : ''
     }
-    if (realcado != null) marcadores.current.get(realcado)?.openTooltip()
+    // Só se abre a tooltip de um marcador que esteja mesmo desenhado; a lista de
+    // jogos muda por baixo e o realce pode apontar para um pino que já saiu.
+    const realce = realcado != null ? marcadores.current.get(realcado) : undefined
+    if (realce?.getElement()) realce.openTooltip()
   }, [realcado])
 
   // Redimensionar quando o painel muda de tamanho.

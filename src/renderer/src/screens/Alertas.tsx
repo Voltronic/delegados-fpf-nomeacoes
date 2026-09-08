@@ -6,7 +6,8 @@ import { avisar, guardarCom, mensagemDeErro } from '../lib/avisos'
 const ETIQUETAS: Record<Alerta['tipo'], { texto: string; classe: string }> = {
   CONFLITO: { texto: 'Conflito de agenda', classe: 'erro' },
   ALTERADO: { texto: 'Jogo alterado', classe: 'alerta' },
-  DESAPARECIDO: { texto: 'Jogo desapareceu', classe: 'alerta' }
+  DESAPARECIDO: { texto: 'Jogo desapareceu', classe: 'alerta' },
+  RECINTO_SEM_COORDENADAS: { texto: 'Recinto sem coordenadas', classe: 'alerta' }
 }
 
 interface Props {

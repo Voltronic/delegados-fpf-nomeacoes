@@ -7,14 +7,27 @@ import ClubesRecintos from './screens/ClubesRecintos'
 import Dashboard from './screens/Dashboard'
 import Definicoes from './screens/Definicoes'
 import Delegados from './screens/Delegados'
+import Escondidos from './screens/Escondidos'
+import Historico from './screens/Historico'
 import Importacao from './screens/Importacao'
 import Nomeacoes from './screens/Nomeacoes'
 import { classes } from './lib/formato'
 
-type Ecra = 'nomeacoes' | 'delegados' | 'clubes' | 'importacao' | 'dashboard' | 'alertas' | 'definicoes'
+type Ecra =
+  | 'nomeacoes'
+  | 'historico'
+  | 'escondidos'
+  | 'delegados'
+  | 'clubes'
+  | 'importacao'
+  | 'dashboard'
+  | 'alertas'
+  | 'definicoes'
 
 const MENU: { chave: Ecra; etiqueta: string; icone: string }[] = [
   { chave: 'nomeacoes', etiqueta: 'Nomeações', icone: '📋' },
+  { chave: 'historico', etiqueta: 'Histórico', icone: '🗂️' },
+  { chave: 'escondidos', etiqueta: 'Escondidos', icone: '🙈' },
   { chave: 'dashboard', etiqueta: 'Dashboard', icone: '📊' },
   { chave: 'alertas', etiqueta: 'Alertas', icone: '🔔' },
   { chave: 'delegados', etiqueta: 'Delegados', icone: '👤' },
@@ -98,6 +111,8 @@ export default function App(): JSX.Element {
 
       <main className="conteudo">
         {ecra === 'nomeacoes' && <Nomeacoes tilesUrl={tilesUrl} versaoDados={versaoDados} />}
+        {ecra === 'historico' && <Historico />}
+        {ecra === 'escondidos' && <Escondidos />}
         {ecra === 'dashboard' && <Dashboard />}
         {ecra === 'alertas' && <Alertas alertas={alertas} aoMudar={setAlertas} />}
         {ecra === 'delegados' && <Delegados tilesUrl={tilesUrl} />}

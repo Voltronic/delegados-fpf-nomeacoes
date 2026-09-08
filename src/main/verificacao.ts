@@ -411,6 +411,97 @@ async function principal(): Promise<void> {
       `→ ${semSugestao.length} sem sugestão${semSugestao[0] ? `: ${semSugestao[0].motivos.join(', ')}` : ''}`
     )
 
+    log('\n7b. Esconder jogos, histórico e alertas de recintos')
+    const paraEsconder = repos.listarJogos()[0]
+    const quantosAntes = repos.listarJogos().length
+    repos.esconderJogo(paraEsconder.id, true)
+    verificar(
+      'esconder tira o jogo das listas de trabalho',
+      repos.listarJogos().length === quantosAntes - 1 &&
+        !repos.listarJogos().some((j) => j.id === paraEsconder.id),
+      `→ ${repos.listarJogos().length} de ${quantosAntes}`
+    )
+    verificar(
+      'o jogo escondido continua guardado e recuperável',
+      repos.jogosEscondidos().some((j) => j.id === paraEsconder.id)
+    )
+    repos.esconderJogo(paraEsconder.id, false)
+    verificar(
+      'repor devolve o jogo à lista',
+      repos.listarJogos().length === quantosAntes && repos.jogosEscondidos().length === 0
+    )
+
+    // Um jogo escondido cuja data já passou deixa de aparecer: foi escondido
+    // por não interessar, e depois da data não há nada a repor.
+    const passado = repos.guardarJogo({
+      chaveNatural: 'teste:passado',
+      competicaoId: competicao.id,
+      fase: '1ª FASE',
+      serie: 'SÉRIE 1',
+      jornada: '0',
+      fpfFixtureId: 999,
+      fpfMatchId: null,
+      dataHora: '2026-08-01T15:00',
+      clubeCasaId: clubes[0].id,
+      clubeForaId: clubes[1].id,
+      recintoId: repos.recintoDoClube(clubes[0].id, competicao.id),
+      recintoTextoFpf: null,
+      estado: 'AGENDADO'
+    })
+    repos.esconderJogo(passado, true)
+    verificar(
+      'um escondido com a data passada desaparece da lista de escondidos',
+      repos.jogosEscondidos().every((j) => j.id !== passado),
+      `→ ${repos.jogosEscondidos().length} escondidos`
+    )
+
+    // Histórico: só entram jogos passados que tiveram delegado.
+    repos.esconderJogo(passado, false)
+    const semNomeacao = repos.historicoJogos()
+    verificar(
+      'um jogo passado sem delegado não entra no histórico',
+      semNomeacao.every((j) => j.id !== passado),
+      `→ ${semNomeacao.length} no histórico`
+    )
+    await nomear({ jogoId: passado, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
+    const historico = repos.historicoJogos()
+    verificar(
+      'um jogo passado com delegado entra no histórico',
+      historico.some((j) => j.id === passado) && historico.every((j) => j.nomeacoes.length > 0),
+      `→ ${historico.length} no histórico`
+    )
+    verificar(
+      'o histórico não mostra jogos que ainda estão para acontecer',
+      historico.every((j) => (j.dataHora ?? '') < new Date().toISOString().slice(0, 16))
+    )
+
+    // Recinto sem coordenadas: tem de dar alerta, e o alerta tem de fechar-se
+    // sozinho quando alguém puser a localização.
+    const orfao = repos.encontrarOuCriarRecinto('Campo Sem Coordenadas Nenhumas')
+    const criados = repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas())
+    verificar(
+      'um recinto sem coordenadas gera alerta',
+      criados.some((a) => a.tipo === 'RECINTO_SEM_COORDENADAS' && a.recintoId === orfao.id),
+      `→ ${criados.length} alerta(s)`
+    )
+    verificar(
+      'o mesmo recinto não gera alertas repetidos',
+      repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas()).length === 0
+    )
+    repos.atualizarRecinto(orfao.id, {
+      nome: orfao.nome,
+      morada: 'algures',
+      lat: 41.1,
+      lng: -8.6,
+      coordsManuais: true
+    })
+    const fechados = repos.apagarAlertasDeRecintosLocalizados()
+    verificar(
+      'o alerta fecha-se quando o recinto passa a ter coordenadas',
+      fechados === 1 &&
+        !repos.listarAlertas().some((a) => a.tipo === 'RECINTO_SEM_COORDENADAS' && a.recintoId === orfao.id)
+    )
+
     log('\n8. Endpoints reais da FPF')
     try {
       const cliente = new ClienteFpf({ baseUrl: 'https://resultados.fpf.pt', intervaloMs: 400 })
@@ -612,7 +703,13 @@ async function principal(): Promise<void> {
     )
     verificar('fica marcado como confirmado', corrigido?.confirmado === true)
   } finally {
-    rmSync(pasta, { recursive: true, force: true })
+    // O SQLite ainda tem o ficheiro aberto; se o Windows o bloquear, a pasta
+    // temporária fica para trás e não vale a pena falhar a verificação por isso.
+    try {
+      rmSync(pasta, { recursive: true, force: true })
+    } catch {
+      /* pasta temporária, o sistema limpa-a depois */
+    }
   }
 
   log(falhas === 0 ? `\n${verde('Verificação concluída sem falhas.')}\n` : `\n${vermelho(`${falhas} verificações falharam.`)}\n`)

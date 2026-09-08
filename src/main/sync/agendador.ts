@@ -205,6 +205,8 @@ export async function atualizarJogos(
     )
   }
 
+  // Os alertas dos recintos são calculados depois da geocodificação, mais
+  // abaixo: só interessam os que ficaram mesmo sem coordenadas.
   resultado.alertas = repos.criarAlertas(entradas)
 
   // Um recinto sem coordenadas não tem distâncias, e sem distâncias o motor não
@@ -223,6 +225,13 @@ export async function atualizarJogos(
     resultado.recintosPorLocalizar = geo.falhados.length
     resultado.recintosPorConfirmar = geo.porConfirmar
   }
+
+  // Um recinto novo que a pesquisa não conseguiu localizar tem de dar nas
+  // vistas: sem coordenadas não há distâncias, e sem distâncias os jogos desse
+  // recinto ficam sem candidatos ordenados. O alerta fecha-se sozinho quando
+  // alguém puser a localização.
+  repos.apagarAlertasDeRecintosLocalizados()
+  resultado.alertas.push(...repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas()))
 
   ultimaAtualizacao = resultado
   return resultado

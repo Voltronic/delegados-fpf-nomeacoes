@@ -27,7 +27,17 @@ function verificar(descricao: string, condicao: boolean, detalhe = ''): void {
   log(`  ${condicao ? 'OK   ' : 'FALHA'} ${descricao}${detalhe ? ` ${detalhe}` : ''}`)
 }
 
-const ECRAS = ['Nomeações', 'Dashboard', 'Alertas', 'Delegados', 'Clubes e recintos', 'Importação', 'Definições']
+const ECRAS = [
+  'Nomeações',
+  'Histórico',
+  'Escondidos',
+  'Dashboard',
+  'Alertas',
+  'Delegados',
+  'Clubes e recintos',
+  'Importação',
+  'Definições'
+]
 
 function semear(): void {
   const delegados = [
@@ -217,6 +227,67 @@ app.whenReady().then(async () => {
       zoomAntes !== '' && zoomAntes === zoomDepois,
       `→ antes ${zoomAntes}, depois ${zoomDepois}`
     )
+
+    const irPara = async (nome: string): Promise<void> => {
+      await janela.webContents.executeJavaScript(
+        `[...document.querySelectorAll('.barra-lateral button')].find((b) => b.textContent.includes(${JSON.stringify(
+          nome
+        )}))?.click()`
+      )
+      await new Promise((r) => setTimeout(r, 700))
+    }
+
+    // Nomear pela interface, que é também o que dá cor à linha do jogo.
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.candidato button')].find((b) => b.textContent.trim() === 'Principal')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 1200))
+    const comCor = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.item-jogo.nomeado, .item-jogo.parcial').length"
+    )) as number
+    verificar('os jogos com delegado ficam com cor própria', comCor > 0, `→ ${comCor} com cor`)
+
+    // Esconder um jogo é uma ação destrutiva à vista do coordenador (o jogo
+    // sai da lista), por isso confirma-se que sai mesmo e que volta. Esconde-se
+    // o último da lista: os primeiros podem já ter passado da hora, e um jogo
+    // passado não volta a aparecer nos escondidos (é o comportamento pedido).
+    const jogosAntes = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.item-jogo').length"
+    )) as number
+    const nomeDoJogo = (await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.item-jogo .equipas')].at(-1)?.textContent ?? ''"
+    )) as string
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.item-jogo .esconder')].at(-1)?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 900))
+    const jogosDepois = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.item-jogo').length"
+    )) as number
+    verificar(
+      'esconder tira o jogo da lista',
+      jogosDepois === jogosAntes - 1,
+      `→ ${jogosAntes} para ${jogosDepois}`
+    )
+
+    await irPara('Escondidos')
+    const noEcraEscondidos = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.corpo-ecra')?.innerText ?? ''"
+    )) as string
+    verificar(
+      'o jogo escondido aparece no ecrã Escondidos',
+      noEcraEscondidos.includes(nomeDoJogo.split('×')[0].trim()),
+      `→ ${noEcraEscondidos.slice(0, 90).replace(/\s+/g, ' ')}`
+    )
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Repor')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 900))
+    await irPara('Nomeações')
+    const reposto = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.item-jogo').length"
+    )) as number
+    verificar('repor devolve o jogo à lista', reposto === jogosAntes, `→ ${reposto} jogos`)
 
     log('\n3. Navegação por todos os ecrãs')
     for (const nome of ECRAS.slice(1)) {

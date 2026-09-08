@@ -70,7 +70,10 @@ const api = {
     obter: invocar('jogos:obter'),
     criarManual: invocar('jogos:criarManual'),
     apagar: invocar('jogos:apagar'),
-    importarCsv: invocar('jogos:importarCsv')
+    importarCsv: invocar('jogos:importarCsv'),
+    esconder: invocar('jogos:esconder'),
+    escondidos: invocar('jogos:escondidos'),
+    historico: invocar('jogos:historico')
   },
   nomeacoes: {
     candidatos: invocar('nomeacoes:candidatos'),

@@ -244,5 +244,41 @@ export const MIGRACOES: Migracao[] = [
 
       DROP TABLE marcadores;
     `
+  },
+  {
+    versao: 8,
+    descricao: 'Jogos escondidos e alertas de recintos sem coordenadas',
+    sql: `
+      -- Esconder um jogo é uma decisão do coordenador (jogo que não lhe compete,
+      -- duplicado da FPF, escalão que não acompanha). Não se apaga nada: fica
+      -- guardado, recuperável, e desaparece sozinho quando a data passa.
+      ALTER TABLE jogo ADD COLUMN escondido INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE jogo ADD COLUMN escondido_em TEXT;
+      CREATE INDEX ix_jogo_escondido ON jogo(escondido, data_hora);
+
+      -- Um recinto sem coordenadas não tem distâncias, e sem distâncias o motor
+      -- não ordena candidatos. Passa a dar alerta em vez de ficar em silêncio.
+      -- O CHECK do tipo não se altera em SQLite; a tabela é recriada.
+      CREATE TABLE alerta_novo (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        chave         TEXT NOT NULL UNIQUE,
+        tipo          TEXT NOT NULL CHECK (tipo IN ('ALTERADO','DESAPARECIDO','CONFLITO','RECINTO_SEM_COORDENADAS')),
+        jogo_id       INTEGER REFERENCES jogo(id) ON DELETE CASCADE,
+        recinto_id    INTEGER REFERENCES recinto(id) ON DELETE CASCADE,
+        competicao    TEXT,
+        descricao     TEXT NOT NULL,
+        data_hora     TEXT,
+        detalhe       TEXT NOT NULL,
+        lido          INTEGER NOT NULL DEFAULT 0,
+        criado_em     TEXT NOT NULL
+      );
+
+      INSERT INTO alerta_novo (id, chave, tipo, jogo_id, competicao, descricao, data_hora, detalhe, lido, criado_em)
+        SELECT id, chave, tipo, jogo_id, competicao, descricao, data_hora, detalhe, lido, criado_em FROM alerta;
+
+      DROP TABLE alerta;
+      ALTER TABLE alerta_novo RENAME TO alerta;
+      CREATE INDEX ix_alerta_lido ON alerta(lido, criado_em);
+    `
   }
 ]

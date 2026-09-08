@@ -158,6 +158,22 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
       }
     })
 
+  /**
+   * Esconder tira o jogo da lista de trabalho sem apagar nada: fica no ecrã
+   * Escondidos até a data passar. É para os jogos que não competem ao
+   * coordenador, e por isso não pede confirmação — repor é um clique.
+   */
+  async function esconder(jogo: JogoDetalhado): Promise<void> {
+    try {
+      await window.api.jogos.esconder(jogo.id, true)
+      if (selecionado === jogo.id) setSelecionado(null)
+      await carregarJogos()
+      avisar(`${jogo.clubeCasaNome} × ${jogo.clubeForaNome} escondido. Pode repô-lo em Escondidos.`)
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+    }
+  }
+
   const nomeados = jogos.filter((j) => j.nomeacoes.length > 0).length
 
   return (
@@ -241,9 +257,25 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
               {jogos.map((j) => (
                 <div
                   key={j.id}
-                  className={classes('item-jogo', j.id === selecionado && 'selecionado')}
+                  className={classes(
+                    'item-jogo',
+                    j.nomeacoes.length >= 2 && 'nomeado',
+                    j.nomeacoes.length === 1 && 'parcial',
+                    j.id === selecionado && 'selecionado'
+                  )}
                   onClick={() => setSelecionado(j.id)}
                 >
+                  <button
+                    className="esconder"
+                    title="Esconder este jogo (fica recuperável em Escondidos)"
+                    onClick={(e) => {
+                      // Sem isto, esconder também selecionava o jogo que vai sair da lista.
+                      e.stopPropagation()
+                      void esconder(j)
+                    }}
+                  >
+                    ✕
+                  </button>
                   <div className="topo">
                     <span>{formatarDataHora(j.dataHora)}</span>
                     <span>·</span>

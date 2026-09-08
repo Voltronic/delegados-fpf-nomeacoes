@@ -476,6 +476,7 @@ table.tabela th.num {
 /* ------------------------------------------------------- lista de jogos */
 
 .item-jogo {
+  position: relative;
   padding: 9px 12px;
   border-bottom: 1px solid var(--borda);
   cursor: pointer;
@@ -491,6 +492,55 @@ table.tabela th.num {
 .item-jogo.selecionado {
   background: var(--primaria-clara);
   box-shadow: inset 3px 0 0 var(--primaria);
+}
+
+/*
+ * Um jogo já nomeado tem de se distinguir de relance numa lista de dezenas:
+ * verde quando está completo, âmbar quando só tem um dos dois delegados. A cor
+ * é uma barra à esquerda mais um fundo ténue, para continuar legível e não
+ * competir com o azul da seleção.
+ */
+.item-jogo.nomeado {
+  background: var(--sucesso-claro);
+  box-shadow: inset 3px 0 0 var(--sucesso);
+}
+
+.item-jogo.parcial {
+  background: var(--aviso-claro);
+  box-shadow: inset 3px 0 0 var(--aviso);
+}
+
+.item-jogo.nomeado.selecionado,
+.item-jogo.parcial.selecionado {
+  background: var(--primaria-clara);
+  box-shadow:
+    inset 3px 0 0 var(--primaria),
+    inset 0 0 0 1px var(--primaria);
+}
+
+/* O botão de esconder só aparece quando o rato passa pela linha. */
+.item-jogo .esconder {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--texto-fraco);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: var(--raio-p);
+  opacity: 0;
+}
+
+.item-jogo:hover .esconder {
+  opacity: 1;
+}
+
+.item-jogo .esconder:hover {
+  background: var(--perigo-claro);
+  color: var(--perigo);
 }
 
 .item-jogo .topo {

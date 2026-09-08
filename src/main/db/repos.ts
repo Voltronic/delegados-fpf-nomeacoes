@@ -473,6 +473,8 @@ type LinhaJogo = {
   estado: string
   importado_em: string | null
   alterado_em: string | null
+  escondido: number
+  escondido_em: string | null
 }
 
 const paraJogo = (l: LinhaJogo): Jogo => ({
@@ -491,10 +493,14 @@ const paraJogo = (l: LinhaJogo): Jogo => ({
   recintoTextoFpf: l.recinto_texto_fpf,
   estado: l.estado as EstadoJogo,
   importadoEm: l.importado_em,
-  alteradoEm: l.alterado_em
+  alteradoEm: l.alterado_em,
+  escondido: !!l.escondido,
+  escondidoEm: l.escondido_em
 })
 
 export interface FiltroJogos {
+  /** `true` devolve **apenas** os escondidos; por omissão são omitidos. */
+  escondidos?: boolean
   de?: string
   ate?: string
   competicaoId?: number
@@ -533,6 +539,8 @@ export function listarJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
     condicoes.push('(cc.nome LIKE @texto OR cf.nome LIKE @texto OR r.nome LIKE @texto)')
     params.texto = `%${filtro.texto}%`
   }
+  // Os escondidos ficam de fora de tudo menos de quem os peça de propósito.
+  condicoes.push(filtro.escondidos ? 'j.escondido = 1' : 'j.escondido = 0')
   const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : ''
   const linhas = obterBaseDados()
     .prepare(`${SQL_JOGO_DETALHADO} ${where} ORDER BY j.data_hora, comp.nome`)
@@ -567,6 +575,39 @@ export function listarJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
     if (filtro.estadoNomeacao === 'COMPLETO') return n >= 2
     return true
   })
+}
+
+/**
+ * Esconder é reversível e não apaga nada: o jogo sai das listas de trabalho e
+ * fica no ecrã Escondidos até a data passar. Nomeações que existam ficam como
+ * estão — se o jogo voltar, volta como estava.
+ */
+export function esconderJogo(id: number, escondido: boolean): void {
+  obterBaseDados()
+    .prepare('UPDATE jogo SET escondido = ?, escondido_em = ? WHERE id = ?')
+    .run(escondido ? 1 : 0, escondido ? agora() : null, id)
+  registarAuditoria('jogo', id, escondido ? 'esconder' : 'repor')
+}
+
+/**
+ * Jogos escondidos que ainda estão para acontecer. Os que já passaram deixam de
+ * aparecer — foram escondidos por não interessarem, e depois da data deixam de
+ * poder interessar de todo.
+ */
+export function jogosEscondidos(desde = agora().slice(0, 16)): JogoDetalhado[] {
+  return listarJogos({ escondidos: true, de: desde })
+}
+
+/**
+ * Histórico: jogos que já se realizaram e tiveram delegado nomeado. É o registo
+ * da época — o que ficou para trás sem nomeação não conta para nada e por isso
+ * não aparece aqui.
+ */
+export function historicoJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
+  const ate = filtro.ate ?? agora().slice(0, 16)
+  return listarJogos({ ...filtro, ate })
+    .filter((j) => j.nomeacoes.length > 0)
+    .reverse()
 }
 
 /**
@@ -891,6 +932,7 @@ type LinhaAlerta = {
   chave: string
   tipo: string
   jogo_id: number | null
+  recinto_id: number | null
   competicao: string | null
   descricao: string
   data_hora: string | null
@@ -904,6 +946,7 @@ const paraAlerta = (l: LinhaAlerta): Alerta => ({
   chave: l.chave,
   tipo: l.tipo as Alerta['tipo'],
   jogoId: l.jogo_id,
+  recintoId: l.recinto_id,
   competicao: l.competicao,
   descricao: l.descricao,
   dataHora: l.data_hora,
@@ -912,7 +955,9 @@ const paraAlerta = (l: LinhaAlerta): Alerta => ({
   criadoEm: l.criado_em
 })
 
-export type EntradaAlerta = Omit<Alerta, 'id' | 'lido' | 'criadoEm'>
+export type EntradaAlerta = Omit<Alerta, 'id' | 'lido' | 'criadoEm' | 'recintoId'> & {
+  recintoId?: number | null
+}
 
 /**
  * Grava alertas ignorando os que já existem: a atualização corre de hora a hora
@@ -922,13 +967,14 @@ export function criarAlertas(entradas: EntradaAlerta[]): Alerta[] {
   if (!entradas.length) return []
   const db = obterBaseDados()
   const inserir = db.prepare(
-    `INSERT OR IGNORE INTO alerta (chave, tipo, jogo_id, competicao, descricao, data_hora, detalhe, lido, criado_em)
-     VALUES (@chave, @tipo, @jogoId, @competicao, @descricao, @dataHora, @detalhe, 0, @criadoEm)`
+    `INSERT OR IGNORE INTO alerta
+       (chave, tipo, jogo_id, recinto_id, competicao, descricao, data_hora, detalhe, lido, criado_em)
+     VALUES (@chave, @tipo, @jogoId, @recintoId, @competicao, @descricao, @dataHora, @detalhe, 0, @criadoEm)`
   )
   const criadas: string[] = []
   const transacao = db.transaction(() => {
     for (const e of entradas) {
-      const info = inserir.run({ ...e, criadoEm: agora() })
+      const info = inserir.run({ recintoId: null, ...e, criadoEm: agora() })
       if (info.changes > 0) criadas.push(e.chave)
     }
   })
@@ -938,6 +984,39 @@ export function criarAlertas(entradas: EntradaAlerta[]): Alerta[] {
   return (
     db.prepare(`SELECT * FROM alerta WHERE chave IN (${marcadores}) ORDER BY criado_em DESC`).all(...criadas) as LinhaAlerta[]
   ).map(paraAlerta)
+}
+
+/**
+ * Alertas dos recintos que continuam sem ponto no mapa. Sem coordenadas não há
+ * distâncias, e sem distâncias o motor não consegue ordenar candidatos para
+ * esses jogos — por isso isto tem de saltar à vista em vez de falhar calado.
+ */
+export function alertasDeRecintosSemCoordenadas(): EntradaAlerta[] {
+  return recintosSemCoordenadas().map((r) => ({
+    chave: `recinto-sem-coords:${r.id}`,
+    tipo: 'RECINTO_SEM_COORDENADAS' as const,
+    jogoId: null,
+    recintoId: r.id,
+    competicao: null,
+    descricao: r.nome,
+    dataHora: null,
+    detalhe:
+      'Este recinto ficou sem coordenadas, por isso os jogos que lá se realizam não têm distâncias ' +
+      'e os candidatos não podem ser ordenados. Abra "Clubes e recintos" e defina a localização ' +
+      '(pode colar um link do Google Maps).'
+  }))
+}
+
+/** Fecha os alertas dos recintos que entretanto ficaram com coordenadas. */
+export function apagarAlertasDeRecintosLocalizados(): number {
+  const info = obterBaseDados()
+    .prepare(
+      `DELETE FROM alerta
+        WHERE tipo = 'RECINTO_SEM_COORDENADAS'
+          AND recinto_id IN (SELECT id FROM recinto WHERE lat IS NOT NULL AND lng IS NOT NULL)`
+    )
+    .run()
+  return info.changes
 }
 
 export function listarAlertas(apenasPorLer = false): Alerta[] {

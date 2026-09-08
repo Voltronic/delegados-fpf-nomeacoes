@@ -178,6 +178,12 @@ export interface Api {
     apagar(id: number): Promise<void>
     /** Importa jogos de um ficheiro CSV — o recurso que não depende do site. */
     importarCsv(texto: string, seasonId: number, descricaoEpoca: string): Promise<ResultadoImportacaoCsvApi>
+    /** Tira (ou repõe) um jogo das listas de trabalho, sem apagar nada. */
+    esconder(id: number, escondido: boolean): Promise<JogoDetalhado | null>
+    /** Jogos escondidos que ainda estão para acontecer. */
+    escondidos(): Promise<JogoDetalhado[]>
+    /** Jogos já realizados que tiveram delegado nomeado. */
+    historico(filtro?: FiltroJogosApi): Promise<JogoDetalhado[]>
   }
 
   nomeacoes: {
