@@ -9,3 +9,5 @@ dist/
 verificacao.log
 verificacao-ui.log
 sonda.log
+dist-exe/
+build.log
