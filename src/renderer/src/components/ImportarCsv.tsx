@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ResultadoImportacaoCsvApi } from '@shared/api'
 import type { Competicao, EpocaFpf } from '@shared/tipos'
+import { avisar, mensagemDeErro } from '../lib/avisos'
 
 interface Props {
   epocas: EpocaFpf[]
@@ -73,9 +74,13 @@ export default function ImportarCsv({ epocas, seasonId }: Props): JSX.Element {
     setErro(null)
     try {
       const descricao = epocasDisponiveis.find((e) => e.seasonId === epoca)?.descricao ?? ''
-      setResultado(await window.api.jogos.importarCsv(texto, epoca, descricao))
+      const r = await window.api.jogos.importarCsv(texto, epoca, descricao)
+      setResultado(r)
+      avisar(`${r.criados} jogos criados, ${r.atualizados} atualizados.`)
     } catch (e) {
-      setErro((e as Error).message)
+      const texto2 = mensagemDeErro(e)
+      setErro(texto2)
+      avisar(texto2, 'erro')
     } finally {
       setAImportar(false)
     }

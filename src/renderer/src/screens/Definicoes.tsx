@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Competicao, ConfiguracaoMotor, NivelDelegado } from '@shared/tipos'
 import type { InfoAplicacao } from '@shared/api'
+import { guardarCom } from '../lib/avisos'
 
 export default function Definicoes(): JSX.Element {
   const [config, setConfig] = useState<ConfiguracaoMotor | null>(null)
@@ -18,7 +19,12 @@ export default function Definicoes(): JSX.Element {
 
   async function guardar(): Promise<void> {
     if (!config) return
-    setConfig(await window.api.config.guardarMotor(config))
+    const actualizada = await guardarCom(
+      () => window.api.config.guardarMotor(config),
+      'Definições guardadas.'
+    )
+    if (!actualizada) return
+    setConfig(actualizada)
     setGuardado(true)
     setTimeout(() => setGuardado(false), 2500)
   }
@@ -138,7 +144,10 @@ export default function Definicoes(): JSX.Element {
               checked={syncAutomatico}
               onChange={async (e) => {
                 setSyncAutomatico(e.target.checked)
-                await window.api.config.escrever('sync.automatico', String(e.target.checked))
+                await guardarCom(
+                  () => window.api.config.escrever('sync.automatico', String(e.target.checked)),
+                  e.target.checked ? 'Atualização automática ligada.' : 'Atualização automática desligada.'
+                )
               }}
             />
             Manter os jogos atualizados automaticamente
@@ -169,12 +178,17 @@ export default function Definicoes(): JSX.Element {
                     <select
                       value={c.nivelMinimo ?? ''}
                       onChange={async (e) =>
-                        setCompeticoes(
-                          await window.api.competicoes.guardar({
-                            ...c,
-                            nivelMinimo: (e.target.value || null) as NivelDelegado | null
-                          })
-                        )
+                        {
+                          const lista = await guardarCom(
+                            () =>
+                              window.api.competicoes.guardar({
+                                ...c,
+                                nivelMinimo: (e.target.value || null) as NivelDelegado | null
+                              }),
+                            `${c.nome}: nível guardado.`
+                          )
+                          if (lista) setCompeticoes(lista)
+                        }
                       }
                     >
                       <option value="">Sem exigência</option>
@@ -187,9 +201,13 @@ export default function Definicoes(): JSX.Element {
                       style={{ width: 'auto' }}
                       checked={c.usaDelegadoCampo}
                       onChange={async (e) =>
-                        setCompeticoes(
-                          await window.api.competicoes.guardar({ ...c, usaDelegadoCampo: e.target.checked })
-                        )
+                        {
+                          const lista = await guardarCom(
+                            () => window.api.competicoes.guardar({ ...c, usaDelegadoCampo: e.target.checked }),
+                            `${c.nome}: delegado de campo guardado.`
+                          )
+                          if (lista) setCompeticoes(lista)
+                        }
                       }
                     />
                   </td>
@@ -199,7 +217,13 @@ export default function Definicoes(): JSX.Element {
                       style={{ width: 'auto' }}
                       checked={c.ativa}
                       onChange={async (e) =>
-                        setCompeticoes(await window.api.competicoes.guardar({ ...c, ativa: e.target.checked }))
+                        {
+                          const lista = await guardarCom(
+                            () => window.api.competicoes.guardar({ ...c, ativa: e.target.checked }),
+                            `${c.nome}: ${e.target.checked ? 'ativada' : 'desativada'}.`
+                          )
+                          if (lista) setCompeticoes(lista)
+                        }
                       }
                     />
                   </td>

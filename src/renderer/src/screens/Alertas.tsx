@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Alerta, ProgressoSincronizacao, ResultadoAtualizacao } from '@shared/tipos'
 import { classes, formatarDataHora } from '../lib/formato'
+import { avisar, guardarCom, mensagemDeErro } from '../lib/avisos'
 
 const ETIQUETAS: Record<Alerta['tipo'], { texto: string; classe: string }> = {
   CONFLITO: { texto: 'Conflito de agenda', classe: 'erro' },
@@ -56,7 +57,9 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
           : `${partes.join(', ')}.`
       )
     } catch (e) {
-      setMensagem(`A atualização falhou: ${(e as Error).message}`)
+      const texto = `A atualização falhou: ${mensagemDeErro(e)}`
+      setMensagem(texto)
+      avisar(texto, 'erro')
     } finally {
       setAAtualizar(false)
       setProgresso(null)
@@ -85,7 +88,13 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
         <div className="espacador" />
         <button
           className="botao"
-          onClick={async () => aoMudar(await window.api.alertas.marcarTodosLidos())}
+          onClick={async () => {
+            const lista = await guardarCom(
+              () => window.api.alertas.marcarTodosLidos(),
+              'Alertas marcados como lidos.'
+            )
+            if (lista) aoMudar(lista)
+          }}
           disabled={porLer === 0}
         >
           Marcar tudo como lido
@@ -159,7 +168,13 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
                   </button>
                   <button
                     className="botao pequeno perigo"
-                    onClick={async () => aoMudar(await window.api.alertas.apagar(a.id))}
+                    onClick={async () => {
+                      const lista = await guardarCom(
+                        () => window.api.alertas.apagar(a.id),
+                        'Alerta apagado.'
+                      )
+                      if (lista) aoMudar(lista)
+                    }}
                   >
                     Apagar
                   </button>

@@ -9,6 +9,7 @@ import type {
 } from '@shared/tipos'
 import Mapa from '../components/Mapa'
 import { classes } from '../lib/formato'
+import { avisar, guardarCom } from '../lib/avisos'
 
 interface Props {
   tilesUrl: string
@@ -68,13 +69,17 @@ function PainelClubes(): JSX.Element {
 
   async function associar(): Promise<void> {
     if (selecionado == null || recintoId === '') return
-    setAssociacoes(
-      await window.api.clubes.definirRecinto({
-        clubeId: selecionado,
-        competicaoId: competicaoId === '' ? null : competicaoId,
-        recintoId
-      })
+    const lista = await guardarCom(
+      () =>
+        window.api.clubes.definirRecinto({
+          clubeId: selecionado,
+          competicaoId: competicaoId === '' ? null : competicaoId,
+          recintoId
+        }),
+      'Recinto associado ao clube.'
     )
+    if (!lista) return
+    setAssociacoes(lista)
     setRecintoId('')
   }
 
@@ -120,7 +125,12 @@ function PainelClubes(): JSX.Element {
               className="botao"
               onClick={async () => {
                 if (!novoNome.trim()) return
-                setClubes(await window.api.clubes.guardar({ nome: novoNome.trim(), notas: null }))
+                const lista = await guardarCom(
+                  () => window.api.clubes.guardar({ nome: novoNome.trim(), notas: null }),
+                  `Clube "${novoNome.trim()}" criado.`
+                )
+                if (!lista) return
+                setClubes(lista)
                 setNovoNome('')
               }}
             >
@@ -146,13 +156,16 @@ function PainelClubes(): JSX.Element {
                     key={clube.id}
                     onBlur={async (e) => {
                       if (e.target.value.trim() && e.target.value !== clube.nome) {
-                        setClubes(
-                          await window.api.clubes.guardar({
-                            id: clube.id,
-                            nome: e.target.value.trim(),
-                            notas: clube.notas
-                          })
+                        const lista = await guardarCom(
+                          () =>
+                            window.api.clubes.guardar({
+                              id: clube.id,
+                              nome: e.target.value.trim(),
+                              notas: clube.notas
+                            }),
+                          'Nome do clube guardado.'
                         )
+                        if (lista) setClubes(lista)
                       }
                     }}
                   />
@@ -180,9 +193,13 @@ function PainelClubes(): JSX.Element {
                       <td style={{ width: 1 }}>
                         <button
                           className="botao pequeno perigo"
-                          onClick={async () =>
-                            setAssociacoes(await window.api.clubes.apagarRecinto(a.id, clube.id))
-                          }
+                          onClick={async () => {
+                            const lista = await guardarCom(
+                              () => window.api.clubes.apagarRecinto(a.id, clube.id),
+                              'Associação removida.'
+                            )
+                            if (lista) setAssociacoes(lista)
+                          }}
                         >
                           Remover
                         </button>
@@ -294,8 +311,13 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
   }, [selecionado, recintos])
 
   async function guardar(): Promise<void> {
-    if (!form.nome.trim()) return
-    setRecintos(await window.api.recintos.guardar(form))
+    if (!form.nome.trim()) {
+      avisar('O nome do recinto é obrigatório.', 'erro')
+      return
+    }
+    const lista = await guardarCom(() => window.api.recintos.guardar(form), `${form.nome} guardado.`)
+    if (!lista) return
+    setRecintos(lista)
     setMensagem(null)
   }
 
@@ -308,8 +330,9 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
         setForm(r)
         setRecintos(await window.api.recintos.listar())
         setMensagem(null)
+        avisar('Recinto localizado.')
       } else {
-        setMensagem('Não foi encontrado. Escreva a morada completa ou introduza as coordenadas.')
+        avisar('Não foi encontrado. Cole o link do Google Maps ou escreva a localidade.', 'erro')
       }
     } finally {
       setAGeocodificar(false)
@@ -470,7 +493,13 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
             <div className="linha" style={{ marginTop: 10 }}>
               <button
                 className="botao"
-                onClick={async () => setRecintos(await window.api.recintos.confirmarTodos())}
+                onClick={async () => {
+                  const lista = await guardarCom(
+                    () => window.api.recintos.confirmarTodos(),
+                    `${porConfirmar} recintos confirmados.`
+                  )
+                  if (lista) setRecintos(lista)
+                }}
               >
                 Confirmar todos os {porConfirmar}
               </button>
@@ -502,7 +531,13 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
                       <button
                         className={classes('botao', !r.confirmado && 'primario')}
                         onClick={async () =>
-                          setRecintos(await window.api.recintos.confirmar(r.id, !r.confirmado))
+                          {
+                          const lista = await guardarCom(
+                            () => window.api.recintos.confirmar(r.id, !r.confirmado),
+                            r.confirmado ? 'Marcado por confirmar.' : 'Ponto confirmado.'
+                          )
+                          if (lista) setRecintos(lista)
+                        }
                         }
                       >
                         {r.confirmado ? 'Marcar por confirmar' : 'Confirmar este ponto'}
@@ -617,12 +652,17 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
                       className="botao pequeno primario"
                       onClick={async () => {
                         if (typeof selecionado !== 'number') return
-                        const lista = await window.api.recintos.definirCoordenadas(
-                          selecionado,
-                          cand.lat,
-                          cand.lng,
-                          cand.moradaResolvida
+                        const lista = await guardarCom(
+                          () =>
+                            window.api.recintos.definirCoordenadas(
+                              selecionado,
+                              cand.lat,
+                              cand.lng,
+                              cand.moradaResolvida
+                            ),
+                          'Localização guardada e confirmada.'
                         )
+                        if (!lista) return
                         setRecintos(lista)
                         setForm({ ...form, lat: cand.lat, lng: cand.lng, coordsManuais: true })
                         setCandidatos(null)

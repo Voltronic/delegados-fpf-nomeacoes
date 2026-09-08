@@ -203,7 +203,31 @@ app.whenReady().then(async () => {
     )) as string
     verificar('oferece localizar de uma vez os que faltam', botaoLote.includes('em falta'), `→ ${botaoLote}`)
 
-    log('\n5. Indicador de atualização')
+    log('\n5. Aviso de gravação')
+    // Sem isto, carregar em "Guardar" não dava sinal nenhum de ter resultado.
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.barra-lateral button')].find(b => b.textContent.includes('Delegados')).click()"
+    )
+    await new Promise((r) => setTimeout(r, 600))
+    await janela.webContents.executeJavaScript("[...document.querySelectorAll('.item-jogo')][0].click()")
+    await new Promise((r) => setTimeout(r, 700))
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Guardar').click()"
+    )
+    await new Promise((r) => setTimeout(r, 900))
+    const aviso = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.avisos .toast')?.innerText.replace(/\\s+/g,' ') ?? ''"
+    )) as string
+    const classeAviso = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.avisos .toast')?.className ?? ''"
+    )) as string
+    verificar(
+      'gravar mostra confirmação no ecrã',
+      aviso.length > 0 && classeAviso.includes('sucesso'),
+      `→ "${aviso}"`
+    )
+
+    log('\n6. Indicador de atualização')
     // A atualização automática corre em segundo plano e demora minutos: sem
     // este indicador o coordenador vê um ecrã vazio e julga que nada funciona.
     janela.webContents.send('fpf:progresso', {
@@ -235,7 +259,7 @@ app.whenReady().then(async () => {
       (await janela.webContents.executeJavaScript("document.querySelector('.sync-estado') === null")) as boolean
     )
 
-    log('\n6. Erros de consola')
+    log('\n7. Erros de consola')
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
   } catch (erro) {
     verificar('percurso completo sem exceções', false, `→ ${(erro as Error).message}`)

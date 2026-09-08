@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Clube, Competicao, Recinto } from '@shared/tipos'
+import { avisar, mensagemDeErro } from '../lib/avisos'
 
 /**
  * Criação de um jogo à mão. Existe para a aplicação nunca ficar bloqueada: se o
@@ -62,12 +63,15 @@ export default function JogoManual(): JSX.Element {
         tipo: 'info',
         texto: `Jogo criado: ${jogo.clubeCasaNome} × ${jogo.clubeForaNome}. Já aparece no ecrã de Nomeações.`
       })
+      avisar(`Jogo ${jogo.clubeCasaNome} × ${jogo.clubeForaNome} criado.`)
       setCasaId('')
       setForaId('')
       setRecintoId('')
       setJornada('')
     } catch (e) {
-      setMensagem({ tipo: 'erro', texto: (e as Error).message })
+      const texto = mensagemDeErro(e)
+      setMensagem({ tipo: 'erro', texto })
+      avisar(texto, 'erro')
     }
   }
 

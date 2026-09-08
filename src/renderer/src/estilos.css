@@ -940,3 +940,78 @@ details.grupo-bloqueados > summary {
 .sync-estado .barra-progresso {
   background: #22304a;
 }
+
+/* ------------------------------------------------------------ avisos */
+
+.avisos {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 260px;
+  max-width: 420px;
+  padding: 10px 13px;
+  border-radius: var(--raio);
+  border: 1px solid;
+  box-shadow: var(--sombra-forte);
+  font-size: 12.5px;
+  line-height: 1.4;
+  animation: entrada-aviso 0.18s ease-out;
+}
+
+.toast .icone {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.toast.sucesso {
+  background: var(--sucesso-claro);
+  border-color: #a9d9be;
+  color: #14603a;
+}
+
+.toast.sucesso .icone {
+  background: var(--sucesso);
+}
+
+.toast.erro {
+  background: var(--perigo-claro);
+  border-color: #eec0bc;
+  color: var(--perigo);
+}
+
+.toast.erro .icone {
+  background: var(--perigo);
+}
+
+@keyframes entrada-aviso {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

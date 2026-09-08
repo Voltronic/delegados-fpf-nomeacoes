@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Clube, Delegado, Indisponibilidade, NivelDelegado, VetoClube } from '@shared/tipos'
 import Mapa from '../components/Mapa'
 import { classes, formatarData } from '../lib/formato'
+import { avisar, guardarCom } from '../lib/avisos'
 
 const VAZIO: Omit<Delegado, 'id'> = {
   numero: '',
@@ -72,23 +73,28 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
 
   async function guardar(): Promise<void> {
     if (!formulario.numero.trim() || !formulario.nome.trim()) {
-      setMensagem('O número e o nome são obrigatórios.')
+      avisar('O número e o nome são obrigatórios.', 'erro')
       return
     }
-    try {
-      const guardado = await window.api.delegados.guardar(formulario)
-      await carregar()
-      setSelecionado(guardado.id)
-      setMensagem(null)
-    } catch (erro) {
-      setMensagem(`Não foi possível guardar: ${(erro as Error).message}`)
-    }
+    const guardado = await guardarCom(
+      () => window.api.delegados.guardar(formulario),
+      `${formulario.nome} guardado.`
+    )
+    if (!guardado) return
+    await carregar()
+    setSelecionado(guardado.id)
+    setMensagem(null)
   }
 
   async function apagar(): Promise<void> {
     if (typeof selecionado !== 'number') return
     if (!confirm('Apagar este delegado e todas as suas nomeações?')) return
-    await window.api.delegados.apagar(selecionado)
+    const nome = formulario.nome
+    const ok = await guardarCom(
+      () => window.api.delegados.apagar(selecionado),
+      `${nome} apagado.`
+    )
+    if (ok === null) return
     setSelecionado(null)
     await carregar()
   }
@@ -102,8 +108,9 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
         setFormulario(atualizado)
         await carregar()
         setMensagem(null)
+        avisar('Morada localizada e guardada.')
       } else {
-        setMensagem('A morada não foi encontrada. Ajuste o texto ou marque o ponto no mapa.')
+        avisar('A morada não foi encontrada. Cole o link do Google Maps ou escreva a localidade.', 'erro')
       }
     } finally {
       setAGeocodificar(false)
@@ -407,14 +414,18 @@ function Indisponibilidades({
 
   async function adicionar(): Promise<void> {
     if (!inicio || !fim) return
-    aoMudar(
-      await window.api.delegados.criarIndisponibilidade({
-        delegadoId,
-        dataInicio: inicio,
-        dataFim: fim,
-        motivo: motivo || null
-      })
+    const lista = await guardarCom(
+      () =>
+        window.api.delegados.criarIndisponibilidade({
+          delegadoId,
+          dataInicio: inicio,
+          dataFim: fim,
+          motivo: motivo || null
+        }),
+      'Indisponibilidade guardada.'
     )
+    if (!lista) return
+    aoMudar(lista)
     setInicio('')
     setFim('')
     setMotivo('')
@@ -434,9 +445,13 @@ function Indisponibilidades({
               <td style={{ width: 1 }}>
                 <button
                   className="botao pequeno perigo"
-                  onClick={async () =>
-                    aoMudar(await window.api.delegados.apagarIndisponibilidade(i.id, delegadoId))
-                  }
+                  onClick={async () => {
+                    const lista = await guardarCom(
+                      () => window.api.delegados.apagarIndisponibilidade(i.id, delegadoId),
+                      'Indisponibilidade removida.'
+                    )
+                    if (lista) aoMudar(lista)
+                  }}
                 >
                   Remover
                 </button>
@@ -489,7 +504,12 @@ function Vetos({
 
   async function adicionar(): Promise<void> {
     if (clubeId === '') return
-    aoMudar(await window.api.delegados.criarVeto({ delegadoId, clubeId, motivo: motivo || null }))
+    const lista = await guardarCom(
+      () => window.api.delegados.criarVeto({ delegadoId, clubeId, motivo: motivo || null }),
+      'Veto guardado.'
+    )
+    if (!lista) return
+    aoMudar(lista)
     setClubeId('')
     setMotivo('')
   }
@@ -506,7 +526,13 @@ function Vetos({
               <td style={{ width: 1 }}>
                 <button
                   className="botao pequeno perigo"
-                  onClick={async () => aoMudar(await window.api.delegados.apagarVeto(v.id, delegadoId))}
+                  onClick={async () => {
+                    const lista = await guardarCom(
+                      () => window.api.delegados.apagarVeto(v.id, delegadoId),
+                      'Veto removido.'
+                    )
+                    if (lista) aoMudar(lista)
+                  }}
                 >
                   Remover
                 </button>

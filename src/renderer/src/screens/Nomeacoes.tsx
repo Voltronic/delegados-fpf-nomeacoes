@@ -9,6 +9,7 @@ import type {
 import CartaoCandidato from '../components/CartaoCandidato'
 import Mapa, { type PontoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
+import { avisar, mensagemDeErro } from '../lib/avisos'
 
 type EstadoNomeacao = 'TODOS' | 'POR_NOMEAR' | 'PARCIAL' | 'COMPLETO'
 
@@ -84,11 +85,14 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   async function nomear(delegadoId: number, papel: PapelNomeacao): Promise<void> {
     if (selecionado == null) return
     try {
+      const nome = candidatos.find((c) => c.delegadoId === delegadoId)?.nome ?? 'Delegado'
       await window.api.nomeacoes.nomear({ jogoId: selecionado, delegadoId, papel })
       setErro(null)
+      avisar(`${nome} nomeado como ${papel === 'PRINCIPAL' ? 'principal' : 'delegado de campo'}.`)
     } catch (e) {
-      // As mensagens do processo principal vêm prefixadas pelo canal IPC.
-      setErro((e as Error).message.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, ''))
+      const texto = mensagemDeErro(e)
+      setErro(texto)
+      avisar(texto, 'erro')
       return
     }
     await carregarJogos()
@@ -97,7 +101,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   async function remover(papel: PapelNomeacao): Promise<void> {
     if (selecionado == null) return
-    await window.api.nomeacoes.remover(selecionado, papel)
+    try {
+      await window.api.nomeacoes.remover(selecionado, papel)
+      avisar('Nomeação removida.')
+    } catch (e) {
+      avisar(mensagemDeErro(e), 'erro')
+      return
+    }
     await carregarJogos()
     await carregarCandidatos(selecionado)
   }
@@ -108,7 +118,9 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
       setProposta(await window.api.nomeacoes.proposta(jogos.map((j) => j.id)))
       setErro(null)
     } catch (e) {
-      setErro(`Não foi possível calcular a proposta: ${(e as Error).message}`)
+      const texto = `Não foi possível calcular a proposta: ${mensagemDeErro(e)}`
+      setErro(texto)
+      avisar(texto, 'erro')
     } finally {
       setAPropor(false)
     }
@@ -116,7 +128,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   async function aplicarProposta(): Promise<void> {
     if (!proposta) return
-    await window.api.nomeacoes.aplicarProposta(proposta.propostas)
+    try {
+      const n = await window.api.nomeacoes.aplicarProposta(proposta.propostas)
+      avisar(`${n} nomeações gravadas.`)
+    } catch (e) {
+      avisar(mensagemDeErro(e), 'erro')
+      return
+    }
     setProposta(null)
     await carregarJogos()
     if (selecionado != null) await carregarCandidatos(selecionado)

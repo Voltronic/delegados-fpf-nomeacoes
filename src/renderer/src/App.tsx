@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { InfoAplicacao } from '@shared/api'
 import type { Alerta, ProgressoSincronizacao } from '@shared/tipos'
+import Avisos from './components/Avisos'
 import Alertas from './screens/Alertas'
 import ClubesRecintos from './screens/ClubesRecintos'
 import Dashboard from './screens/Dashboard'
@@ -104,6 +105,8 @@ export default function App(): JSX.Element {
         {ecra === 'importacao' && <Importacao />}
         {ecra === 'definicoes' && <Definicoes />}
       </main>
+
+      <Avisos />
 
       {aviso && aviso.length > 0 && (
         <div className="notificacao">

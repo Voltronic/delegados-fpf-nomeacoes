@@ -8,6 +8,7 @@ import type {
 import ImportarCsv from '../components/ImportarCsv'
 import JogoManual from '../components/JogoManual'
 import { classes, formatarDataHora, paraDataIso } from '../lib/formato'
+import { avisar, mensagemDeErro } from '../lib/avisos'
 
 export default function Importacao(): JSX.Element {
   const [catalogo, setCatalogo] = useState<CatalogoFpf | null>(null)
@@ -92,8 +93,11 @@ export default function Importacao(): JSX.Element {
           }))
       })
       setResultado(r)
+      avisar(`${r.criados} jogos novos, ${r.atualizados} atualizados.`)
     } catch (e) {
-      setErro(`A sincronização falhou: ${(e as Error).message}`)
+      const texto = `A sincronização falhou: ${mensagemDeErro(e)}`
+      setErro(texto)
+      avisar(texto, 'erro')
     } finally {
       setACarregar(false)
       setProgresso(null)
