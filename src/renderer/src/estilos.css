@@ -197,6 +197,29 @@ h4 {
   min-height: 0;
 }
 
+/* Com o mapa em janela própria, os candidatos ficam com o espaço dele. */
+.tres-paineis.sem-mapa {
+  grid-template-columns: 330px minmax(0, 1fr);
+}
+
+.painel.escondido {
+  display: none;
+}
+
+/* A janela do mapa é só cabeçalho e mapa, sem barra lateral nem nada à volta. */
+.janela-mapa {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--superficie);
+}
+
+.janela-mapa .painel-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .painel {
   display: flex;
   flex-direction: column;

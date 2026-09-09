@@ -89,10 +89,16 @@ function emitirAlertas(alertas: unknown[]): void {
   }
 }
 
+let janelaDoMapa: BrowserWindow | null = null
+let ultimoEstadoDoMapa: unknown = null
+
 export function registarIpc(contexto: {
   versao: string
   caminhoBaseDados: string
   pastaCopias?: string
+  /** Ficheiros da interface, para abrir a janela do mapa. */
+  preload: string
+  paginaRenderer: string
 }): void {
   const registar = <T extends unknown[], R>(canal: string, manipulador: (...args: T) => R | Promise<R>): void => {
     ipcMain.handle(canal, async (_evento, ...args) => manipulador(...(args as T)))
@@ -155,6 +161,75 @@ export function registarIpc(contexto: {
       { lat: delegado.lat, lng: delegado.lng },
       { lat: recinto.lat, lng: recinto.lng }
     )
+  })
+
+  // -- Mapa em janela à parte -----------------------------------------------
+  //
+  // Com dezenas de delegados, o mapa e a lista disputam o mesmo ecrã. Numa
+  // janela própria, o mapa pode ir para um segundo monitor e a lista fica com
+  // a largura toda. O estado continua a vir do ecrã principal: a janela do
+  // mapa não sabe nada sozinha, só desenha o que recebe.
+  registar('mapa:destacar', () => {
+    if (janelaDoMapa && !janelaDoMapa.isDestroyed()) {
+      janelaDoMapa.focus()
+      return true
+    }
+    janelaDoMapa = new BrowserWindow({
+      width: 900,
+      height: 700,
+      title: 'Mapa — Nomeações de Delegados',
+      backgroundColor: '#f5f6f8',
+      webPreferences: {
+        preload: contexto.preload,
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    // A página da janela ainda está a carregar quando o ecrã principal manda o
+    // primeiro estado, e essa mensagem perdia-se — a janela abria vazia. O
+    // último estado fica guardado e é entregue assim que a página está pronta.
+    janelaDoMapa.webContents.on('did-finish-load', () => {
+      if (ultimoEstadoDoMapa !== null && janelaDoMapa && !janelaDoMapa.isDestroyed()) {
+        janelaDoMapa.webContents.send('mapa:estado', ultimoEstadoDoMapa)
+      }
+    })
+    void janelaDoMapa.loadFile(contexto.paginaRenderer, { hash: 'mapa' })
+    janelaDoMapa.on('closed', () => {
+      janelaDoMapa = null
+      // O ecrã principal volta a mostrar o mapa onde estava.
+      for (const janela of BrowserWindow.getAllWindows()) {
+        if (!janela.isDestroyed()) janela.webContents.send('mapa:juntou')
+      }
+    })
+    return true
+  })
+
+  registar('mapa:juntar', () => {
+    janelaDoMapa?.close()
+    return true
+  })
+
+  /** O ecrã principal manda o que há para desenhar; a janela do mapa recebe. */
+  /**
+   * A janela do mapa pede o estado quando monta. Empurrá-lo assim que a página
+   * carrega não chegava: o React ainda não tinha posto o ouvinte, e a mensagem
+   * caía no vazio. Pedir é a única ordem que não depende de tempos.
+   */
+  registar('mapa:estadoAtual', () => ultimoEstadoDoMapa)
+
+  registar('mapa:estado', (estado: unknown) => {
+    ultimoEstadoDoMapa = estado
+    if (janelaDoMapa && !janelaDoMapa.isDestroyed()) janelaDoMapa.webContents.send('mapa:estado', estado)
+  })
+
+  /** Clicar num pino na janela do mapa realça o candidato no ecrã principal. */
+  registar('mapa:realcar', (delegadoId: number | null) => {
+    for (const janela of BrowserWindow.getAllWindows()) {
+      if (janela !== janelaDoMapa && !janela.isDestroyed()) {
+        janela.webContents.send('mapa:realcar', delegadoId)
+      }
+    }
   })
 
   // -- Delegados ------------------------------------------------------------

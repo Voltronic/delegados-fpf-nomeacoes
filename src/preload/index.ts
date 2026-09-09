@@ -21,6 +21,28 @@ const api = {
     reporCopia: invocar('app:reporCopia'),
     abrirPastaCopias: invocar('app:abrirPastaCopias')
   },
+  mapa: {
+    destacar: invocar('mapa:destacar'),
+    juntar: invocar('mapa:juntar'),
+    enviarEstado: invocar('mapa:estado'),
+    estadoAtual: invocar('mapa:estadoAtual'),
+    realcar: invocar('mapa:realcar'),
+    aoReceberEstado: (ouvinte: (estado: unknown) => void): (() => void) => {
+      const wrapper = (_e: unknown, estado: unknown): void => ouvinte(estado)
+      ipcRenderer.on('mapa:estado', wrapper)
+      return () => ipcRenderer.removeListener('mapa:estado', wrapper)
+    },
+    aoRealcar: (ouvinte: (delegadoId: number | null) => void): (() => void) => {
+      const wrapper = (_e: unknown, id: number | null): void => ouvinte(id)
+      ipcRenderer.on('mapa:realcar', wrapper)
+      return () => ipcRenderer.removeListener('mapa:realcar', wrapper)
+    },
+    aoJuntar: (ouvinte: () => void): (() => void) => {
+      const wrapper = (): void => ouvinte()
+      ipcRenderer.on('mapa:juntou', wrapper)
+      return () => ipcRenderer.removeListener('mapa:juntou', wrapper)
+    }
+  },
   geo: {
     procurar: invocar('geo:procurar'),
     trajeto: invocar('geo:trajeto')

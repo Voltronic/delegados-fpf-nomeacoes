@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dataHoraAGuardar, diasAte, horaDesconhecida, paraDataLocal } from '../src/shared/datas'
+import { dataHoraAGuardar, dataMudou, diasAte, horaDesconhecida, paraDataLocal } from '../src/shared/datas'
 
 /**
  * O caso que falhou em uso real: às 14:57 de 9 de setembro, um jogo desse mesmo
@@ -92,5 +92,40 @@ describe('a hora que a FPF deixa de mostrar', () => {
   it('não inventa datas onde não há', () => {
     expect(dataHoraAGuardar(null, '2026-09-09T00:00')).toBe('2026-09-09T00:00')
     expect(dataHoraAGuardar('2026-09-09T12:00', null)).toBeNull()
+  })
+})
+
+describe('avisar o coordenador de uma alteração de data', () => {
+  it('não avisa quando a hora só desapareceu do site', () => {
+    // O alerta dizia "data passou de 09/09/2026 às 12:00 para 09/09/2026",
+    // quando na base de dados a hora ficava exatamente na mesma.
+    expect(dataMudou('2026-09-09T12:00', '2026-09-09T00:00')).toBe(false)
+  })
+
+  it('avisa quando a hora muda mesmo', () => {
+    expect(dataMudou('2026-09-09T12:00', '2026-09-09T17:00')).toBe(true)
+  })
+
+  it('avisa quando o jogo é adiado para outro dia', () => {
+    expect(dataMudou('2026-09-09T12:00', '2026-09-20T00:00')).toBe(true)
+  })
+
+  it('avisa quando um jogo sem data passa a ter data', () => {
+    expect(dataMudou(null, '2026-09-09T15:00')).toBe(true)
+  })
+
+  it('o que se avisa é sempre o que se grava', () => {
+    // A regra tem de ser a mesma nos dois lados: foi por serem duas que o
+    // alerta apareceu depois de a gravação já estar corrigida.
+    const casos: [string | null, string | null][] = [
+      ['2026-09-09T12:00', '2026-09-09T00:00'],
+      ['2026-09-09T12:00', '2026-09-09T17:00'],
+      ['2026-09-09T12:00', '2026-09-20T00:00'],
+      [null, '2026-09-09T15:00'],
+      ['2026-09-09T12:00', null]
+    ]
+    for (const [antes, daFpf] of casos) {
+      expect(dataMudou(antes, daFpf), `${antes} → ${daFpf}`).toBe(dataHoraAGuardar(antes, daFpf) !== antes)
+    }
   })
 })

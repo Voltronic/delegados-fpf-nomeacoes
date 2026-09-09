@@ -61,6 +61,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [urgentes, setUrgentes] = useState<JogoDetalhado[]>([])
   const [aEditar, setAEditar] = useState<JogoDetalhado | null>(null)
   const [aConfigurarProposta, setAConfigurarProposta] = useState(false)
+  const [mapaDestacado, setMapaDestacado] = useState(false)
   const [trajetos, setTrajetos] = useState<TrajetoMapa[]>([])
 
   /**
@@ -286,6 +287,44 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     }
   }, [jogo?.id, jogo?.recintoId, jogo?.nomeacoes.map((n) => n.delegadoId).join(',')])
 
+  /** O que a janela do mapa tem de desenhar. */
+  const estadoDoMapa = {
+    tilesUrl,
+    recinto:
+      jogo?.recintoLat != null && jogo.recintoLng != null
+        ? { lat: jogo.recintoLat, lng: jogo.recintoLng, titulo: jogo.recintoNome ?? 'Recinto' }
+        : null,
+    pontos,
+    trajetos,
+    realcado,
+    legenda: `${jogo?.recintoNome ?? 'sem recinto'} · ${pontos.length} delegados localizados`
+  }
+
+  // Enquanto o mapa estiver destacado, é este ecrã que lhe diz o que desenhar.
+  useEffect(() => {
+    if (!mapaDestacado) return
+    void window.api.mapa.enviarEstado({
+      tilesUrl,
+      recinto:
+        jogo?.recintoLat != null && jogo.recintoLng != null
+          ? { lat: jogo.recintoLat, lng: jogo.recintoLng, titulo: jogo.recintoNome ?? 'Recinto' }
+          : null,
+      pontos,
+      trajetos,
+      realcado,
+      legenda: `${jogo?.recintoNome ?? 'sem recinto'} · ${pontos.length} delegados localizados`
+    })
+  }, [mapaDestacado, tilesUrl, jogo, pontos, trajetos, realcado])
+
+  useEffect(() => {
+    const largarRealce = window.api.mapa.aoRealcar((id) => setRealcado(id))
+    const largarJuntar = window.api.mapa.aoJuntar(() => setMapaDestacado(false))
+    return () => {
+      largarRealce()
+      largarJuntar()
+    }
+  }, [])
+
   /** Levar a semana até ao jogo escolhido na faixa, e selecioná-lo. */
   function irParaJogo(jogoId: number): void {
     const jogo = urgentes.find((j) => j.id === jogoId)
@@ -365,7 +404,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
       </div>
 
       <div className="corpo-ecra sem-padding">
-        <div className="tres-paineis">
+        <div className={classes('tres-paineis', mapaDestacado && 'sem-mapa')}>
           {/* ------------------------------------------------ jogos */}
           <div className="painel">
             <div className="painel-cabecalho">
@@ -579,12 +618,26 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           </div>
 
           {/* -------------------------------------------------- mapa */}
-          <div className="painel">
+          <div className={classes('painel', mapaDestacado && 'escondido')}>
             <div className="painel-cabecalho">
               <h2>Mapa</h2>
               <div className="silencioso" style={{ marginTop: 3 }}>
                 {jogo?.recintoNome ?? 'sem recinto'} · {pontos.length} delegados localizados
               </div>
+              <div className="espacador" style={{ marginLeft: 'auto' }} />
+              <button
+                className="botao pequeno"
+                title="Abrir o mapa numa janela à parte e dar o espaço todo à lista"
+                onClick={async () => {
+                  // O estado vai já: a janela ainda está a carregar, e o
+                  // processo principal guarda-o para lho entregar quando abrir.
+                  await window.api.mapa.enviarEstado(estadoDoMapa)
+                  await window.api.mapa.destacar()
+                  setMapaDestacado(true)
+                }}
+              >
+                ⧉ Janela à parte
+              </button>
             </div>
             <div className="painel-corpo" style={{ display: 'flex', flexDirection: 'column' }}>
               <Mapa

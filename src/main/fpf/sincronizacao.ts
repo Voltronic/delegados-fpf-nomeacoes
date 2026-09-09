@@ -6,6 +6,7 @@ import type {
   ProgressoSincronizacao,
   ResultadoSincronizacao
 } from '@shared/tipos'
+import { dataHoraAGuardar, dataMudou } from '../../shared/datas'
 import { ClienteFpf } from './cliente'
 import {
   anosDaEpoca,
@@ -336,8 +337,13 @@ function calcularDiffs(chaves: string[]): DiffJogo[] {
     }
 
     const alteracoes: DiffJogo['alteracoes'] = []
-    if ((existente.dataHora ?? null) !== (p.dataHora ?? null)) {
-      alteracoes.push({ campo: 'Data e hora', antes: existente.dataHora, depois: p.dataHora })
+    // Compara-se com a data que vai mesmo ser gravada, não com a que veio da
+    // FPF: um jogo já jogado deixa de mostrar a hora no site, e avisar de uma
+    // alteração que não chega a ser aplicada é ruído — e assustava, porque a
+    // mensagem parecia dizer que a hora tinha desaparecido.
+    const dataFinal = dataHoraAGuardar(existente.dataHora, p.dataHora)
+    if (dataMudou(existente.dataHora, p.dataHora)) {
+      alteracoes.push({ campo: 'Data e hora', antes: existente.dataHora, depois: dataFinal })
     }
     const recintoAntes = existente.recintoTextoFpf ?? null
     if (normalizarNome(recintoAntes ?? '') !== normalizarNome(p.recintoTexto ?? '')) {

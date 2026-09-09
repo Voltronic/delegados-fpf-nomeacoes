@@ -115,6 +115,22 @@ export interface Api {
     abrirPastaCopias(): Promise<void>
   }
 
+  /** O mapa numa janela à parte, para a lista ficar com o ecrã todo. */
+  mapa: {
+    destacar(): Promise<boolean>
+    juntar(): Promise<boolean>
+    /** O ecrã principal manda o que a janela do mapa tem de desenhar. */
+    enviarEstado(estado: unknown): Promise<void>
+    /** O último estado enviado, para a janela do mapa pedir quando abre. */
+    estadoAtual(): Promise<unknown>
+    /** Um clique na janela do mapa realça o candidato no ecrã principal. */
+    realcar(delegadoId: number | null): Promise<void>
+    aoReceberEstado(ouvinte: (estado: unknown) => void): () => void
+    aoRealcar(ouvinte: (delegadoId: number | null) => void): () => void
+    /** A janela do mapa fechou: o mapa volta ao ecrã principal. */
+    aoJuntar(ouvinte: () => void): () => void
+  }
+
   geo: {
     /** Procura um local por texto livre ou por link do Google Maps colado. */
     procurar(termo: string): Promise<{ lat: number; lng: number; moradaResolvida: string; categoria: string }[]>

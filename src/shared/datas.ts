@@ -67,3 +67,15 @@ export function dataHoraAGuardar(anterior: string | null, nova: string | null): 
   if (horaDesconhecida(nova) && mesmoDia && !horaDesconhecida(anterior)) return anterior
   return nova
 }
+
+/**
+ * Se a data de um jogo mudou mesmo, para efeitos de aviso ao coordenador.
+ *
+ * É a mesma regra de `dataHoraAGuardar`, de propósito: avisar de uma alteração
+ * que não chega a ser gravada é ruído. Foi o que aconteceu com os jogos já
+ * realizados — o alerta dizia que a hora tinha mudado quando a hora ficava
+ * exatamente na mesma.
+ */
+export function dataMudou(anterior: string | null, novaDaFpf: string | null): boolean {
+  return (anterior ?? null) !== (dataHoraAGuardar(anterior, novaDaFpf) ?? null)
+}

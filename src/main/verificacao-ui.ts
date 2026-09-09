@@ -117,7 +117,12 @@ app.whenReady().then(async () => {
   abrirBaseDados(caminho, { pastaCopias: join(pasta, 'backups'), semearRecintos: false })
   escreverConfig('geo.osrmUrl', 'http://127.0.0.1:1') // distâncias em linha reta
   semear()
-  registarIpc({ versao: app.getVersion(), caminhoBaseDados: caminho })
+  registarIpc({
+    versao: app.getVersion(),
+    caminhoBaseDados: caminho,
+    preload: join(__dirname, '../preload/index.mjs'),
+    paginaRenderer: join(__dirname, '../renderer/index.html')
+  })
 
   const erros: string[] = []
   const janela = new BrowserWindow({
@@ -529,6 +534,59 @@ app.whenReady().then(async () => {
       "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Cancelar')?.click()"
     )
     await new Promise((r) => setTimeout(r, 500))
+
+    log('\n2c. Mapa em janela à parte')
+    await irPara('Nomeações')
+    const janelasAntes = BrowserWindow.getAllWindows().length
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.painel-cabecalho button')].find((b) => b.textContent.includes('Janela à parte'))?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 1500))
+    const janelaMapa = BrowserWindow.getAllWindows().find((j) => j !== janela)
+    verificar(
+      'o botão abre o mapa numa janela própria',
+      BrowserWindow.getAllWindows().length === janelasAntes + 1 && !!janelaMapa,
+      `→ ${BrowserWindow.getAllWindows().length} janelas`
+    )
+
+    if (janelaMapa) {
+      await new Promise((r) => setTimeout(r, 1200))
+      const naJanela = (await janelaMapa.webContents.executeJavaScript(
+        `JSON.stringify({
+           mapa: document.querySelectorAll('.leaflet-container').length,
+           pinos: document.querySelectorAll('.leaflet-container .pino').length,
+           voltar: !!document.querySelector('.janela-mapa button')
+         })`
+      )) as string
+      const conteudo = JSON.parse(naJanela) as { mapa: number; pinos: number; voltar: boolean }
+      verificar(
+        'a janela do mapa desenha o mesmo que o ecrã principal',
+        conteudo.mapa === 1 && conteudo.pinos > 0 && conteudo.voltar,
+        `→ ${naJanela}`
+      )
+    }
+
+    // Com o mapa fora, a lista fica com o espaço dele.
+    const semMapa = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         paineis: document.querySelectorAll('.tres-paineis > .painel:not(.escondido)').length,
+         colunas: getComputedStyle(document.querySelector('.tres-paineis')).gridTemplateColumns.split(' ').length
+       })`
+    )) as string
+    const layout = JSON.parse(semMapa) as { paineis: number; colunas: number }
+    verificar(
+      'o ecrã principal passa a dois painéis',
+      layout.paineis === 2 && layout.colunas === 2,
+      `→ ${semMapa}`
+    )
+
+    // Fechar a janela devolve o mapa ao ecrã.
+    janelaMapa?.close()
+    await new Promise((r) => setTimeout(r, 1200))
+    const voltou = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.tres-paineis > .painel:not(.escondido)').length"
+    )) as number
+    verificar('fechar a janela devolve o mapa ao ecrã', voltou === 3, `→ ${voltou} painéis`)
 
     log('\n3b. Dashboard: ordenação e altura das tabelas')
     await irPara('Dashboard')

@@ -75,7 +75,13 @@ app.whenReady().then(() => {
     app.exit(1)
     return
   }
-  registarIpc({ versao: app.getVersion(), caminhoBaseDados: caminho, pastaCopias: PASTA_COPIAS })
+  registarIpc({
+    versao: app.getVersion(),
+    caminhoBaseDados: caminho,
+    pastaCopias: PASTA_COPIAS,
+    preload: join(__dirname, '../preload/index.mjs'),
+    paginaRenderer: join(__dirname, '../renderer/index.html')
+  })
 
   criarJanela()
   iniciarAgendador(clienteFpfPartilhado)
