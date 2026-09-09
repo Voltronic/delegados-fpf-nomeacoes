@@ -24,6 +24,7 @@ import { MIGRACOES } from './db/schema'
 import { semearRecintos } from './db/semente'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
+import { obterTrajeto } from './geo'
 import { RECINTOS_CONHECIDOS } from './geo/recintosConhecidos'
 import {
   desfazerUltimaAccao,
@@ -802,6 +803,40 @@ async function principal(): Promise<void> {
       'o alerta fecha-se quando o recinto passa a ter coordenadas',
       fechados === 1 &&
         !repos.listarAlertas().some((a) => a.tipo === 'RECINTO_SEM_COORDENADAS' && a.recintoId === orfao.id)
+    )
+
+    log('\n7c. Traçado das viagens')
+    // Sem rede o traçado por estrada é a linha reta, mas a estrutura tem de
+    // estar certa: com mar pelo meio, a viagem parte-se em estrada + voo, e o
+    // aeroporto de partida é o da região de quem viaja.
+    const dosAcores = { lat: 37.747, lng: -25.651 }
+    const noContinente = { lat: 41.15, lng: -8.61 }
+    const comAviao = await obterTrajeto(dosAcores, noContinente)
+    verificar(
+      'uma viagem de avião traz o aeroporto de partida',
+      comAviao.aeroporto?.codigo === 'PDL',
+      `→ ${comAviao.aeroporto?.nome ?? 'nenhum'} (${comAviao.aeroporto?.codigo ?? '—'})`
+    )
+    verificar(
+      'o troço por estrada acaba no aeroporto, não no recinto',
+      !!comAviao.aeroporto &&
+        Math.abs(comAviao.pontos.at(-1)![0] - comAviao.aeroporto.lat) < 0.05 &&
+        Math.abs(comAviao.pontos.at(-1)![1] - comAviao.aeroporto.lng) < 0.05,
+      `→ acaba em ${comAviao.pontos.at(-1)?.join(', ')}`
+    )
+    verificar(
+      'e o voo liga o aeroporto ao recinto',
+      comAviao.voo?.length === 2 &&
+        Math.abs(comAviao.voo[1][0] - noContinente.lat) < 0.001 &&
+        Math.abs(comAviao.voo[1][1] - noContinente.lng) < 0.001,
+      `→ ${comAviao.voo?.map((p) => p.join(', ')).join(' → ')}`
+    )
+
+    const porEstrada = await obterTrajeto(noContinente, { lat: 38.72, lng: -9.14 })
+    verificar(
+      'uma viagem por estrada não tem aeroporto nem voo',
+      !porEstrada.aeroporto && !porEstrada.voo,
+      `→ ${porEstrada.aeroporto ? 'com aeroporto' : 'sem aeroporto'}`
     )
 
     log('\n8. Endpoints reais da FPF')

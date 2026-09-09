@@ -8,11 +8,12 @@ import type {
   ResultadoPropostaAutomatica
 } from '@shared/tipos'
 import CartaoCandidato from '../components/CartaoCandidato'
+import ConfigurarProposta from '../components/ConfigurarProposta'
 import EditarJogo from '../components/EditarJogo'
 import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa, type TrajetoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
-import { diasAte, paraDataLocal } from '@shared/datas'
+import { paraDataLocal } from '@shared/datas'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 
 type EstadoNomeacao = 'TODOS' | 'POR_NOMEAR' | 'PARCIAL' | 'COMPLETO'
@@ -59,8 +60,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   const [urgentes, setUrgentes] = useState<JogoDetalhado[]>([])
   const [aEditar, setAEditar] = useState<JogoDetalhado | null>(null)
-  const [ambito, setAmbito] = useState<'SEMANA' | 'DIA'>('SEMANA')
-  const [excluidos, setExcluidos] = useState<Set<number>>(new Set())
+  const [aConfigurarProposta, setAConfigurarProposta] = useState(false)
   const [trajetos, setTrajetos] = useState<TrajetoMapa[]>([])
 
   /**
@@ -179,27 +179,11 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     await carregarCandidatos(selecionado)
   }
 
-  /**
-   * Jogos que entram na proposta automática: os do âmbito escolhido, menos os
-   * que foram desmarcados. É a diferença entre "propõe para a semana toda" e
-   * "propõe só para o que eu quero tratar agora".
-   */
-  const doAmbito = jogos.filter((j) => ambito === 'SEMANA' || diasAte(j.dataHora) === 0)
-  const paraProposta = doAmbito.filter((j) => !excluidos.has(j.id))
-
-  function alternarNaProposta(jogoId: number): void {
-    setExcluidos((atuais) => {
-      const novos = new Set(atuais)
-      if (novos.has(jogoId)) novos.delete(jogoId)
-      else novos.add(jogoId)
-      return novos
-    })
-  }
-
-  async function gerarProposta(): Promise<void> {
+  async function gerarProposta(jogoIds: number[]): Promise<void> {
     setAPropor(true)
     try {
-      setProposta(await window.api.nomeacoes.proposta(paraProposta.map((j) => j.id)))
+      setProposta(await window.api.nomeacoes.proposta(jogoIds))
+      setAConfigurarProposta(false)
       setErro(null)
     } catch (e) {
       const texto = `Não foi possível calcular a proposta: ${mensagemDeErro(e)}`
@@ -370,24 +354,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
         </div>
 
         <div className="espacador" />
-        <div className="grupo-botoes" title="Que jogos entram na proposta automática">
-          {(['DIA', 'SEMANA'] as const).map((a) => (
-            <button key={a} className={classes(ambito === a && 'ativo')} onClick={() => setAmbito(a)}>
-              {a === 'DIA' ? 'Hoje' : 'Semana'}
-            </button>
-          ))}
-        </div>
         <button
           className="botao primario"
-          onClick={gerarProposta}
-          disabled={aPropor || paraProposta.length === 0}
-          title={
-            excluidos.size > 0
-              ? `${excluidos.size} jogos desmarcados ficam de fora`
-              : 'Propõe delegados para os jogos assinalados'
-          }
+          onClick={() => setAConfigurarProposta(true)}
+          disabled={aPropor}
+          title="Escolher a semana e os jogos antes de gerar"
         >
-          {aPropor ? 'A calcular…' : `Proposta automática (${paraProposta.length})`}
+          {aPropor ? 'A calcular…' : 'Proposta automática…'}
         </button>
       </div>
 
@@ -451,15 +424,6 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                     </button>
                   </div>
                   <div className="topo">
-                    <input
-                      type="checkbox"
-                      className="incluir"
-                      checked={!excluidos.has(j.id)}
-                      disabled={!doAmbito.some((d) => d.id === j.id)}
-                      title="Incluir este jogo na proposta automática"
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={() => alternarNaProposta(j.id)}
-                    />
                     <span>{formatarDataHora(j.dataHora)}</span>
                     <span>·</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -650,6 +614,15 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
             await carregarUrgentes()
             if (selecionado != null) await carregarCandidatos(selecionado)
           }}
+        />
+      )}
+
+      {aConfigurarProposta && (
+        <ConfigurarProposta
+          semanaInicial={semana}
+          aGerar={aPropor}
+          aFechar={() => setAConfigurarProposta(false)}
+          aoGerar={(ids) => void gerarProposta(ids)}
         />
       )}
 

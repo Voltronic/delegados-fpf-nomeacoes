@@ -13,9 +13,13 @@ export interface PontoMapa {
 
 /** Caminho de um delegado nomeado até ao recinto. */
 export interface TrajetoMapa {
+  /** Troço por estrada: até ao aeroporto quando há voo, senão até ao recinto. */
   pontos: [number, number][]
-  /** Linha reta em vez de estrada: sem rede, ou com mar pelo meio. */
+  /** Linha reta em vez de estrada: sem rede para calcular o caminho. */
   estimado: boolean
+  aeroporto?: { nome: string; codigo: string; lat: number; lng: number }
+  /** Troço aéreo, a tracejado, do aeroporto até ao recinto. */
+  voo?: [number, number][]
 }
 
 export interface PropsMapa {
@@ -62,7 +66,7 @@ export default function Mapa({
       JSON.stringify({
         recinto: recinto ? [recinto.lat, recinto.lng, recinto.titulo] : null,
         pontos: pontos.map((p) => [p.id, p.lat, p.lng, p.etiqueta, p.classe, p.titulo]),
-        trajetos: trajetos.map((t) => [t.estimado, t.pontos.length, t.pontos[0], t.pontos.at(-1)])
+        trajetos: trajetos.map((t) => [t.estimado, t.pontos.length, t.pontos[0], t.pontos.at(-1), t.aeroporto?.codigo, t.voo?.length])
       }),
     [recinto, pontos, trajetos]
   )
@@ -122,17 +126,53 @@ export default function Mapa({
     const coordenadas: L.LatLngExpression[] = []
 
     for (const trajeto of trajetos) {
-      if (trajeto.pontos.length < 2) continue
-      // A linha reta vai a tracejado: é uma estimativa, não o caminho real.
-      L.polyline(trajeto.pontos, {
-        color: '#b3261e',
-        weight: trajeto.estimado ? 2 : 3,
-        opacity: 0.75,
-        dashArray: trajeto.estimado ? '6 6' : undefined
-      })
-        .bindTooltip(trajeto.estimado ? 'Traçado aproximado (linha reta)' : 'Viagem por estrada')
-        .addTo(grupo)
-      for (const ponto of trajeto.pontos) coordenadas.push(ponto)
+      if (trajeto.pontos.length >= 2) {
+        // A linha reta vai a tracejado: é uma estimativa, não o caminho real.
+        L.polyline(trajeto.pontos, {
+          color: '#b3261e',
+          weight: trajeto.estimado ? 2 : 3,
+          opacity: 0.8,
+          dashArray: trajeto.estimado ? '6 6' : undefined
+        })
+          .bindTooltip(
+            trajeto.aeroporto
+              ? `Estrada até ao aeroporto — são estes os km que contam`
+              : trajeto.estimado
+                ? 'Traçado aproximado (linha reta)'
+                : 'Viagem por estrada'
+          )
+          .addTo(grupo)
+        for (const ponto of trajeto.pontos) coordenadas.push(ponto)
+      }
+
+      // O voo vai sempre a tracejado e mais claro: não é caminho percorrido, e
+      // os seus quilómetros não contam para o equilíbrio entre delegados.
+      if (trajeto.voo && trajeto.voo.length >= 2) {
+        L.polyline(trajeto.voo, {
+          color: '#b3261e',
+          weight: 2,
+          opacity: 0.5,
+          dashArray: '2 8'
+        })
+          .bindTooltip('Voo — os km do avião não contam')
+          .addTo(grupo)
+        for (const ponto of trajeto.voo) coordenadas.push(ponto)
+      }
+
+      if (trajeto.aeroporto) {
+        const { nome, codigo, lat, lng } = trajeto.aeroporto
+        L.marker([lat, lng], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div class="pino aeroporto" title="Aeroporto">✈</div>',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+          })
+        })
+          .bindTooltip(`${nome} (${codigo})`, { direction: 'top' })
+          .addTo(grupo)
+        coordenadas.push([lat, lng])
+      }
     }
 
     if (recinto) {

@@ -466,40 +466,69 @@ app.whenReady().then(async () => {
     )
     verificar('a hora nova aparece na lista', estado.horas.includes('21:45'), `→ ${estado.horas.slice(0, 80)}`)
 
-    // Âmbito da proposta e seleção jogo a jogo.
-    const contagem = async (): Promise<string> =>
-      (await janela.webContents.executeJavaScript(
-        "[...document.querySelectorAll('.botao.primario')].find((b) => b.textContent.includes('Proposta'))?.textContent ?? ''"
-      )) as string
-    const comSemana = await contagem()
+    // A proposta pergunta antes de calcular: semana à escolha e que jogos
+    // entram. Antes gerava logo com o que estivesse no ecrã.
     await janela.webContents.executeJavaScript(
-      "[...document.querySelectorAll('.grupo-botoes button')].find((b) => b.textContent.trim() === 'Hoje')?.click()"
+      "[...document.querySelectorAll('.botao.primario')].find((b) => b.textContent.includes('Proposta'))?.click()"
     )
-    await new Promise((r) => setTimeout(r, 400))
-    const comDia = await contagem()
+    await new Promise((r) => setTimeout(r, 900))
+    const janelaProposta = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         titulo: document.querySelector('.modal header h2')?.textContent ?? '',
+         jogos: document.querySelectorAll('.modal .tabela tbody tr').length,
+         marcados: document.querySelectorAll('.modal .tabela input:checked').length,
+         botao: document.querySelector('.modal footer .botao.primario')?.textContent ?? ''
+       })`
+    )) as string
+    const conf = JSON.parse(janelaProposta) as {
+      titulo: string
+      jogos: number
+      marcados: number
+      botao: string
+    }
     verificar(
-      'escolher "Hoje" reduz os jogos da proposta',
-      comSemana !== comDia,
-      `→ ${comSemana.trim()} para ${comDia.trim()}`
+      'a proposta abre uma janela para escolher o que entra',
+      conf.titulo.includes('Proposta') && conf.jogos > 0,
+      `→ ${conf.titulo}, ${conf.jogos} jogos`
+    )
+    verificar(
+      'começa com os jogos por nomear marcados',
+      conf.marcados > 0 && conf.botao.includes(String(conf.marcados)),
+      `→ ${conf.marcados} marcados, botão "${conf.botao.trim()}"`
     )
 
+    // Mudar de semana tem de mudar a lista: é o caso de preparar a semana
+    // seguinte com antecedência.
+    const semanaAtual = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.modal .modal-corpo b')?.textContent ?? ''"
+    )) as string
     await janela.webContents.executeJavaScript(
-      "[...document.querySelectorAll('.grupo-botoes button')].find((b) => b.textContent.trim() === 'Semana')?.click()"
+      "[...document.querySelectorAll('.modal .grupo-botoes button')].find((b) => b.textContent.trim() === '›')?.click()"
     )
-    await new Promise((r) => setTimeout(r, 400))
-    await janela.webContents.executeJavaScript(
-      "document.querySelector('.item-jogo .incluir')?.click()"
-    )
-    await new Promise((r) => setTimeout(r, 400))
-    const semUm = await contagem()
+    await new Promise((r) => setTimeout(r, 700))
+    const semanaSeguinte = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.modal .modal-corpo b')?.textContent ?? ''"
+    )) as string
     verificar(
-      'desmarcar um jogo tira-o da proposta',
-      semUm !== comSemana,
-      `→ ${comSemana.trim()} para ${semUm.trim()}`
+      'dá para escolher outra semana antes de gerar',
+      semanaAtual !== '' && semanaAtual !== semanaSeguinte,
+      `→ ${semanaAtual} para ${semanaSeguinte}`
     )
-    // Volta a marcar, para as verificações seguintes verem a lista completa.
-    await janela.webContents.executeJavaScript("document.querySelector('.item-jogo .incluir')?.click()")
-    await new Promise((r) => setTimeout(r, 300))
+
+    // E desmarcar tudo impede de gerar: não se calcula uma proposta vazia.
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.modal .grupo-botoes button')].find((b) => b.textContent.trim() === 'Nenhum')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    const semNada = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.modal footer .botao.primario')?.disabled ?? false"
+    )) as boolean
+    verificar('sem jogos escolhidos não se gera proposta', semNada)
+
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Cancelar')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 500))
 
     log('\n3b. Dashboard: ordenação e altura das tabelas')
     await irPara('Dashboard')

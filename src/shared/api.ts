@@ -125,7 +125,12 @@ export interface Api {
     trajeto(
       delegadoId: number,
       recintoId: number
-    ): Promise<{ pontos: [number, number][]; estimado: boolean } | null>
+    ): Promise<{
+      pontos: [number, number][]
+      estimado: boolean
+      aeroporto?: { nome: string; codigo: string; lat: number; lng: number }
+      voo?: [number, number][]
+    } | null>
   }
 
   delegados: {

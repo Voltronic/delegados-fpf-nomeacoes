@@ -984,6 +984,15 @@ details.grupo-bloqueados > summary {
   font-weight: 700;
 }
 
+/* O aeroporto de onde o delegado parte, quando a viagem exige avião. */
+.pino.aeroporto {
+  width: 22px;
+  height: 22px;
+  background: #37474f;
+  border-color: #fff;
+  font-size: 12px;
+}
+
 /* Quem já está nomeado para este jogo: vermelho, como o traçado da viagem. */
 .pino.nomeado {
   background: var(--perigo);

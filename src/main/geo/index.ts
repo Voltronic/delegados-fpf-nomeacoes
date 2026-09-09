@@ -172,8 +172,13 @@ export async function distanciaRodoviaria(
  * Mostrar uma linha reta como se fosse o caminho seria mentir sobre a viagem.
  */
 export interface Trajeto {
+  /** Troço por estrada: de casa até ao aeroporto, ou até ao próprio recinto. */
   pontos: [number, number][]
   estimado: boolean
+  /** Aeroporto de partida, quando a viagem exige avião. */
+  aeroporto?: { nome: string; codigo: string; lat: number; lng: number }
+  /** Troço aéreo, do aeroporto até ao recinto. */
+  voo?: [number, number][]
 }
 
 /** Só se pede o traçado quando é para o mostrar, e guarda-se para não repetir. */
@@ -192,10 +197,31 @@ export async function obterTrajeto(origem: Coordenadas, destino: Coordenadas): P
     estimado: true
   }
 
-  // Entre ilhas e continente não há estrada; nem vale a pena perguntar.
+  // Com mar pelo meio, a viagem tem duas partes: a estrada até ao aeroporto,
+  // que é a que conta para os km, e o voo. Mostrar uma linha reta única
+  // escondia justamente a parte que interessa ao coordenador.
   if (exigeAviao(origem, destino)) {
-    trajetos.set(chave, reta)
-    return reta
+    const aeroporto = aeroportoDePartida(origem)
+    if (!aeroporto) {
+      trajetos.set(chave, reta)
+      return reta
+    }
+    const ateAoAeroporto = await obterTrajeto(origem, { lat: aeroporto.lat, lng: aeroporto.lng })
+    const comVoo: Trajeto = {
+      ...ateAoAeroporto,
+      aeroporto: {
+        nome: aeroporto.nome,
+        codigo: aeroporto.codigo,
+        lat: aeroporto.lat,
+        lng: aeroporto.lng
+      },
+      voo: [
+        [aeroporto.lat, aeroporto.lng],
+        [destino.lat, destino.lng]
+      ]
+    }
+    trajetos.set(chave, comVoo)
+    return comVoo
   }
 
   const base = lerConfig('geo.osrmUrl') ?? 'https://router.project-osrm.org'
