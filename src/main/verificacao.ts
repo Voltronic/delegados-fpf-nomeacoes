@@ -24,6 +24,12 @@ import { semearRecintos } from './db/semente'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
 import { RECINTOS_CONHECIDOS } from './geo/recintosConhecidos'
+import {
+  desfazerUltimaAccao,
+  esquecerUltimaAccao,
+  registarAlteracao,
+  ultimaAccao
+} from './engine/desfazer'
 import { candidatosParaJogo, nomear, propostaAutomatica } from './engine/servico'
 import { ClienteFpf } from './fpf/cliente'
 import { parseDetalhesCompeticao, parseEpocas, parseJogosJornada, parseOrganizacoes } from './fpf/parsers'
@@ -531,6 +537,51 @@ async function principal(): Promise<void> {
       'o jogo de ontem com delegado passa ao histórico',
       doHistorico.some((j) => j.id === ontem) && !doHistorico.some((j) => j.id === hojeCedo)
     )
+
+    // Desfazer: o caso que interessa é o clique errado — nomear por cima de
+    // alguém, ou remover quem não era para remover.
+    const jogoDesfazer = repos.listarJogos().find((j) => j.nomeacoes.length === 0)!
+    registarAlteracao(jogoDesfazer.id, 'PRINCIPAL', 'nomeação de teste')
+    await nomear({ jogoId: jogoDesfazer.id, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
+    verificar(
+      'há uma alteração por desfazer depois de nomear',
+      ultimaAccao()?.descricao === 'nomeação de teste',
+      `→ ${ultimaAccao()?.descricao ?? 'nenhuma'}`
+    )
+    desfazerUltimaAccao()
+    verificar(
+      'desfazer uma nomeação nova deixa o papel livre',
+      repos.listarNomeacoesDoJogo(jogoDesfazer.id).every((n) => n.papel !== 'PRINCIPAL'),
+      `→ ${repos.listarNomeacoesDoJogo(jogoDesfazer.id).length} nomeações`
+    )
+    verificar('não há nada para desfazer duas vezes seguidas', ultimaAccao() === null)
+
+    // Nomear por cima de alguém: desfazer tem de repor a pessoa anterior, não
+    // deixar o papel vazio.
+    await nomear({ jogoId: jogoDesfazer.id, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
+    registarAlteracao(jogoDesfazer.id, 'PRINCIPAL', 'substituição')
+    await nomear({ jogoId: jogoDesfazer.id, delegadoId: delegados[1].id, papel: 'PRINCIPAL' })
+    desfazerUltimaAccao()
+    const anterior = repos.listarNomeacoesDoJogo(jogoDesfazer.id).find((n) => n.papel === 'PRINCIPAL')
+    verificar(
+      'desfazer uma substituição repõe o delegado anterior',
+      anterior?.delegadoId === delegados[0].id,
+      `→ ${anterior?.delegadoNome ?? 'ninguém'}`
+    )
+
+    // E desfazer uma remoção repõe a nomeação com os km que tinha.
+    const kmDaNomeacao = anterior?.km ?? null
+    registarAlteracao(jogoDesfazer.id, 'PRINCIPAL', 'remoção')
+    repos.removerNomeacao(jogoDesfazer.id, 'PRINCIPAL')
+    desfazerUltimaAccao()
+    const devolvida = repos.listarNomeacoesDoJogo(jogoDesfazer.id).find((n) => n.papel === 'PRINCIPAL')
+    verificar(
+      'desfazer uma remoção repõe a nomeação tal como estava',
+      devolvida?.delegadoId === delegados[0].id && devolvida?.km === kmDaNomeacao,
+      `→ ${devolvida?.delegadoNome ?? 'ninguém'}, ${devolvida?.km ?? '—'} km`
+    )
+    repos.removerNomeacao(jogoDesfazer.id, 'PRINCIPAL')
+    esquecerUltimaAccao()
 
     // Repetições de clube: contam-se por par clube/competição. O mesmo clube
     // noutra competição não é repetição — são equipas e escalões diferentes.

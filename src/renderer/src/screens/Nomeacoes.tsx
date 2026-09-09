@@ -116,13 +116,38 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     void carregarCandidatos(selecionado)
   }, [selecionado, carregarCandidatos])
 
+  /**
+   * Desfaz a última nomeação ou remoção. Fica no próprio aviso, que é onde a
+   * pessoa está a olhar quando percebe que se enganou.
+   */
+  async function desfazer(): Promise<void> {
+    try {
+      const jogo = await window.api.nomeacoes.desfazer()
+      await carregarJogos()
+      await carregarUrgentes()
+      if (jogo) {
+        setSelecionado(jogo.id)
+        await carregarCandidatos(jogo.id)
+      }
+      avisar('Alteração anulada.')
+    } catch (e) {
+      avisar(mensagemDeErro(e), 'erro')
+    }
+  }
+
+  const anular = { etiqueta: 'Anular', executar: desfazer }
+
   async function nomear(delegadoId: number, papel: PapelNomeacao): Promise<void> {
     if (selecionado == null) return
     try {
       const nome = candidatos.find((c) => c.delegadoId === delegadoId)?.nome ?? 'Delegado'
       await window.api.nomeacoes.nomear({ jogoId: selecionado, delegadoId, papel })
       setErro(null)
-      avisar(`${nome} nomeado como ${papel === 'PRINCIPAL' ? 'principal' : 'delegado de campo'}.`)
+      avisar(
+        `${nome} nomeado como ${papel === 'PRINCIPAL' ? 'principal' : 'delegado de campo'}.`,
+        'sucesso',
+        anular
+      )
     } catch (e) {
       const texto = mensagemDeErro(e)
       setErro(texto)
@@ -130,6 +155,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
       return
     }
     await carregarJogos()
+    await carregarUrgentes()
     await carregarCandidatos(selecionado)
   }
 
@@ -137,12 +163,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     if (selecionado == null) return
     try {
       await window.api.nomeacoes.remover(selecionado, papel)
-      avisar('Nomeação removida.')
+      avisar('Nomeação removida.', 'sucesso', anular)
     } catch (e) {
       avisar(mensagemDeErro(e), 'erro')
       return
     }
     await carregarJogos()
+    await carregarUrgentes()
     await carregarCandidatos(selecionado)
   }
 

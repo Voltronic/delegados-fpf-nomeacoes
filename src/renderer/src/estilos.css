@@ -418,6 +418,23 @@ table.tabela th.num {
   max-height: 100%;
 }
 
+.toast .anular {
+  margin-left: 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--raio-p);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.toast .anular:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 /* -------------------------------------------------- faixa de jogos urgentes */
 
 /*

@@ -78,6 +78,8 @@ const api = {
   },
   nomeacoes: {
     contar: invocar('nomeacoes:contar'),
+    ultimaAccao: invocar('nomeacoes:ultimaAccao'),
+    desfazer: invocar('nomeacoes:desfazer'),
     apagarTodas: invocar('nomeacoes:apagarTodas'),
     candidatos: invocar('nomeacoes:candidatos'),
     nomear: invocar('nomeacoes:nomear'),

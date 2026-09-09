@@ -39,6 +39,12 @@ import {
   sincronizar
 } from '../fpf/sincronizacao'
 import { exportarDelegados, importarDelegados } from '../delegados/servico'
+import {
+  desfazerUltimaAccao,
+  esquecerUltimaAccao,
+  registarAlteracao,
+  ultimaAccao
+} from '../engine/desfazer'
 import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
@@ -125,6 +131,7 @@ export function registarIpc(contexto: {
    */
   registar('nomeacoes:apagarTodas', (): { apagadas: number; copia: string | null } => {
     const copia = copiaSeguranca(obterBaseDados(), contexto.pastaCopias ?? PASTA_COPIAS)
+    esquecerUltimaAccao()
     const apagadas = emTransacao(() => repos.apagarTodasNomeacoes())
     return { apagadas, copia }
   })
@@ -375,15 +382,38 @@ export function registarIpc(contexto: {
   )
   registar(
     'nomeacoes:nomear',
-    (dados: { jogoId: number; delegadoId: number; papel: PapelNomeacao; motivoOverride?: string | null }) =>
-      nomear(dados)
+    (dados: { jogoId: number; delegadoId: number; papel: PapelNomeacao; motivoOverride?: string | null }) => {
+      const delegado = repos.obterDelegado(dados.delegadoId)
+      registarAlteracao(
+        dados.jogoId,
+        dados.papel,
+        `nomeação de ${delegado?.nome ?? 'delegado'} como ${
+          dados.papel === 'PRINCIPAL' ? 'principal' : 'delegado de campo'
+        }`
+      )
+      return nomear(dados)
+    }
   )
   registar('nomeacoes:remover', (jogoId: number, papel: PapelNomeacao) => {
+    const removida = repos.listarNomeacoesDoJogo(jogoId).find((n) => n.papel === papel)
+    registarAlteracao(
+      jogoId,
+      papel,
+      removida
+        ? `remoção de ${removida.delegadoNome} (${papel === 'PRINCIPAL' ? 'principal' : 'campo'})`
+        : 'remoção'
+    )
     repos.removerNomeacao(jogoId, papel)
     return repos.obterJogoDetalhado(jogoId)
   })
+  registar('nomeacoes:ultimaAccao', () => ultimaAccao())
+  registar('nomeacoes:desfazer', () => desfazerUltimaAccao())
   registar('nomeacoes:proposta', (jogoIds: number[]) => propostaAutomatica(jogoIds))
-  registar('nomeacoes:aplicarProposta', (propostas: PropostaAutomatica[]) => aplicarProposta(propostas))
+  registar('nomeacoes:aplicarProposta', (propostas: PropostaAutomatica[]) => {
+    // Uma proposta mexe em muitos jogos; desfazer só o último seria enganador.
+    esquecerUltimaAccao()
+    return aplicarProposta(propostas)
+  })
 
   // -- Dashboard ------------------------------------------------------------
   registar('dashboard:km', (seasonId?: number) => repos.tabelaKm(seasonId))

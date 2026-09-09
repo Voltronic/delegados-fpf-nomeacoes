@@ -12,13 +12,19 @@ export interface Aviso {
   id: number
   texto: string
   tipo: TipoAviso
+  /**
+   * Botão opcional dentro do aviso, para desfazer o que acabou de acontecer.
+   * É aqui que faz sentido: no momento e no sítio em que a pessoa percebe que
+   * se enganou, sem ter de procurar nada.
+   */
+  accao?: { etiqueta: string; executar: () => void | Promise<void> }
 }
 
 let proximoId = 1
 const ouvintes = new Set<(aviso: Aviso) => void>()
 
-export function avisar(texto: string, tipo: TipoAviso = 'sucesso'): void {
-  const aviso: Aviso = { id: proximoId++, texto, tipo }
+export function avisar(texto: string, tipo: TipoAviso = 'sucesso', accao?: Aviso['accao']): void {
+  const aviso: Aviso = { id: proximoId++, texto, tipo, accao }
   for (const ouvinte of ouvintes) ouvinte(aviso)
 }
 

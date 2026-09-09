@@ -196,6 +196,10 @@ export interface Api {
     candidatos(jogoId: number, papel: PapelNomeacao): Promise<Candidato[]>
     /** Quantas nomeações existem — para avisar antes de as apagar. */
     contar(): Promise<number>
+    /** A última alteração que se pode desfazer, se existir. */
+    ultimaAccao(): Promise<{ descricao: string } | null>
+    /** Repõe o estado anterior à última alteração. */
+    desfazer(): Promise<JogoDetalhado | null>
     /**
      * Apaga **todas** as nomeações, depois de gravar uma cópia de segurança.
      * Devolve quantas apagou e o caminho da cópia.
