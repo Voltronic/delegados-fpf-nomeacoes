@@ -366,6 +366,42 @@ app.whenReady().then(async () => {
     )) as number
     verificar('a faixa lista os jogos em falta', linhas > 0, `→ ${linhas} jogos`)
 
+    // A lista tem de ficar **por cima** do mapa. O Leaflet dá aos seus painéis
+    // `z-index` até 800, e sem contexto de empilhamento próprio esses valores
+    // tapavam a lista. Mede-se com `elementFromPoint` sobre a área do mapa:
+    // abre-se a lista e estica-se até lá, porque `:hover` não se simula e com a
+    // altura normal a lista podia nem chegar ao mapa — e o teste não media nada.
+    const porCima = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const lista = document.querySelector('.faixa-urgentes .lista');
+         const mapa = document.querySelector('.leaflet-container');
+         if (!lista || !mapa) return JSON.stringify({ erro: 'sem lista ou sem mapa' });
+         const alturaOriginal = lista.style.height;
+         lista.style.display = 'block';
+         lista.style.height = '420px';
+         const r = mapa.getBoundingClientRect();
+         const x = Math.round(r.left + 30);
+         const y = Math.round(r.top + 30);
+         const alvo = document.elementFromPoint(x, y);
+         const dentroDaLista = !!alvo && !!alvo.closest('.faixa-urgentes');
+         const sobreposto = y < lista.getBoundingClientRect().bottom;
+         lista.style.display = '';
+         lista.style.height = alturaOriginal;
+         return JSON.stringify({ dentroDaLista, sobreposto, alvo: alvo && alvo.className });
+       })()`
+    )) as string
+    const resultado = JSON.parse(porCima) as {
+      dentroDaLista?: boolean
+      sobreposto?: boolean
+      alvo?: string
+      erro?: string
+    }
+    verificar(
+      'a lista da faixa fica por cima do mapa',
+      resultado.sobreposto === true && resultado.dentroDaLista === true,
+      `→ ${porCima}`
+    )
+
     log('\n3b. Dashboard: ordenação e altura das tabelas')
     await irPara('Dashboard')
 

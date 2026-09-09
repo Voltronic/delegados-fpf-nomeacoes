@@ -445,7 +445,8 @@ table.tabela th.num {
   position: relative;
   background: var(--aviso-claro);
   border-bottom: 1px solid var(--borda);
-  z-index: 20;
+  /* Acima de tudo o que é conteúdo: a lista abre sobre os três painéis. */
+  z-index: 900;
 }
 
 .faixa-urgentes .resumo {
@@ -894,6 +895,18 @@ details.grupo-bloqueados > summary {
 .mapa {
   flex: 1 1 auto;
   min-height: 260px;
+}
+
+/*
+ * O Leaflet dá aos seus painéis internos `z-index` até 800, e como o contentor
+ * do mapa não cria contexto de empilhamento próprio, esses valores competiam
+ * com o resto da aplicação — o mapa passava por cima da faixa de jogos por
+ * nomear. Com `z-index: 0` (e o `position: relative` que o Leaflet já põe), o
+ * mapa passa a ser uma camada só, e o que está por cima dele fica por cima de
+ * tudo o que ele tem lá dentro.
+ */
+.leaflet-container {
+  z-index: 0;
 }
 
 .pino {
