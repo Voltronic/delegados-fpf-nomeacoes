@@ -24,6 +24,7 @@ import { MIGRACOES } from './db/schema'
 import { semearRecintos } from './db/semente'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
+import { limiteDeTrabalho } from '../shared/datas'
 import { obterTrajeto } from './geo'
 import { RECINTOS_CONHECIDOS } from './geo/recintosConhecidos'
 import {
@@ -534,60 +535,52 @@ async function principal(): Promise<void> {
       historico.every((j) => (j.dataHora ?? '') < new Date().toISOString().slice(0, 16))
     )
 
-    // A fronteira do dia: um jogo de ontem já não é trabalho por fazer, e um de
-    // hoje ainda é — mesmo que a hora já tenha passado, para não desaparecer da
-    // lista com o coordenador ainda a tratar dele.
-    const diaDe = (deslocamento: number): string => {
+    // A fronteira do trabalho: um jogo continua na lista durante as horas em
+    // que ainda se pode estar a jogar, e só depois passa a histórico.
+    const horasDaqui = (horas: number): string => {
       const d = new Date()
-      d.setDate(d.getDate() + deslocamento)
+      d.setHours(d.getHours() + horas)
       const p2 = (n: number): string => String(n).padStart(2, '0')
-      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`
     }
-    const ontem = repos.guardarJogo({
-      chaveNatural: 'teste:ontem',
-      competicaoId: competicao.id,
-      fase: '1ª FASE',
-      serie: 'SÉRIE 1',
-      jornada: '0',
-      fpfFixtureId: 998,
-      fpfMatchId: null,
-      dataHora: `${diaDe(-1)}T15:00`,
-      clubeCasaId: clubes[0].id,
-      clubeForaId: clubes[1].id,
-      recintoId: repos.recintoDoClube(clubes[0].id, competicao.id),
-      recintoTextoFpf: null,
-      estado: 'AGENDADO'
-    })
-    const hojeCedo = repos.guardarJogo({
-      chaveNatural: 'teste:hoje',
-      competicaoId: competicao.id,
-      fase: '1ª FASE',
-      serie: 'SÉRIE 1',
-      jornada: '0',
-      fpfFixtureId: 997,
-      fpfMatchId: null,
-      dataHora: `${diaDe(0)}T00:30`,
-      clubeCasaId: clubes[0].id,
-      clubeForaId: clubes[1].id,
-      recintoId: repos.recintoDoClube(clubes[0].id, competicao.id),
-      recintoTextoFpf: null,
-      estado: 'AGENDADO'
-    })
-    await nomear({ jogoId: ontem, delegadoId: delegados[1].id, papel: 'PRINCIPAL' })
-    const porFazer = repos.listarJogos({ de: repos.inicioDeHoje() })
+    const jogoEm = (chave: string, quando: string): number =>
+      repos.guardarJogo({
+        chaveNatural: chave,
+        competicaoId: competicao.id,
+        fase: null,
+        serie: null,
+        jornada: null,
+        fpfFixtureId: null,
+        fpfMatchId: null,
+        dataHora: quando,
+        clubeCasaId: clubes[0].id,
+        clubeForaId: clubes[1].id,
+        recintoId: repos.recintoDoClube(clubes[0].id, competicao.id),
+        recintoTextoFpf: null,
+        estado: 'AGENDADO'
+      })
+
+    // Começou há duas horas: ainda pode estar a decorrer.
+    const aDecorrer = jogoEm('teste:adecorrer', horasDaqui(-2))
+    // Começou há cinco: já acabou de certeza.
+    const acabado = jogoEm('teste:acabado', horasDaqui(-5))
+    await nomear({ jogoId: acabado, delegadoId: delegados[1].id, papel: 'PRINCIPAL' })
+
+    const porFazer = repos.listarJogos({ de: limiteDeTrabalho() })
     verificar(
-      'um jogo de ontem sai da lista de trabalho',
-      !porFazer.some((j) => j.id === ontem),
+      'um jogo que começou há duas horas continua na lista',
+      porFazer.some((j) => j.id === aDecorrer),
       `→ ${porFazer.length} jogos por fazer`
     )
     verificar(
-      'um jogo de hoje continua na lista, mesmo com a hora passada',
-      porFazer.some((j) => j.id === hojeCedo)
+      'um jogo que começou há cinco horas sai da lista',
+      !porFazer.some((j) => j.id === acabado)
     )
     const doHistorico = repos.historicoJogos()
     verificar(
-      'o jogo de ontem com delegado passa ao histórico',
-      doHistorico.some((j) => j.id === ontem) && !doHistorico.some((j) => j.id === hojeCedo)
+      'e passa ao histórico se teve delegado',
+      doHistorico.some((j) => j.id === acabado) && !doHistorico.some((j) => j.id === aDecorrer),
+      `→ ${doHistorico.length} no histórico`
     )
 
     // Editar um jogo à mão: as nomeações ficam, a FPF deixa de lhe tocar, e o

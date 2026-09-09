@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   agoraLocal,
+  aindaEDeTrabalho,
   dataHoraAGuardar,
   dataMudou,
   diasAte,
   horaDesconhecida,
+  HORAS_ATE_HISTORICO,
+  limiteDeTrabalho,
   paraDataLocal,
   vaiAcontecer
 } from '../src/shared/datas'
@@ -158,5 +161,33 @@ describe('quando faz sentido avisar sobre um jogo', () => {
 
   it('o instante atual sai no mesmo formato das datas dos jogos', () => {
     expect(agoraLocal(new Date(2026, 8, 9, 9, 5))).toBe('2026-09-09T09:05')
+  })
+})
+
+describe('quando um jogo passa a histórico', () => {
+  const INICIO = '2026-09-09T12:00'
+
+  it('durante o jogo ainda é trabalho', () => {
+    // 17h46 de um jogo das 12:00 era o caso real: já devia ser histórico.
+    expect(aindaEDeTrabalho(INICIO, new Date(2026, 8, 9, 13, 0))).toBe(true)
+    expect(aindaEDeTrabalho(INICIO, new Date(2026, 8, 9, 15, 59))).toBe(true)
+  })
+
+  it('quatro horas depois do apito inicial passa a histórico', () => {
+    expect(aindaEDeTrabalho(INICIO, new Date(2026, 8, 9, 16, 1))).toBe(false)
+    expect(aindaEDeTrabalho(INICIO, new Date(2026, 8, 9, 17, 46))).toBe(false)
+  })
+
+  it('um jogo que ainda não começou é sempre trabalho', () => {
+    expect(aindaEDeTrabalho('2026-09-13T15:00', new Date(2026, 8, 9, 17, 46))).toBe(true)
+  })
+
+  it('um jogo sem data marcada não se perde de vista', () => {
+    expect(aindaEDeTrabalho(null, new Date(2026, 8, 9, 17, 46))).toBe(true)
+  })
+
+  it('a fronteira é a hora atual menos a duração de um jogo', () => {
+    expect(limiteDeTrabalho(new Date(2026, 8, 9, 17, 46))).toBe('2026-09-09T13:46')
+    expect(HORAS_ATE_HISTORICO).toBe(4)
   })
 })

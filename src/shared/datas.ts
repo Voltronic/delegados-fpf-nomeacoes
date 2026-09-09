@@ -99,3 +99,29 @@ export function agoraLocal(agora = new Date()): string {
 export function vaiAcontecer(dataHora: string | null, agora = agoraLocal()): boolean {
   return !dataHora || dataHora >= agora
 }
+
+/**
+ * Quantas horas um jogo continua a contar como trabalho depois da hora de
+ * início. Um jogo das 12:00 ainda aparece na lista às 15:00 — o delegado pode
+ * estar lá nesse momento e ainda haver alguma coisa a resolver —, mas às 17:00
+ * já é história.
+ */
+export const HORAS_ATE_HISTORICO = 4
+
+/**
+ * A fronteira entre o que ainda é trabalho e o que já ficou para trás: a hora
+ * atual menos as horas de duração de um jogo.
+ *
+ * Um jogo com data igual ou posterior a isto ainda está na lista de trabalho.
+ */
+export function limiteDeTrabalho(agora = new Date()): string {
+  const limite = new Date(agora)
+  limite.setHours(limite.getHours() - HORAS_ATE_HISTORICO)
+  return agoraLocal(limite)
+}
+
+/** Se um jogo ainda é trabalho por fazer, ou já passou para o histórico. */
+export function aindaEDeTrabalho(dataHora: string | null, agora = new Date()): boolean {
+  // Sem data marcada, continua por tratar: é dos que não se pode perder de vista.
+  return !dataHora || dataHora >= limiteDeTrabalho(agora)
+}

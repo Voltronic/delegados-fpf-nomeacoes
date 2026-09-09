@@ -13,7 +13,7 @@ import EditarJogo from '../components/EditarJogo'
 import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa, type TrajetoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
-import { paraDataLocal } from '@shared/datas'
+import { limiteDeTrabalho, paraDataLocal } from '@shared/datas'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 
 type EstadoNomeacao = 'TODOS' | 'POR_NOMEAR' | 'PARCIAL' | 'COMPLETO'
@@ -41,7 +41,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [aPropor, setAPropor] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
-  // Início do dia de hoje: a fronteira entre o que falta fazer e o histórico.
+  // Início do dia de hoje, para navegar por semanas.
   const hoje = useMemo(() => {
     const d = new Date()
     d.setHours(0, 0, 0, 0)
@@ -75,7 +75,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     daqui.setDate(daqui.getDate() + 7)
     setUrgentes(
       await window.api.jogos.listar({
-        de: paraDataIso(hoje),
+        de: limiteDeTrabalho(),
         ate: `${paraDataIso(daqui)}T23:59`,
         estadoNomeacao: 'POR_NOMEAR'
       })
@@ -83,11 +83,12 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   }, [hoje])
 
   const carregarJogos = useCallback(async () => {
-    // Um jogo que já se realizou não é trabalho por fazer: sai daqui e passa ao
-    // Histórico no dia seguinte. Por isso a semana nunca começa antes de hoje.
-    const inicio = semana.getTime() < hoje.getTime() ? hoje : semana
+    // Um jogo deixa de ser trabalho quatro horas depois da hora de início; a
+    // partir daí é histórico. A semana nunca começa antes dessa fronteira.
+    const limite = limiteDeTrabalho()
+    const inicioDaSemanaIso = paraDataIso(semana)
     const lista = await window.api.jogos.listar({
-      de: paraDataIso(inicio),
+      de: inicioDaSemanaIso > limite ? inicioDaSemanaIso : limite,
       ate: `${paraDataIso(fim)}T23:59`,
       competicaoId: competicaoId === '' ? undefined : competicaoId,
       estadoNomeacao: estado,
