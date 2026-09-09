@@ -1,5 +1,5 @@
 import type { JogoDetalhado } from '@shared/tipos'
-import { formatarDataHora } from '../lib/formato'
+import { diasAte, formatarDataHora } from '../lib/formato'
 
 /** Dias a partir dos quais um jogo por nomear deixa de ser urgente. */
 const DIAS = 7
@@ -20,13 +20,8 @@ interface Props {
 export default function FaixaUrgentes({ jogos, aoEscolher }: Props): JSX.Element | null {
   if (jogos.length === 0) return null
 
-  const dias = (jogo: JogoDetalhado): number => {
-    if (!jogo.dataHora) return DIAS
-    const agora = new Date()
-    agora.setHours(0, 0, 0, 0)
-    return Math.round((new Date(jogo.dataHora).getTime() - agora.getTime()) / 86_400_000)
-  }
-  const emCima = jogos.filter((j) => dias(j) <= 2).length
+  const dias = (jogo: JogoDetalhado): number => diasAte(jogo.dataHora) ?? DIAS
+  const emCima = jogos.filter((j) => dias(j) <= 1).length
 
   return (
     <div className="faixa-urgentes">
@@ -38,7 +33,7 @@ export default function FaixaUrgentes({ jogos, aoEscolher }: Props): JSX.Element
         </b>
         {emCima > 0 && (
           <span className="urgente">
-            {emCima} {emCima === 1 ? 'acontece' : 'acontecem'} em 48 horas
+            {emCima} {emCima === 1 ? 'é' : 'são'} hoje ou amanhã
           </span>
         )}
         <span className="silencioso">passe o rato para ver a lista</span>
@@ -49,7 +44,7 @@ export default function FaixaUrgentes({ jogos, aoEscolher }: Props): JSX.Element
           const falta = dias(j)
           return (
             <button key={j.id} className="linha-urgente" onClick={() => aoEscolher(j.id)}>
-              <span className={falta <= 2 ? 'prazo urgente' : 'prazo'}>
+              <span className={falta <= 1 ? 'prazo urgente' : 'prazo'}>
                 {falta <= 0 ? 'hoje' : falta === 1 ? 'amanhã' : `${falta} dias`}
               </span>
               <span className="quando">{formatarDataHora(j.dataHora)}</span>
