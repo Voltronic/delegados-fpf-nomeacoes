@@ -8,10 +8,11 @@ import type {
   ResultadoPropostaAutomatica
 } from '@shared/tipos'
 import CartaoCandidato from '../components/CartaoCandidato'
+import EditarJogo from '../components/EditarJogo'
 import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
-import { paraDataLocal } from '@shared/datas'
+import { diasAte, paraDataLocal } from '@shared/datas'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 
 type EstadoNomeacao = 'TODOS' | 'POR_NOMEAR' | 'PARCIAL' | 'COMPLETO'
@@ -57,6 +58,9 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   }, [versaoDados])
 
   const [urgentes, setUrgentes] = useState<JogoDetalhado[]>([])
+  const [aEditar, setAEditar] = useState<JogoDetalhado | null>(null)
+  const [ambito, setAmbito] = useState<'SEMANA' | 'DIA'>('SEMANA')
+  const [excluidos, setExcluidos] = useState<Set<number>>(new Set())
 
   /**
    * Jogos que estão a chegar e ainda não têm ninguém: é a lista que não pode
@@ -174,10 +178,27 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     await carregarCandidatos(selecionado)
   }
 
+  /**
+   * Jogos que entram na proposta automática: os do âmbito escolhido, menos os
+   * que foram desmarcados. É a diferença entre "propõe para a semana toda" e
+   * "propõe só para o que eu quero tratar agora".
+   */
+  const doAmbito = jogos.filter((j) => ambito === 'SEMANA' || diasAte(j.dataHora) === 0)
+  const paraProposta = doAmbito.filter((j) => !excluidos.has(j.id))
+
+  function alternarNaProposta(jogoId: number): void {
+    setExcluidos((atuais) => {
+      const novos = new Set(atuais)
+      if (novos.has(jogoId)) novos.delete(jogoId)
+      else novos.add(jogoId)
+      return novos
+    })
+  }
+
   async function gerarProposta(): Promise<void> {
     setAPropor(true)
     try {
-      setProposta(await window.api.nomeacoes.proposta(jogos.map((j) => j.id)))
+      setProposta(await window.api.nomeacoes.proposta(paraProposta.map((j) => j.id)))
       setErro(null)
     } catch (e) {
       const texto = `Não foi possível calcular a proposta: ${mensagemDeErro(e)}`
@@ -312,8 +333,24 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
         </div>
 
         <div className="espacador" />
-        <button className="botao primario" onClick={gerarProposta} disabled={aPropor || jogos.length === 0}>
-          {aPropor ? 'A calcular…' : 'Proposta automática'}
+        <div className="grupo-botoes" title="Que jogos entram na proposta automática">
+          {(['DIA', 'SEMANA'] as const).map((a) => (
+            <button key={a} className={classes(ambito === a && 'ativo')} onClick={() => setAmbito(a)}>
+              {a === 'DIA' ? 'Hoje' : 'Semana'}
+            </button>
+          ))}
+        </div>
+        <button
+          className="botao primario"
+          onClick={gerarProposta}
+          disabled={aPropor || paraProposta.length === 0}
+          title={
+            excluidos.size > 0
+              ? `${excluidos.size} jogos desmarcados ficam de fora`
+              : 'Propõe delegados para os jogos assinalados'
+          }
+        >
+          {aPropor ? 'A calcular…' : `Proposta automática (${paraProposta.length})`}
         </button>
       </div>
 
@@ -353,18 +390,39 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   )}
                   onClick={() => setSelecionado(j.id)}
                 >
-                  <button
-                    className="esconder"
-                    title="Esconder este jogo (fica recuperável em Escondidos)"
-                    onClick={(e) => {
-                      // Sem isto, esconder também selecionava o jogo que vai sair da lista.
-                      e.stopPropagation()
-                      void esconder(j)
-                    }}
-                  >
-                    ✕
-                  </button>
+                  <div className="accoes-jogo">
+                    <button
+                      className="accao"
+                      title="Corrigir data, hora ou recinto deste jogo"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setAEditar(j)
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="accao esconder"
+                      title="Esconder este jogo (fica recuperável em Escondidos)"
+                      onClick={(e) => {
+                        // Sem isto, esconder também selecionava o jogo que vai sair da lista.
+                        e.stopPropagation()
+                        void esconder(j)
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                   <div className="topo">
+                    <input
+                      type="checkbox"
+                      className="incluir"
+                      checked={!excluidos.has(j.id)}
+                      disabled={!doAmbito.some((d) => d.id === j.id)}
+                      title="Incluir este jogo na proposta automática"
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => alternarNaProposta(j.id)}
+                    />
                     <span>{formatarDataHora(j.dataHora)}</span>
                     <span>·</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -375,6 +433,12 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                     {j.clubeCasaNome} <span className="silencioso">×</span> {j.clubeForaNome}
                   </div>
                   <div className="local">{j.recintoNome ?? 'recinto por indicar'}</div>
+                  {(j.ultimaAlteracao || j.editadoManualmente) && (
+                    <div className="alteracao" title={j.ultimaAlteracao ?? undefined}>
+                      {j.editadoManualmente && <span className="etiqueta">corrigido à mão</span>}
+                      {j.ultimaAlteracao && <span className="texto">{j.ultimaAlteracao}</span>}
+                    </div>
+                  )}
                   {j.nomeacoes.length > 0 && (
                     <div className="chips">
                       {j.nomeacoes.map((n) => (
@@ -538,6 +602,18 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           </div>
         </div>
       </div>
+
+      {aEditar && (
+        <EditarJogo
+          jogo={aEditar}
+          aoFechar={() => setAEditar(null)}
+          aoGuardar={async () => {
+            await carregarJogos()
+            await carregarUrgentes()
+            if (selecionado != null) await carregarCandidatos(selecionado)
+          }}
+        />
+      )}
 
       {proposta && (
         <RevisaoProposta

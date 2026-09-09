@@ -129,6 +129,18 @@ export interface Jogo {
   /** Retirado da lista pelo coordenador; recuperável no ecrã Escondidos. */
   escondido: boolean
   escondidoEm: string | null
+  /** Corrigido à mão: a sincronização deixa de lhe tocar. */
+  editadoManualmente: boolean
+  editadoEm: string | null
+  /** O que mudou da última vez, pronto a mostrar. Ex.: "hora 15:00 → 17:00". */
+  ultimaAlteracao: string | null
+}
+
+/** Campos que o coordenador pode corrigir à mão num jogo. */
+export interface EdicaoJogo {
+  dataHora: string | null
+  recintoId: number | null
+  jornada: string | null
 }
 
 /** Jogo com os nomes já resolvidos, para listagem na UI. */

@@ -538,6 +538,78 @@ async function principal(): Promise<void> {
       doHistorico.some((j) => j.id === ontem) && !doHistorico.some((j) => j.id === hojeCedo)
     )
 
+    // Editar um jogo à mão: as nomeações ficam, a FPF deixa de lhe tocar, e o
+    // que mudou fica registado para aparecer no cartão.
+    const paraEditar = repos.listarJogos().find((j) => j.nomeacoes.length > 0)!
+    const nomeacoesAntes = paraEditar.nomeacoes.length
+    const editado = repos.editarJogo(paraEditar.id, {
+      dataHora: '2026-11-30T20:45',
+      recintoId: paraEditar.recintoId,
+      jornada: paraEditar.jornada
+    })!
+    verificar(
+      'editar guarda a data nova e mantém as nomeações',
+      editado.dataHora === '2026-11-30T20:45' && editado.nomeacoes.length === nomeacoesAntes,
+      `→ ${editado.dataHora}, ${editado.nomeacoes.length} nomeações`
+    )
+    verificar(
+      'o jogo diz o que mudou',
+      (editado.ultimaAlteracao ?? '').includes('data'),
+      `→ ${editado.ultimaAlteracao ?? 'nada'}`
+    )
+    verificar('e fica marcado como corrigido à mão', editado.editadoManualmente)
+
+    // A sincronização não pode desfazer a correção.
+    repos.guardarJogo({
+      chaveNatural: editado.chaveNatural,
+      competicaoId: editado.competicaoId,
+      fase: editado.fase,
+      serie: editado.serie,
+      jornada: editado.jornada,
+      fpfFixtureId: editado.fpfFixtureId,
+      fpfMatchId: editado.fpfMatchId,
+      dataHora: '2026-12-25T10:00',
+      clubeCasaId: editado.clubeCasaId,
+      clubeForaId: editado.clubeForaId,
+      recintoId: editado.recintoId,
+      recintoTextoFpf: editado.recintoTextoFpf,
+      estado: editado.estado
+    })
+    verificar(
+      'a atualização automática não mexe num jogo corrigido à mão',
+      repos.obterJogoDetalhado(editado.id)?.dataHora === '2026-11-30T20:45',
+      `→ ${repos.obterJogoDetalhado(editado.id)?.dataHora}`
+    )
+
+    // E voltar a seguir a FPF devolve o jogo às atualizações.
+    repos.seguirFpfDeNovo(editado.id)
+    repos.guardarJogo({
+      chaveNatural: editado.chaveNatural,
+      competicaoId: editado.competicaoId,
+      fase: editado.fase,
+      serie: editado.serie,
+      jornada: editado.jornada,
+      fpfFixtureId: editado.fpfFixtureId,
+      fpfMatchId: editado.fpfMatchId,
+      dataHora: '2026-12-25T10:00',
+      clubeCasaId: editado.clubeCasaId,
+      clubeForaId: editado.clubeForaId,
+      recintoId: editado.recintoId,
+      recintoTextoFpf: editado.recintoTextoFpf,
+      estado: editado.estado
+    })
+    const depoisDeSeguir = repos.obterJogoDetalhado(editado.id)
+    verificar(
+      'voltar a seguir a FPF devolve o jogo às atualizações',
+      depoisDeSeguir?.dataHora === '2026-12-25T10:00',
+      `→ ${depoisDeSeguir?.dataHora}`
+    )
+    verificar(
+      'e a alteração vinda da FPF também fica descrita',
+      (depoisDeSeguir?.ultimaAlteracao ?? '').includes('30'),
+      `→ ${depoisDeSeguir?.ultimaAlteracao ?? 'nada'}`
+    )
+
     // Desfazer: o caso que interessa é o clique errado — nomear por cima de
     // alguém, ou remover quem não era para remover.
     const jogoDesfazer = repos.listarJogos().find((j) => j.nomeacoes.length === 0)!

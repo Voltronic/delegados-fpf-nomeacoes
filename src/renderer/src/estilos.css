@@ -670,11 +670,21 @@ table.tabela th.ordenada .seta {
     inset 0 0 0 1px var(--primaria);
 }
 
-/* O botão de esconder só aparece quando o rato passa pela linha. */
-.item-jogo .esconder {
+/* Os botões da linha só aparecem quando o rato passa por ela. */
+.item-jogo .accoes-jogo {
   position: absolute;
   top: 6px;
   right: 8px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+
+.item-jogo:hover .accoes-jogo {
+  opacity: 1;
+}
+
+.item-jogo .accao {
   border: 0;
   background: transparent;
   color: var(--texto-fraco);
@@ -683,16 +693,51 @@ table.tabela th.ordenada .seta {
   line-height: 1;
   padding: 3px 5px;
   border-radius: var(--raio-p);
-  opacity: 0;
 }
 
-.item-jogo:hover .esconder {
-  opacity: 1;
+.item-jogo .accao:hover {
+  background: var(--primaria-clara);
+  color: var(--primaria);
 }
 
-.item-jogo .esconder:hover {
+.item-jogo .accao.esconder:hover {
   background: var(--perigo-claro);
   color: var(--perigo);
+}
+
+/* Caixa de seleção para a proposta automática, discreta no canto da linha. */
+.item-jogo .incluir {
+  width: 13px;
+  height: 13px;
+  margin: 0 2px 0 0;
+  flex: 0 0 auto;
+}
+
+/*
+ * O que mudou no jogo, para não ser preciso ir aos alertas descobrir porque é
+ * que a hora não é a que se esperava.
+ */
+.item-jogo .alteracao {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--aviso);
+  margin-top: 2px;
+}
+
+.item-jogo .alteracao .etiqueta {
+  background: var(--aviso-claro);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.item-jogo .alteracao .texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-jogo .topo {

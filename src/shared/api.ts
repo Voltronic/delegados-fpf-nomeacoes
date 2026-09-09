@@ -1,5 +1,6 @@
 import type {
   Alerta,
+  EdicaoJogo,
   Candidato,
   Clube,
   Competicao,
@@ -184,6 +185,14 @@ export interface Api {
     apagar(id: number): Promise<void>
     /** Importa jogos de um ficheiro CSV — o recurso que não depende do site. */
     importarCsv(texto: string, seasonId: number, descricaoEpoca: string): Promise<ResultadoImportacaoCsvApi>
+    /**
+     * Corrige um jogo à mão. A partir daqui a sincronização deixa de lhe tocar,
+     * e as nomeações que existam mantêm-se — se ficarem em conflito, é gerado
+     * um alerta.
+     */
+    editar(id: number, dados: EdicaoJogo): Promise<JogoDetalhado | null>
+    /** Devolve o jogo ao controlo da FPF. */
+    seguirFpf(id: number): Promise<JogoDetalhado | null>
     /** Tira (ou repõe) um jogo das listas de trabalho, sem apagar nada. */
     esconder(id: number, escondido: boolean): Promise<JogoDetalhado | null>
     /** Jogos escondidos que ainda estão para acontecer. */

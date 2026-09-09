@@ -280,5 +280,20 @@ export const MIGRACOES: Migracao[] = [
       ALTER TABLE alerta_novo RENAME TO alerta;
       CREATE INDEX ix_alerta_lido ON alerta(lido, criado_em);
     `
+  },
+  {
+    versao: 9,
+    descricao: 'Jogos editados à mão e resumo da última alteração',
+    sql: `
+      -- Um jogo corrigido à mão passa a ser da responsabilidade do
+      -- coordenador: a FPF deixa de lhe tocar, senão a correção desaparecia na
+      -- atualização seguinte, sem ninguém dar por isso.
+      ALTER TABLE jogo ADD COLUMN editado_manualmente INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE jogo ADD COLUMN editado_em TEXT;
+
+      -- O que mudou na última alteração, em texto pronto a mostrar no cartão do
+      -- jogo. Sem isto, o cartão só podia dizer *que* mudou, não *o quê*.
+      ALTER TABLE jogo ADD COLUMN ultima_alteracao TEXT;
+    `
   }
 ]

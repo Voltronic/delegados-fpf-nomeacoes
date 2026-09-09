@@ -13,6 +13,7 @@ import type {
   Competicao,
   ConfiguracaoMotor,
   Delegado,
+  EdicaoJogo,
   Indisponibilidade,
   PapelNomeacao,
   ProgressoSincronizacao,
@@ -79,6 +80,13 @@ export const clienteFpfPartilhado = (): ClienteFpf => cliente()
 export function fecharCliente(): void {
   clienteFpf?.fechar()
   clienteFpf = null
+}
+
+/** Faz chegar alertas novos à janela, como faz a atualização automática. */
+function emitirAlertas(alertas: unknown[]): void {
+  for (const janela of BrowserWindow.getAllWindows()) {
+    if (!janela.isDestroyed()) janela.webContents.send('alertas:novos', alertas)
+  }
 }
 
 export function registarIpc(contexto: {
@@ -365,6 +373,43 @@ export function registarIpc(contexto: {
     return repos.obterJogoDetalhado(id)
   })
   registar('jogos:apagar', (id: number) => repos.apagarJogo(id))
+  /**
+   * Corrige um jogo à mão. As nomeações ficam — mudar a hora não é motivo para
+   * desnomear ninguém —, mas se o jogo for para cima de outro do mesmo
+   * delegado, isso tem de dar alerta: ninguém está em dois recintos ao mesmo
+   * tempo, e quem fez a alteração pode não se ter lembrado disso.
+   */
+  registar('jogos:editar', (id: number, dados: EdicaoJogo) => {
+    const jogo = repos.editarJogo(id, dados)
+    if (!jogo) return null
+
+    const margem = Number(lerConfig('motor.margemEntreJogosMinutos') ?? '180')
+    const alertas: repos.EntradaAlerta[] = []
+    // Sem data não há colisão possível: o jogo ainda não está marcado.
+    for (const nomeacao of jogo.dataHora ? jogo.nomeacoes : []) {
+      const agenda = repos.jogosDoDelegadoPerto(nomeacao.delegadoId, jogo.dataHora!, margem, jogo.id)
+      for (const colisao of agenda) {
+        alertas.push({
+          // A chave inclui os dois jogos: mexer outra vez gera alerta novo.
+          chave: `conflito-manual:${jogo.id}:${colisao.id}:${jogo.dataHora ?? 'sem-data'}`,
+          tipo: 'CONFLITO',
+          jogoId: jogo.id,
+          competicao: jogo.competicaoNome,
+          descricao: `${jogo.clubeCasaNome} × ${jogo.clubeForaNome}`,
+          dataHora: jogo.dataHora,
+          detalhe:
+            `Depois da alteração, ${nomeacao.delegadoNome} fica com dois jogos à mesma hora: ` +
+            `este e ${colisao.clubeCasaNome} × ${colisao.clubeForaNome}. Um dos dois tem de mudar de delegado.`
+        })
+      }
+    }
+    const criados = repos.criarAlertas(alertas)
+    if (criados.length) emitirAlertas(criados)
+    return jogo
+  })
+  /** Devolve o jogo ao controlo da FPF, voltando a ser atualizado. */
+  registar('jogos:seguirFpf', (id: number) => repos.seguirFpfDeNovo(id))
+
   registar('jogos:esconder', (id: number, escondido: boolean) => {
     repos.esconderJogo(id, escondido)
     return repos.obterJogoDetalhado(id)

@@ -402,6 +402,84 @@ app.whenReady().then(async () => {
       `→ ${porCima}`
     )
 
+    log('\n2b. Corrigir um jogo à mão e escolher o âmbito da proposta')
+    await irPara('Nomeações')
+
+    // Editar: abre a caixa, muda a hora e confirma que a lista passa a mostrar
+    // o que mudou e que o jogo fica marcado como corrigido.
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.item-jogo .accoes-jogo .accao')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 600))
+    const abriu = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.modal header h2')?.textContent ?? ''"
+    )) as string
+    verificar('o botão de editar abre a correção do jogo', abriu.includes('Corrigir'), `→ ${abriu}`)
+
+    await janela.webContents.executeJavaScript(
+      `(() => {
+         const hora = document.querySelector('.modal input[type=time]');
+         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+         setter.call(hora, '21:45');
+         hora.dispatchEvent(new Event('input', { bubbles: true }));
+       })()`
+    )
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Guardar')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 1200))
+    const marcado = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const alt = document.querySelector('.item-jogo .alteracao');
+         return JSON.stringify({
+           texto: alt ? alt.innerText.replace(/\\s+/g, ' ') : '',
+           horas: [...document.querySelectorAll('.item-jogo .topo')].map((t) => t.innerText).join(' | ')
+         });
+       })()`
+    )) as string
+    const estado = JSON.parse(marcado) as { texto: string; horas: string }
+    verificar(
+      'o cartão do jogo mostra que foi corrigido e o que mudou',
+      estado.texto.includes('corrigido à mão') && estado.texto.includes('21:45'),
+      `→ ${estado.texto || 'sem indicação'}`
+    )
+    verificar('a hora nova aparece na lista', estado.horas.includes('21:45'), `→ ${estado.horas.slice(0, 80)}`)
+
+    // Âmbito da proposta e seleção jogo a jogo.
+    const contagem = async (): Promise<string> =>
+      (await janela.webContents.executeJavaScript(
+        "[...document.querySelectorAll('.botao.primario')].find((b) => b.textContent.includes('Proposta'))?.textContent ?? ''"
+      )) as string
+    const comSemana = await contagem()
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.grupo-botoes button')].find((b) => b.textContent.trim() === 'Hoje')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    const comDia = await contagem()
+    verificar(
+      'escolher "Hoje" reduz os jogos da proposta',
+      comSemana !== comDia,
+      `→ ${comSemana.trim()} para ${comDia.trim()}`
+    )
+
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.grupo-botoes button')].find((b) => b.textContent.trim() === 'Semana')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.item-jogo .incluir')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    const semUm = await contagem()
+    verificar(
+      'desmarcar um jogo tira-o da proposta',
+      semUm !== comSemana,
+      `→ ${comSemana.trim()} para ${semUm.trim()}`
+    )
+    // Volta a marcar, para as verificações seguintes verem a lista completa.
+    await janela.webContents.executeJavaScript("document.querySelector('.item-jogo .incluir')?.click()")
+    await new Promise((r) => setTimeout(r, 300))
+
     log('\n3b. Dashboard: ordenação e altura das tabelas')
     await irPara('Dashboard')
 

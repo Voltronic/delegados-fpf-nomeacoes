@@ -3,6 +3,7 @@ import type {
   Clube,
   Competicao,
   Delegado,
+  EdicaoJogo,
   EstadoJogo,
   Indisponibilidade,
   Jogo,
@@ -477,6 +478,9 @@ type LinhaJogo = {
   alterado_em: string | null
   escondido: number
   escondido_em: string | null
+  editado_manualmente: number
+  editado_em: string | null
+  ultima_alteracao: string | null
 }
 
 const paraJogo = (l: LinhaJogo): Jogo => ({
@@ -497,7 +501,10 @@ const paraJogo = (l: LinhaJogo): Jogo => ({
   importadoEm: l.importado_em,
   alteradoEm: l.alterado_em,
   escondido: !!l.escondido,
-  escondidoEm: l.escondido_em
+  escondidoEm: l.escondido_em,
+  editadoManualmente: !!l.editado_manualmente,
+  editadoEm: l.editado_em,
+  ultimaAlteracao: l.ultima_alteracao
 })
 
 export interface FiltroJogos {
@@ -675,16 +682,40 @@ export function obterJogoPorChave(chave: string): Jogo | null {
   return l ? paraJogo(l) : null
 }
 
+/** Resumo legível do que mudou entre dois estados de um jogo. */
+export function descreverAlteracao(
+  antes: { dataHora: string | null; recintoId: number | null; jornada: string | null },
+  depois: { dataHora: string | null; recintoId: number | null; jornada: string | null }
+): string | null {
+  const partes: string[] = []
+  const dia = (d: string | null): string => (d ? d.replace('T', ' às ') : 'sem data')
+  if (antes.dataHora !== depois.dataHora) partes.push(`data ${dia(antes.dataHora)} → ${dia(depois.dataHora)}`)
+  if (antes.recintoId !== depois.recintoId) {
+    const nome = (id: number | null): string => (id ? (obterRecinto(id)?.nome ?? 'recinto') : 'sem recinto')
+    partes.push(`recinto ${nome(antes.recintoId)} → ${nome(depois.recintoId)}`)
+  }
+  if (antes.jornada !== depois.jornada) {
+    partes.push(`jornada ${antes.jornada ?? '—'} → ${depois.jornada ?? '—'}`)
+  }
+  return partes.length ? partes.join(' · ') : null
+}
+
 export function guardarJogo(dados: EntradaJogo): number {
   const db = obterBaseDados()
   const existente = obterJogoPorChave(dados.chaveNatural)
   if (existente) {
+    // Um jogo corrigido à mão passa a mandar sobre a FPF: se a atualização lhe
+    // tocasse, a correção desaparecia na hora seguinte sem ninguém dar por isso.
+    if (existente.editadoManualmente) return existente.id
+
+    const alteracao = descreverAlteracao(existente, dados)
     db.prepare(
       `UPDATE jogo SET fase=@fase, serie=@serie, jornada=@jornada, fpf_fixture_id=@fpfFixtureId,
         fpf_match_id=@fpfMatchId, data_hora=@dataHora, recinto_id=@recintoId,
-        recinto_texto_fpf=@recintoTextoFpf, estado=@estado, alterado_em=@alteradoEm
+        recinto_texto_fpf=@recintoTextoFpf, estado=@estado, alterado_em=@alteradoEm,
+        ultima_alteracao=COALESCE(@alteracao, ultima_alteracao)
        WHERE id=@id`
-    ).run({ ...dados, id: existente.id, alteradoEm: agora() })
+    ).run({ ...dados, id: existente.id, alteradoEm: agora(), alteracao })
     return existente.id
   }
   const info = db
@@ -696,6 +727,39 @@ export function guardarJogo(dados: EntradaJogo): number {
     )
     .run({ ...dados, importadoEm: agora() })
   return Number(info.lastInsertRowid)
+}
+
+/**
+ * Corrige um jogo à mão: data, hora, recinto ou jornada.
+ *
+ * A partir daqui a sincronização deixa de lhe tocar. É a única forma de a
+ * correção sobreviver: a FPF continuaria a mandar o que tem, e a atualização
+ * seguinte desfazia tudo. As nomeações que existam ficam como estão — mudar a
+ * hora de um jogo não é motivo para desnomear ninguém.
+ */
+export function editarJogo(id: number, dados: EdicaoJogo): JogoDetalhado | null {
+  const antes = obterJogoDetalhado(id)
+  if (!antes) return null
+  const alteracao = descreverAlteracao(antes, dados)
+  obterBaseDados()
+    .prepare(
+      `UPDATE jogo SET data_hora=@dataHora, recinto_id=@recintoId, jornada=@jornada,
+         editado_manualmente=1, editado_em=@quando, alterado_em=@quando,
+         ultima_alteracao=COALESCE(@alteracao, ultima_alteracao)
+       WHERE id=@id`
+    )
+    .run({ ...dados, id, quando: agora(), alteracao })
+  registarAuditoria('jogo', id, 'editar', { antes: alteracao, dados })
+  return obterJogoDetalhado(id)
+}
+
+/** Devolve o jogo ao controlo da FPF: volta a ser atualizado nas sincronizações. */
+export function seguirFpfDeNovo(id: number): JogoDetalhado | null {
+  obterBaseDados()
+    .prepare('UPDATE jogo SET editado_manualmente = 0, editado_em = NULL WHERE id = ?')
+    .run(id)
+  registarAuditoria('jogo', id, 'seguir-fpf')
+  return obterJogoDetalhado(id)
 }
 
 export function apagarJogo(id: number): void {
