@@ -418,6 +418,35 @@ table.tabela th.num {
   max-height: 100%;
 }
 
+/* ------------------------------------------------------ tabelas ordenáveis */
+
+table.tabela th.ordenavel {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+table.tabela th.ordenavel:hover {
+  color: var(--texto);
+  background: var(--superficie-2);
+}
+
+table.tabela th.ordenavel .seta {
+  margin-left: 4px;
+  font-size: 9px;
+  /* A seta inativa fica esbatida: mostra que a coluna se pode ordenar sem
+     competir com a que está mesmo a ordenar a tabela. */
+  opacity: 0.28;
+}
+
+table.tabela th.ordenada {
+  color: var(--primaria);
+}
+
+table.tabela th.ordenada .seta {
+  opacity: 1;
+}
+
 /* --------------------------------------------------------------- emblemas */
 
 .emblema {

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Competicao, LinhaKmDelegado, MatrizDashboard } from '@shared/tipos'
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
+import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 
 export default function Dashboard(): JSX.Element {
   const [epocas, setEpocas] = useState<{ seasonId: number; etiqueta: string }[]>([])
@@ -31,6 +32,26 @@ export default function Dashboard(): JSX.Element {
     void window.api.dashboard.porCompeticao(epoca).then(setPorCompeticao)
     void window.api.dashboard.porClube(epoca).then(setPorClube)
   }, [seasonId])
+
+  const colunasKm: Valores<LinhaKmDelegado, 'numero' | 'nome' | 'nivel' | 'jogos' | 'km' | 'desvio' | 'minutos'> =
+    useMemo(
+      () => ({
+        // O número é texto na base de dados mas lê-se como número: sem isto, o
+        // 10 vinha antes do 2.
+        numero: (l) => Number(l.numero) || l.numero,
+        nome: (l) => l.nome,
+        nivel: (l) => l.nivel,
+        jogos: (l) => l.jogos,
+        km: (l) => l.km,
+        desvio: (l) => l.desvio,
+        minutos: (l) => l.minutos
+      }),
+      []
+    )
+  const { ordenadas: kmOrdenado, ordem: ordemKm, alternar: alternarKm } = useOrdenacao(km, colunasKm, {
+    coluna: 'km',
+    sentido: 'desc'
+  })
 
   const kmMaximo = Math.max(1, ...km.map((l) => l.km))
   const totalKm = km.reduce((a, l) => a + l.km, 0)
@@ -85,26 +106,56 @@ export default function Dashboard(): JSX.Element {
             <table className="tabela">
               <thead>
                 <tr>
-                  <th style={{ width: 60 }}>Nº</th>
-                  <th>Delegado</th>
-                  <th style={{ width: 90 }}>Nível</th>
-                  <th className="num" style={{ width: 70 }}>
+                  <ColunaOrdenavel coluna="numero" ordem={ordemKm} alternar={alternarKm} style={{ width: 60 }}>
+                    Nº
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel coluna="nome" ordem={ordemKm} alternar={alternarKm}>
+                    Delegado
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel coluna="nivel" ordem={ordemKm} alternar={alternarKm} style={{ width: 100 }}>
+                    Nível
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel
+                    coluna="jogos"
+                    ordem={ordemKm}
+                    alternar={alternarKm}
+                    className="num"
+                    style={{ width: 80 }}
+                  >
                     Jogos
-                  </th>
-                  <th className="num" style={{ width: 100 }}>
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel
+                    coluna="km"
+                    ordem={ordemKm}
+                    alternar={alternarKm}
+                    className="num"
+                    style={{ width: 110 }}
+                  >
                     Km
-                  </th>
-                  <th className="num" style={{ width: 110 }}>
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel
+                    coluna="desvio"
+                    ordem={ordemKm}
+                    alternar={alternarKm}
+                    className="num"
+                    style={{ width: 120 }}
+                  >
                     Desvio
-                  </th>
-                  <th className="num" style={{ width: 90 }}>
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel
+                    coluna="minutos"
+                    ordem={ordemKm}
+                    alternar={alternarKm}
+                    className="num"
+                    style={{ width: 100 }}
+                  >
                     Tempo
-                  </th>
+                  </ColunaOrdenavel>
                   <th style={{ width: '30%' }} />
                 </tr>
               </thead>
               <tbody>
-                {km.map((l) => (
+                {kmOrdenado.map((l) => (
                   <tr key={l.delegadoId}>
                     <td className="mono silencioso">{l.numero}</td>
                     <td>{l.nome}</td>
@@ -143,7 +194,35 @@ export default function Dashboard(): JSX.Element {
 }
 
 function Matriz({ titulo, matriz }: { titulo: string; matriz: MatrizDashboard | null }): JSX.Element {
-  if (!matriz || matriz.colunas.length === 0) {
+  // Os hooks têm de correr sempre, mesmo sem dados, por isso a matriz vazia é
+  // tratada depois de os declarar.
+  const linhas = matriz?.linhas ?? []
+  const colunas = matriz?.colunas ?? []
+  const celulas = matriz?.celulas ?? []
+
+  const valor = useCallback(
+    (delegadoId: number, chave: string): number =>
+      celulas.find((c) => c.delegadoId === delegadoId && c.chaveColuna === chave)?.valor ?? 0,
+    [celulas]
+  )
+
+  // Além do delegado e do total, cada clube (ou competição) é uma coluna
+  // ordenável: é assim que se responde a "quem ainda não fez este clube?".
+  const valores = useMemo(() => {
+    const mapa: Record<string, (l: (typeof linhas)[number]) => string | number> = {
+      delegado: (l) => Number(l.numero) || l.numero,
+      total: (l) => colunas.reduce((a, c) => a + valor(l.delegadoId, c.chave), 0)
+    }
+    for (const c of colunas) mapa[c.chave] = (l) => valor(l.delegadoId, c.chave)
+    return mapa
+  }, [colunas, valor])
+
+  const { ordenadas, ordem, alternar } = useOrdenacao(linhas, valores, {
+    coluna: 'delegado',
+    sentido: 'asc'
+  })
+
+  if (!matriz || colunas.length === 0) {
     return (
       <div className="cartao">
         <h2>{titulo}</h2>
@@ -151,34 +230,55 @@ function Matriz({ titulo, matriz }: { titulo: string; matriz: MatrizDashboard | 
       </div>
     )
   }
-  const valor = (delegadoId: number, chave: string): number =>
-    matriz.celulas.find((c) => c.delegadoId === delegadoId && c.chaveColuna === chave)?.valor ?? 0
 
   return (
     <div className="cartao">
       <h2>{titulo}</h2>
-      <div className="envolve-tabela" style={{ maxHeight: 420, border: 'none' }}>
+      {/*
+        Sem altura máxima: o cartão cresce com o número de delegados e quem
+        rola é a página. Com um limite fixo, a tabela ficava com um scroll
+        próprio dentro de outro, e nunca se via a lista toda de uma vez.
+        A rolagem horizontal fica, porque as colunas são tantas quantos os
+        clubes da época.
+      */}
+      <div className="envolve-tabela" style={{ border: 'none', maxHeight: 'none', overflowY: 'visible' }}>
         <table className="tabela">
           <thead>
             <tr>
-              <th style={{ position: 'sticky', left: 0, zIndex: 2 }}>Delegado</th>
-              {matriz.colunas.map((c) => (
-                <th key={c.chave} className="num" title={c.etiqueta}>
+              <ColunaOrdenavel
+                coluna="delegado"
+                ordem={ordem}
+                alternar={alternar}
+                style={{ position: 'sticky', left: 0, zIndex: 2 }}
+              >
+                Delegado
+              </ColunaOrdenavel>
+              {colunas.map((c) => (
+                <ColunaOrdenavel
+                  key={c.chave}
+                  coluna={c.chave}
+                  ordem={ordem}
+                  alternar={alternar}
+                  className="num"
+                  title={c.etiqueta}
+                >
                   {c.etiqueta.length > 22 ? `${c.etiqueta.slice(0, 20)}…` : c.etiqueta}
-                </th>
+                </ColunaOrdenavel>
               ))}
-              <th className="num">Total</th>
+              <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
+                Total
+              </ColunaOrdenavel>
             </tr>
           </thead>
           <tbody>
-            {matriz.linhas.map((l) => {
-              const total = matriz.colunas.reduce((a, c) => a + valor(l.delegadoId, c.chave), 0)
+            {ordenadas.map((l) => {
+              const total = colunas.reduce((a, c) => a + valor(l.delegadoId, c.chave), 0)
               return (
                 <tr key={l.delegadoId}>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <span className="mono silencioso">{l.numero}</span> {l.nome}
                   </td>
-                  {matriz.colunas.map((c) => {
+                  {colunas.map((c) => {
                     const v = valor(l.delegadoId, c.chave)
                     return (
                       <td key={c.chave} className={classes('num', v === 0 ? 'matriz-celula-0' : 'matriz-celula-n')}>

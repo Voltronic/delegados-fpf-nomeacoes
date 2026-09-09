@@ -135,9 +135,10 @@ app.whenReady().then(async () => {
     }
   })
 
-  janela.webContents.on('console-message', (_e, nivel, mensagem) => {
-    // 3 = error
-    if (nivel >= 3) erros.push(mensagem)
+  janela.webContents.on('console-message', (_e, nivel, mensagem, linha, origem) => {
+    // 3 = error. Guarda-se a origem: sem ela, um erro do Leaflet podia vir de
+    // qualquer um dos sítios onde o mapa é montado ou destruído.
+    if (nivel >= 3) erros.push(`${mensagem} (${origem}:${linha})`)
   })
   janela.webContents.on('render-process-gone', (_e, detalhes) =>
     erros.push(`render-process-gone: ${detalhes.reason}`)
@@ -305,6 +306,51 @@ app.whenReady().then(async () => {
       )) as number
       verificar(`ecrã "${nome}" desenha`, conteudo > 30, `→ título "${titulo}", ${conteudo} caracteres`)
     }
+
+    log('\n3b. Dashboard: ordenação e altura das tabelas')
+    await irPara('Dashboard')
+
+    // Ordenar por uma coluna tem de mudar mesmo a ordem das linhas. Sem
+    // comparar antes e depois, o teste passava com os cabeçalhos inertes.
+    const primeiroDelegado = async (): Promise<string> =>
+      (await janela.webContents.executeJavaScript(
+        "document.querySelector('.tabela tbody tr td:nth-child(2)')?.textContent?.trim() ?? ''"
+      )) as string
+    const antesDeOrdenar = await primeiroDelegado()
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.tabela th.ordenavel')].find((t) => t.textContent.includes('Delegado'))?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    const depoisDeOrdenar = await primeiroDelegado()
+    verificar(
+      'ordenar por delegado muda a ordem das linhas',
+      antesDeOrdenar !== '' && depoisDeOrdenar !== '' && antesDeOrdenar !== depoisDeOrdenar,
+      `→ "${antesDeOrdenar}" para "${depoisDeOrdenar}"`
+    )
+    // E clicar outra vez inverte.
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.tabela th.ordenavel')].find((t) => t.textContent.includes('Delegado'))?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    verificar(
+      'clicar outra vez inverte o sentido',
+      (await primeiroDelegado()) !== depoisDeOrdenar,
+      `→ ${await primeiroDelegado()}`
+    )
+
+    // As matrizes não podem ter scroll vertical próprio: o cartão cresce com o
+    // número de delegados e quem rola é a página.
+    const scrollInterno = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const caixas = [...document.querySelectorAll('.envolve-tabela')];
+         return caixas.filter((c) => c.scrollHeight > c.clientHeight + 1).length;
+       })()`
+    )) as number
+    verificar(
+      'nenhuma tabela do dashboard tem scroll vertical próprio',
+      scrollInterno === 0,
+      `→ ${scrollInterno} com scroll interno`
+    )
 
     log('\n4. Recintos por confirmar')
     await janela.webContents.executeJavaScript(

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { JogoDetalhado } from '@shared/tipos'
 import { classes, formatarDataHora } from '../lib/formato'
 import { avisar, mensagemDeErro } from '../lib/avisos'
+import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 
 /**
  * Jogos que o coordenador tirou da lista de trabalho.
@@ -26,6 +27,20 @@ export default function Escondidos(): JSX.Element {
   useEffect(() => {
     void carregar()
   }, [carregar])
+
+  // Cada coluna ordena a lista: por data, por competição, por clubes, por
+  // recinto ou pelo delegado nomeado.
+  const colunas: Valores<JogoDetalhado, 'data' | 'competicao' | 'jogo' | 'recinto' | 'delegados'> = useMemo(
+    () => ({
+      data: (j) => j.dataHora,
+      competicao: (j) => j.competicaoNome,
+      jogo: (j) => `${j.clubeCasaNome} ${j.clubeForaNome}`,
+      recinto: (j) => j.recintoNome,
+      delegados: (j) => j.nomeacoes.map((n) => n.delegadoNome).join(', ') || null
+    }),
+    []
+  )
+  const { ordenadas, ordem, alternar } = useOrdenacao(jogos, colunas, { coluna: 'data', sentido: 'asc' })
 
   async function repor(jogo: JogoDetalhado): Promise<void> {
     try {
@@ -69,16 +84,26 @@ export default function Escondidos(): JSX.Element {
             <table className="tabela">
               <thead>
                 <tr>
-                  <th>Data</th>
-                  <th>Competição</th>
-                  <th>Jogo</th>
-                  <th>Recinto</th>
-                  <th>Delegados</th>
+                  <ColunaOrdenavel coluna="data" ordem={ordem} alternar={alternar}>
+                    Data
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel coluna="competicao" ordem={ordem} alternar={alternar}>
+                    Competição
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel coluna="jogo" ordem={ordem} alternar={alternar}>
+                    Jogo
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel coluna="recinto" ordem={ordem} alternar={alternar}>
+                    Recinto
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel coluna="delegados" ordem={ordem} alternar={alternar}>
+                    Delegados
+                  </ColunaOrdenavel>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {jogos.map((j) => (
+                {ordenadas.map((j) => (
                   <tr key={j.id}>
                     <td>{formatarDataHora(j.dataHora)}</td>
                     <td>{j.competicaoNome}</td>

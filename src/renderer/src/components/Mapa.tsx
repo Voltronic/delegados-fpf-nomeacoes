@@ -78,8 +78,15 @@ export default function Mapa({
     marcarZoom()
 
     return () => {
+      // Desmontar com uma tooltip aberta rebenta no Leaflet: ela tenta
+      // reposicionar-se sobre um marcador que já não está no mapa. Fecha-se
+      // tudo antes de destruir.
+      for (const marcador of marcadores.current.values()) marcador.closeTooltip()
+      marcadores.current.clear()
+      camada.current?.clearLayers()
       mapa.current?.remove()
       mapa.current = null
+      camada.current = null
     }
   }, [tilesUrl])
 
