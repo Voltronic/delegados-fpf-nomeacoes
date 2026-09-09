@@ -79,3 +79,23 @@ export function dataHoraAGuardar(anterior: string | null, nova: string | null): 
 export function dataMudou(anterior: string | null, novaDaFpf: string | null): boolean {
   return (anterior ?? null) !== (dataHoraAGuardar(anterior, novaDaFpf) ?? null)
 }
+
+/** O instante atual no mesmo formato das datas dos jogos (`YYYY-MM-DDTHH:mm`). */
+export function agoraLocal(agora = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return (
+    `${agora.getFullYear()}-${p(agora.getMonth() + 1)}-${p(agora.getDate())}` +
+    `T${p(agora.getHours())}:${p(agora.getMinutes())}`
+  )
+}
+
+/**
+ * Se ainda faz sentido avisar sobre um jogo.
+ *
+ * Um jogo cuja hora de início já passou não tem nada a fazer numa lista de
+ * avisos: o delegado ou foi ou não foi, e não há decisão a tomar. Avisos sem
+ * data (um recinto por localizar, por exemplo) valem sempre.
+ */
+export function vaiAcontecer(dataHora: string | null, agora = agoraLocal()): boolean {
+  return !dataHora || dataHora >= agora
+}

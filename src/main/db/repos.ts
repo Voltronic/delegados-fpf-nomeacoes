@@ -18,7 +18,7 @@ import type {
   VetoClube
 } from '@shared/tipos'
 import { obterBaseDados, registarAuditoria } from './index'
-import { dataHoraAGuardar } from '../../shared/datas'
+import { dataHoraAGuardar, vaiAcontecer } from '../../shared/datas'
 import { normalizarNome } from '../fpf/html'
 import { jogosQueColidem } from '../sync/conflitos'
 
@@ -1106,18 +1106,35 @@ export type EntradaAlerta = Omit<Alerta, 'id' | 'lido' | 'criadoEm' | 'recintoId
  * Grava alertas ignorando os que já existem: a atualização corre de hora a hora
  * e o mesmo adiamento não deve encher a lista de repetições.
  */
+/**
+ * Grava alertas novos.
+ *
+ * Dois filtros antes de gravar seja o que for: nada se avisa sobre um jogo cuja
+ * hora já passou, e nada se repete — nem que o alerta anterior tenha sido
+ * apagado. Um alerta apagado é um alerta tratado, e vê-lo voltar sozinho na
+ * atualização seguinte fazia a lista parecer avariada.
+ */
 export function criarAlertas(entradas: EntradaAlerta[]): Alerta[] {
   if (!entradas.length) return []
   const db = obterBaseDados()
+  const jaVistos = new Set(
+    (db.prepare('SELECT chave FROM alerta_visto').all() as { chave: string }[]).map((l) => l.chave)
+  )
+  entradas = entradas.filter((e) => vaiAcontecer(e.dataHora) && !jaVistos.has(e.chave))
+  if (!entradas.length) return []
   const inserir = db.prepare(
     `INSERT OR IGNORE INTO alerta
        (chave, tipo, jogo_id, recinto_id, competicao, descricao, data_hora, detalhe, lido, criado_em)
      VALUES (@chave, @tipo, @jogoId, @recintoId, @competicao, @descricao, @dataHora, @detalhe, 0, @criadoEm)`
   )
+  const marcarVisto = db.prepare('INSERT OR IGNORE INTO alerta_visto (chave, criado_em) VALUES (?, ?)')
   const criadas: string[] = []
   const transacao = db.transaction(() => {
     for (const e of entradas) {
       const info = inserir.run({ recintoId: null, ...e, criadoEm: agora() })
+      // A chave fica registada mesmo assim: é isso que impede o alerta de
+      // voltar depois de o coordenador o apagar.
+      marcarVisto.run(e.chave, agora())
       if (info.changes > 0) criadas.push(e.chave)
     }
   })

@@ -778,6 +778,45 @@ async function principal(): Promise<void> {
       `→ ${repeticoes.length} linhas`
     )
 
+    // Regras dos alertas: nada sobre jogos que já começaram, e nada repetido —
+    // nem depois de o coordenador apagar o alerta.
+    const daquiA = (horas: number): string => {
+      const d = new Date()
+      d.setHours(d.getHours() + horas)
+      const p2 = (n: number): string => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`
+    }
+    const base = {
+      tipo: 'ALTERADO' as const,
+      jogoId: null,
+      recintoId: null,
+      competicao: 'Teste',
+      descricao: 'A × B',
+      detalhe: 'mudou alguma coisa'
+    }
+
+    const doPassado = repos.criarAlertas([
+      { ...base, chave: 'teste:passado', dataHora: daquiA(-2) }
+    ])
+    verificar('não se avisa sobre um jogo que já começou', doPassado.length === 0, `→ ${doPassado.length}`)
+
+    const doFuturo = repos.criarAlertas([{ ...base, chave: 'teste:futuro', dataHora: daquiA(48) }])
+    verificar('avisa-se sobre o que ainda está para acontecer', doFuturo.length === 1)
+
+    const repetido = repos.criarAlertas([{ ...base, chave: 'teste:futuro', dataHora: daquiA(48) }])
+    verificar('o mesmo facto não gera um segundo alerta', repetido.length === 0)
+
+    // O caso que motivou isto: apagar e ver o alerta voltar na atualização
+    // seguinte fazia a lista parecer avariada.
+    const paraApagar = repos.listarAlertas().find((a) => a.chave === 'teste:futuro')!
+    repos.apagarAlerta(paraApagar.id)
+    const depoisDeApagar = repos.criarAlertas([{ ...base, chave: 'teste:futuro', dataHora: daquiA(48) }])
+    verificar(
+      'um alerta apagado não volta',
+      depoisDeApagar.length === 0 && !repos.listarAlertas().some((a) => a.chave === 'teste:futuro'),
+      `→ ${depoisDeApagar.length} recriados`
+    )
+
     // Recinto sem coordenadas: tem de dar alerta, e o alerta tem de fechar-se
     // sozinho quando alguém puser a localização.
     const orfao = repos.encontrarOuCriarRecinto('Campo Sem Coordenadas Nenhumas')

@@ -319,5 +319,23 @@ export const MIGRACOES: Migracao[] = [
          AND substr(ultima_alteracao, 20, 5) GLOB '[0-9][0-9]:[0-9][0-9]'
          AND substr(ultima_alteracao, 20, 5) <> '00:00';
     `
+  },
+  {
+    versao: 11,
+    descricao: 'Memória dos alertas já mostrados',
+    sql: `
+      -- Um alerta apagado é um alerta tratado. Sem memória, a atualização
+      -- seguinte via o mesmo facto e criava-o outra vez: o coordenador
+      -- limpava a lista e ela voltava sozinha.
+      CREATE TABLE alerta_visto (
+        chave     TEXT PRIMARY KEY,
+        criado_em TEXT NOT NULL
+      );
+
+      -- Os alertas que já existem contam como vistos, senão duplicavam-se na
+      -- primeira atualização depois desta versão.
+      INSERT OR IGNORE INTO alerta_visto (chave, criado_em)
+        SELECT chave, criado_em FROM alerta;
+    `
   }
 ]

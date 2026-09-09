@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { dataHoraAGuardar, dataMudou, diasAte, horaDesconhecida, paraDataLocal } from '../src/shared/datas'
+import {
+  agoraLocal,
+  dataHoraAGuardar,
+  dataMudou,
+  diasAte,
+  horaDesconhecida,
+  paraDataLocal,
+  vaiAcontecer
+} from '../src/shared/datas'
 
 /**
  * O caso que falhou em uso real: às 14:57 de 9 de setembro, um jogo desse mesmo
@@ -127,5 +135,28 @@ describe('avisar o coordenador de uma alteração de data', () => {
     for (const [antes, daFpf] of casos) {
       expect(dataMudou(antes, daFpf), `${antes} → ${daFpf}`).toBe(dataHoraAGuardar(antes, daFpf) !== antes)
     }
+  })
+})
+
+describe('quando faz sentido avisar sobre um jogo', () => {
+  const AGORA = '2026-09-09T14:57'
+
+  it('não avisa sobre um jogo que já começou', () => {
+    expect(vaiAcontecer('2026-09-09T12:00', AGORA)).toBe(false)
+    expect(vaiAcontecer('2026-09-08T20:00', AGORA)).toBe(false)
+  })
+
+  it('avisa sobre o que ainda está para acontecer', () => {
+    expect(vaiAcontecer('2026-09-09T17:00', AGORA)).toBe(true)
+    expect(vaiAcontecer('2026-09-13T15:00', AGORA)).toBe(true)
+  })
+
+  it('um aviso sem data vale sempre', () => {
+    // É o caso do recinto sem coordenadas: não está preso a nenhum jogo.
+    expect(vaiAcontecer(null, AGORA)).toBe(true)
+  })
+
+  it('o instante atual sai no mesmo formato das datas dos jogos', () => {
+    expect(agoraLocal(new Date(2026, 8, 9, 9, 5))).toBe('2026-09-09T09:05')
   })
 })
