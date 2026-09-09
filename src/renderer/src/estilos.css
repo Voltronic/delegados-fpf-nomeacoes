@@ -214,11 +214,7 @@ h4 {
   background: var(--superficie);
 }
 
-.janela-mapa .painel-cabecalho {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+
 
 .painel {
   display: flex;
@@ -236,6 +232,25 @@ h4 {
   padding: 10px 12px;
   border-bottom: 1px solid var(--borda);
   background: var(--superficie-2);
+  flex: 0 0 auto;
+}
+
+/*
+ * Cabeçalho com um botão à direita: o texto de um lado, a ação do outro. Sem
+ * isto o botão caía para baixo do subtítulo, encostado à esquerda.
+ */
+.painel-cabecalho.com-accao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.painel-cabecalho.com-accao > .titulo {
+  min-width: 0;
+}
+
+.painel-cabecalho.com-accao > .botao {
+  margin-left: auto;
   flex: 0 0 auto;
 }
 

@@ -535,6 +535,37 @@ app.whenReady().then(async () => {
     )
     await new Promise((r) => setTimeout(r, 500))
 
+    // O botão do mapa fica encostado à direita do cabeçalho, na mesma linha do
+    // título — antes caía para baixo do subtítulo, à esquerda.
+    const posicaoBotao = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const cab = document.querySelector('.painel-cabecalho.com-accao');
+         const botao = cab && cab.querySelector('.botao');
+         const titulo = cab && cab.querySelector('.titulo');
+         if (!cab || !botao || !titulo) return JSON.stringify({ erro: 'sem cabeçalho com ação' });
+         const c = cab.getBoundingClientRect();
+         const b = botao.getBoundingClientRect();
+         const t = titulo.getBoundingClientRect();
+         return JSON.stringify({
+           folgaDireita: Math.round(c.right - b.right),
+           aDireitaDoTitulo: b.left >= t.right,
+           naMesmaLinha: b.top < t.bottom && b.bottom > t.top
+         });
+       })()`
+    )) as string
+    const botaoMapa = JSON.parse(posicaoBotao) as {
+      folgaDireita?: number
+      aDireitaDoTitulo?: boolean
+      naMesmaLinha?: boolean
+    }
+    verificar(
+      'o botão do mapa fica encostado à direita, ao lado do título',
+      botaoMapa.aDireitaDoTitulo === true &&
+        botaoMapa.naMesmaLinha === true &&
+        (botaoMapa.folgaDireita ?? 99) <= 16,
+      `→ ${posicaoBotao}`
+    )
+
     log('\n2c. Mapa em janela à parte')
     await irPara('Nomeações')
     const janelasAntes = BrowserWindow.getAllWindows().length

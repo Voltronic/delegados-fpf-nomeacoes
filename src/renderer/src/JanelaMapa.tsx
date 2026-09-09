@@ -32,12 +32,13 @@ export default function JanelaMapa(): JSX.Element {
 
   return (
     <div className="janela-mapa">
-      <div className="painel-cabecalho">
-        <h2>Mapa</h2>
-        <div className="silencioso" style={{ marginTop: 3 }}>
-          {estado?.legenda ?? 'à espera do ecrã principal…'}
+      <div className="painel-cabecalho com-accao">
+        <div className="titulo">
+          <h2>Mapa</h2>
+          <div className="silencioso" style={{ marginTop: 3 }}>
+            {estado?.legenda ?? 'à espera do ecrã principal…'}
+          </div>
         </div>
-        <div className="espacador" style={{ marginLeft: 'auto' }} />
         <button className="botao pequeno" onClick={() => window.api.mapa.juntar()}>
           Voltar ao ecrã principal
         </button>

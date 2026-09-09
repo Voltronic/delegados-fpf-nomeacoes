@@ -619,12 +619,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
           {/* -------------------------------------------------- mapa */}
           <div className={classes('painel', mapaDestacado && 'escondido')}>
-            <div className="painel-cabecalho">
-              <h2>Mapa</h2>
-              <div className="silencioso" style={{ marginTop: 3 }}>
-                {jogo?.recintoNome ?? 'sem recinto'} · {pontos.length} delegados localizados
+            <div className="painel-cabecalho com-accao">
+              <div className="titulo">
+                <h2>Mapa</h2>
+                <div className="silencioso" style={{ marginTop: 3 }}>
+                  {jogo?.recintoNome ?? 'sem recinto'} · {pontos.length} delegados localizados
+                </div>
               </div>
-              <div className="espacador" style={{ marginLeft: 'auto' }} />
               <button
                 className="botao pequeno"
                 title="Abrir o mapa numa janela à parte e dar o espaço todo à lista"
