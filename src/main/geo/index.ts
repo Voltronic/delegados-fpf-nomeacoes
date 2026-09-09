@@ -164,6 +164,62 @@ export async function distanciaRodoviaria(
   }
 }
 
+/**
+ * Traçado da viagem, para desenhar no mapa.
+ *
+ * `estimado` diz que não se conseguiu a estrada real e o que vai é a linha
+ * reta entre os dois pontos — acontece sem rede, e sempre que há mar pelo meio.
+ * Mostrar uma linha reta como se fosse o caminho seria mentir sobre a viagem.
+ */
+export interface Trajeto {
+  pontos: [number, number][]
+  estimado: boolean
+}
+
+/** Só se pede o traçado quando é para o mostrar, e guarda-se para não repetir. */
+const trajetos = new Map<string, Trajeto>()
+
+export async function obterTrajeto(origem: Coordenadas, destino: Coordenadas): Promise<Trajeto> {
+  const chave = `${origem.lat},${origem.lng}:${destino.lat},${destino.lng}`
+  const guardado = trajetos.get(chave)
+  if (guardado) return guardado
+
+  const reta: Trajeto = {
+    pontos: [
+      [origem.lat, origem.lng],
+      [destino.lat, destino.lng]
+    ],
+    estimado: true
+  }
+
+  // Entre ilhas e continente não há estrada; nem vale a pena perguntar.
+  if (exigeAviao(origem, destino)) {
+    trajetos.set(chave, reta)
+    return reta
+  }
+
+  const base = lerConfig('geo.osrmUrl') ?? 'https://router.project-osrm.org'
+  const coords = `${origem.lng},${origem.lat};${destino.lng},${destino.lat}`
+  try {
+    const resposta = await pedirJson<{
+      code: string
+      routes?: { geometry?: { coordinates?: [number, number][] } }[]
+    }>(`${base}/route/v1/driving/${coords}?overview=simplified&geometries=geojson&alternatives=false`)
+    const linha = resposta.routes?.[0]?.geometry?.coordinates
+    if (resposta.code !== 'Ok' || !linha?.length) {
+      trajetos.set(chave, reta)
+      return reta
+    }
+    // O GeoJSON vem em (longitude, latitude); o mapa quer o contrário.
+    const trajeto: Trajeto = { pontos: linha.map(([lng, lat]) => [lat, lng]), estimado: false }
+    trajetos.set(chave, trajeto)
+    return trajeto
+  } catch {
+    trajetos.set(chave, reta)
+    return reta
+  }
+}
+
 interface LinhaCache {
   km: number
   minutos: number | null

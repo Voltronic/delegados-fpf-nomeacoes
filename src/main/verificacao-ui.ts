@@ -256,6 +256,27 @@ app.whenReady().then(async () => {
     )) as number
     verificar('os jogos com delegado ficam com cor própria', comCor > 0, `→ ${comCor} com cor`)
 
+    // Quem já vai ao jogo tem de se distinguir no mapa, e a viagem tem de estar
+    // desenhada. Sem rede o traçado é a linha reta — continua a ser uma linha.
+    await new Promise((r) => setTimeout(r, 1500))
+    const noMapa = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         nomeados: document.querySelectorAll('.leaflet-container .pino.nomeado').length,
+         linhas: document.querySelectorAll('.leaflet-overlay-pane path').length
+       })`
+    )) as string
+    const mapaEstado = JSON.parse(noMapa) as { nomeados: number; linhas: number }
+    verificar(
+      'o delegado nomeado fica com pino vermelho no mapa',
+      mapaEstado.nomeados > 0,
+      `→ ${mapaEstado.nomeados} pinos de nomeado`
+    )
+    verificar(
+      'e a viagem dele aparece desenhada',
+      mapaEstado.linhas > 0,
+      `→ ${mapaEstado.linhas} traçados`
+    )
+
     // Esconder um jogo é uma ação destrutiva à vista do coordenador (o jogo
     // sai da lista), por isso confirma-se que sai mesmo e que volta. Esconde-se
     // o último da lista: os primeiros podem já ter passado da hora, e um jogo

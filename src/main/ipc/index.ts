@@ -47,7 +47,7 @@ import {
   ultimaAccao
 } from '../engine/desfazer'
 import { chaveNatural } from '../fpf/parsers'
-import { geocodificar, invalidarCache } from '../geo'
+import { geocodificar, invalidarCache, obterTrajeto } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { extrairCoordenadas } from '../geo/googlemaps'
 import { atualizarJogos, estadoAtualizacao } from '../sync/agendador'
@@ -142,6 +142,19 @@ export function registarIpc(contexto: {
     esquecerUltimaAccao()
     const apagadas = emTransacao(() => repos.apagarTodasNomeacoes())
     return { apagadas, copia }
+  })
+
+  /** Traçado da viagem de um delegado até ao recinto, para desenhar no mapa. */
+  registar('geo:trajeto', async (delegadoId: number, recintoId: number) => {
+    const delegado = repos.obterDelegado(delegadoId)
+    const recinto = repos.obterRecinto(recintoId)
+    if (delegado?.lat == null || delegado.lng == null || recinto?.lat == null || recinto.lng == null) {
+      return null
+    }
+    return obterTrajeto(
+      { lat: delegado.lat, lng: delegado.lng },
+      { lat: recinto.lat, lng: recinto.lng }
+    )
   })
 
   // -- Delegados ------------------------------------------------------------

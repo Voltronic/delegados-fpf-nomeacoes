@@ -118,6 +118,14 @@ export interface Api {
   geo: {
     /** Procura um local por texto livre ou por link do Google Maps colado. */
     procurar(termo: string): Promise<{ lat: number; lng: number; moradaResolvida: string; categoria: string }[]>
+    /**
+     * Traçado da viagem de um delegado até um recinto, para desenhar no mapa.
+     * `estimado` significa linha reta: sem estrada possível ou sem rede.
+     */
+    trajeto(
+      delegadoId: number,
+      recintoId: number
+    ): Promise<{ pontos: [number, number][]; estimado: boolean } | null>
   }
 
   delegados: {

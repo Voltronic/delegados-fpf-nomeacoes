@@ -10,7 +10,7 @@ import type {
 import CartaoCandidato from '../components/CartaoCandidato'
 import EditarJogo from '../components/EditarJogo'
 import FaixaUrgentes from '../components/FaixaUrgentes'
-import Mapa, { type PontoMapa } from '../components/Mapa'
+import Mapa, { type PontoMapa, type TrajetoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
 import { diasAte, paraDataLocal } from '@shared/datas'
 import { avisar, mensagemDeErro } from '../lib/avisos'
@@ -61,6 +61,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [aEditar, setAEditar] = useState<JogoDetalhado | null>(null)
   const [ambito, setAmbito] = useState<'SEMANA' | 'DIA'>('SEMANA')
   const [excluidos, setExcluidos] = useState<Set<number>>(new Set())
+  const [trajetos, setTrajetos] = useState<TrajetoMapa[]>([])
 
   /**
    * Jogos que estão a chegar e ainda não têm ninguém: é a lista que não pode
@@ -233,17 +234,31 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const kmMaximo = Math.max(1, ...candidatos.map((c) => c.kmEpoca))
   const escondidosPeloNivel = candidatos.length - visiveis.length
 
+  const jaVaoAEsteJogo = new Set(jogo?.nomeacoes.map((n) => n.delegadoId) ?? [])
+
   const pontos: PontoMapa[] = visiveis
     .filter((c): c is Candidato & { lat: number; lng: number } => c.lat != null && c.lng != null)
     .map((c) => {
       const posicao = candidatos.filter((o) => o.elegivel).indexOf(c) + 1
+      const nomeado = jaVaoAEsteJogo.has(c.delegadoId)
       return {
         id: c.delegadoId,
         lat: c.lat,
         lng: c.lng,
-        etiqueta: c.elegivel ? String(posicao) : '×',
-        titulo: `${posicao > 0 ? `${posicao}. ` : ''}${c.nome} — ${formatarKm(c.kmViagem)} ida e volta`,
-        classe: !c.elegivel ? 'bloqueado' : posicao <= 3 ? 'top' : posicao <= 10 ? 'medio' : 'baixo'
+        etiqueta: nomeado ? '✓' : c.elegivel ? String(posicao) : '×',
+        titulo: nomeado
+          ? `${c.nome} — nomeado · ${formatarKm(c.kmViagem)} ida e volta`
+          : `${posicao > 0 ? `${posicao}. ` : ''}${c.nome} — ${formatarKm(c.kmViagem)} ida e volta`,
+        // Quem já vai a este jogo destaca-se de quem é só candidato.
+        classe: nomeado
+          ? 'nomeado'
+          : !c.elegivel
+            ? 'bloqueado'
+            : posicao <= 3
+              ? 'top'
+              : posicao <= 10
+                ? 'medio'
+                : 'baixo'
       }
     })
 
@@ -264,6 +279,28 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   }
 
   const nomeados = jogos.filter((j) => j.nomeacoes.length > 0).length
+
+  /**
+   * Desenha a viagem de quem já está nomeado. Só se pede o traçado depois de
+   * haver nomeação: é uma chamada ao serviço de rotas por delegado, e não vale
+   * a pena fazê-la para candidatos que podem nem ser escolhidos.
+   */
+  useEffect(() => {
+    const recintoId = jogo?.recintoId
+    const ids = jogo?.nomeacoes.map((n) => n.delegadoId) ?? []
+    if (recintoId == null || ids.length === 0) {
+      setTrajetos([])
+      return
+    }
+    let cancelado = false
+    void Promise.all(ids.map((id) => window.api.geo.trajeto(id, recintoId))).then((lista) => {
+      // O jogo pode ter mudado enquanto as rotas vinham a caminho.
+      if (!cancelado) setTrajetos(lista.filter((t): t is TrajetoMapa => t !== null))
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [jogo?.id, jogo?.recintoId, jogo?.nomeacoes.map((n) => n.delegadoId).join(',')])
 
   /** Levar a semana até ao jogo escolhido na faixa, e selecioná-lo. */
   function irParaJogo(jogoId: number): void {
@@ -594,6 +631,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                     : null
                 }
                 pontos={pontos}
+                trajetos={trajetos}
                 realcado={realcado}
                 aoSelecionar={(id) => setRealcado(id)}
                 aoRealcar={setRealcado}

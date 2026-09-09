@@ -968,6 +968,14 @@ details.grupo-bloqueados > summary {
   font-weight: 700;
 }
 
+/* Quem já está nomeado para este jogo: vermelho, como o traçado da viagem. */
+.pino.nomeado {
+  background: var(--perigo);
+  border-color: #7d1b15;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.25);
+}
+
 .pino.recinto {
   background: var(--perigo);
   width: 28px;

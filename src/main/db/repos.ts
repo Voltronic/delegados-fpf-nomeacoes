@@ -18,6 +18,7 @@ import type {
   VetoClube
 } from '@shared/tipos'
 import { obterBaseDados, registarAuditoria } from './index'
+import { dataHoraAGuardar } from '../../shared/datas'
 import { normalizarNome } from '../fpf/html'
 import { jogosQueColidem } from '../sync/conflitos'
 
@@ -708,14 +709,17 @@ export function guardarJogo(dados: EntradaJogo): number {
     // tocasse, a correção desaparecia na hora seguinte sem ninguém dar por isso.
     if (existente.editadoManualmente) return existente.id
 
-    const alteracao = descreverAlteracao(existente, dados)
+    // Um jogo já jogado deixa de mostrar a hora no site da FPF, e a leitura
+    // devolve `T00:00`. Guardar isso apagava a hora real.
+    const comHora = { ...dados, dataHora: dataHoraAGuardar(existente.dataHora, dados.dataHora) }
+    const alteracao = descreverAlteracao(existente, comHora)
     db.prepare(
       `UPDATE jogo SET fase=@fase, serie=@serie, jornada=@jornada, fpf_fixture_id=@fpfFixtureId,
         fpf_match_id=@fpfMatchId, data_hora=@dataHora, recinto_id=@recintoId,
         recinto_texto_fpf=@recintoTextoFpf, estado=@estado, alterado_em=@alteradoEm,
         ultima_alteracao=COALESCE(@alteracao, ultima_alteracao)
        WHERE id=@id`
-    ).run({ ...dados, id: existente.id, alteradoEm: agora(), alteracao })
+    ).run({ ...comHora, id: existente.id, alteradoEm: agora(), alteracao })
     return existente.id
   }
   const info = db

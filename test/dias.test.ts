@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diasAte, paraDataLocal } from '../src/shared/datas'
+import { dataHoraAGuardar, diasAte, horaDesconhecida, paraDataLocal } from '../src/shared/datas'
 
 /**
  * O caso que falhou em uso real: às 14:57 de 9 de setembro, um jogo desse mesmo
@@ -63,5 +63,34 @@ describe('leitura de datas guardadas', () => {
   it('devolve nulo para o que não é data', () => {
     expect(paraDataLocal('')).toBeNull()
     expect(paraDataLocal('qualquer coisa')).toBeNull()
+  })
+})
+
+describe('a hora que a FPF deixa de mostrar', () => {
+  it('reconhece a meia-noite como "hora ainda não conhecida"', () => {
+    expect(horaDesconhecida('2026-09-09T00:00')).toBe(true)
+    expect(horaDesconhecida('2026-09-09T12:00')).toBe(false)
+    expect(horaDesconhecida(null)).toBe(false)
+  })
+
+  it('não apaga a hora certa quando o jogo é jogado', () => {
+    // O caso real: o Santa Clara × Farense das 12:00 passou a 00:00 sozinho,
+    // porque a página passa a mostrar o resultado em vez da hora.
+    expect(dataHoraAGuardar('2026-09-09T12:00', '2026-09-09T00:00')).toBe('2026-09-09T12:00')
+  })
+
+  it('aceita a hora nova quando ela existe', () => {
+    expect(dataHoraAGuardar('2026-09-09T12:00', '2026-09-09T17:00')).toBe('2026-09-09T17:00')
+  })
+
+  it('aceita a data nova quando o jogo muda mesmo de dia', () => {
+    // Mudou de dia e ainda não tem hora: é uma alteração a sério, não um jogo
+    // jogado, e a hora antiga já não quer dizer nada.
+    expect(dataHoraAGuardar('2026-09-09T12:00', '2026-09-20T00:00')).toBe('2026-09-20T00:00')
+  })
+
+  it('não inventa datas onde não há', () => {
+    expect(dataHoraAGuardar(null, '2026-09-09T00:00')).toBe('2026-09-09T00:00')
+    expect(dataHoraAGuardar('2026-09-09T12:00', null)).toBeNull()
   })
 })

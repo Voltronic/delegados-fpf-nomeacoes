@@ -22,7 +22,8 @@ const api = {
     abrirPastaCopias: invocar('app:abrirPastaCopias')
   },
   geo: {
-    procurar: invocar('geo:procurar')
+    procurar: invocar('geo:procurar'),
+    trajeto: invocar('geo:trajeto')
   },
   delegados: {
     listar: invocar('delegados:listar'),

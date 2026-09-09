@@ -411,6 +411,13 @@ async function principal(): Promise<void> {
       'nunca repete delegado no mesmo jogo',
       proposta.every((p) => !p.principal || !p.campo || p.principal.delegadoId !== p.campo.delegadoId)
     )
+    // Na prática só o principal vai a quase todos os jogos; o delegado de campo
+    // é a exceção e é o coordenador que decide, jogo a jogo.
+    verificar(
+      'a proposta automática sugere só o delegado principal',
+      proposta.every((p) => p.principal && !p.campo),
+      `→ ${proposta.filter((p) => p.campo).length} com delegado de campo`
+    )
     verificar('explica cada sugestão', proposta.every((p) => p.motivo.length > 0))
     verificar(
       'explica também os jogos que ficaram sem sugestão',

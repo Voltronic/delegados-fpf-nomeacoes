@@ -217,10 +217,10 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPr
 
   const { atribuicoes, semSugestao } = gerarProposta({
     jogos: entradas,
-    usaDelegadoCampo: (jogoId) => {
-      const jogo = jogos.find((j) => j.id === jogoId)
-      return competicoes.find((c) => c.id === jogo?.competicaoId)?.usaDelegadoCampo ?? false
-    }
+    // A proposta automática sugere só o delegado principal. Na prática é esse o
+    // que vai a quase todos os jogos; o delegado de campo é a exceção e quem
+    // decide é o coordenador, jogo a jogo, no ecrã de nomeação.
+    usaDelegadoCampo: () => false
   })
 
   const nomes = new Map(listarDelegados(true).map((d) => [d.id, `${d.numero} — ${d.nome}`]))

@@ -7,14 +7,23 @@ export interface PontoMapa {
   lng: number
   etiqueta: string
   titulo: string
-  /** Determina a cor do pino. */
-  classe: 'top' | 'medio' | 'baixo' | 'bloqueado'
+  /** Determina a cor do pino. `nomeado` é quem já vai a este jogo. */
+  classe: 'top' | 'medio' | 'baixo' | 'bloqueado' | 'nomeado'
+}
+
+/** Caminho de um delegado nomeado até ao recinto. */
+export interface TrajetoMapa {
+  pontos: [number, number][]
+  /** Linha reta em vez de estrada: sem rede, ou com mar pelo meio. */
+  estimado: boolean
 }
 
 export interface PropsMapa {
   tilesUrl: string
   recinto: { lat: number; lng: number; titulo: string } | null
   pontos: PontoMapa[]
+  /** Viagens a desenhar — as dos delegados já nomeados para este jogo. */
+  trajetos?: TrajetoMapa[]
   realcado: number | null
   aoSelecionar?: (id: number) => void
   aoRealcar?: (id: number | null) => void
@@ -29,6 +38,7 @@ export default function Mapa({
   tilesUrl,
   recinto,
   pontos,
+  trajetos = [],
   realcado,
   aoSelecionar,
   aoRealcar
@@ -51,9 +61,10 @@ export default function Mapa({
     () =>
       JSON.stringify({
         recinto: recinto ? [recinto.lat, recinto.lng, recinto.titulo] : null,
-        pontos: pontos.map((p) => [p.id, p.lat, p.lng, p.etiqueta, p.classe, p.titulo])
+        pontos: pontos.map((p) => [p.id, p.lat, p.lng, p.etiqueta, p.classe, p.titulo]),
+        trajetos: trajetos.map((t) => [t.estimado, t.pontos.length, t.pontos[0], t.pontos.at(-1)])
       }),
-    [recinto, pontos]
+    [recinto, pontos, trajetos]
   )
 
   useEffect(() => {
@@ -109,6 +120,20 @@ export default function Mapa({
     marcadores.current.clear()
 
     const coordenadas: L.LatLngExpression[] = []
+
+    for (const trajeto of trajetos) {
+      if (trajeto.pontos.length < 2) continue
+      // A linha reta vai a tracejado: é uma estimativa, não o caminho real.
+      L.polyline(trajeto.pontos, {
+        color: '#b3261e',
+        weight: trajeto.estimado ? 2 : 3,
+        opacity: 0.75,
+        dashArray: trajeto.estimado ? '6 6' : undefined
+      })
+        .bindTooltip(trajeto.estimado ? 'Traçado aproximado (linha reta)' : 'Viagem por estrada')
+        .addTo(grupo)
+      for (const ponto of trajeto.pontos) coordenadas.push(ponto)
+    }
 
     if (recinto) {
       const icone = L.divIcon({

@@ -42,3 +42,28 @@ export function diasAte(dataHora: string | null, agora = new Date()): number | n
   // 23 ou 25 horas, e sem isto a contagem escorregava um dia nessas semanas.
   return Math.round((dia.getTime() - hoje.getTime()) / 86_400_000)
 }
+
+/**
+ * A hora que a FPF não diz é escrita como `T00:00`. Nenhum jogo destas
+ * competições começa à meia-noite, por isso essa hora significa sempre "ainda
+ * não se sabe" — e nunca deve apagar uma hora que já se conhecia.
+ */
+export function horaDesconhecida(dataHora: string | null): boolean {
+  return !!dataHora && dataHora.endsWith('T00:00')
+}
+
+/**
+ * Que data guardar quando chega uma atualização.
+ *
+ * Quando um jogo é jogado, a página da FPF passa a mostrar o resultado em vez
+ * da hora, e a leitura devolve `T00:00`. Aceitar isso apagava a hora real do
+ * jogo — foi o que aconteceu a um Santa Clara × Farense, que passou de 12:00
+ * para 00:00 sozinho. No mesmo dia, mantém-se a hora que já se conhecia; se o
+ * jogo mudou mesmo de dia, aceita-se a data nova como está.
+ */
+export function dataHoraAGuardar(anterior: string | null, nova: string | null): string | null {
+  if (!nova || !anterior) return nova
+  const mesmoDia = anterior.slice(0, 10) === nova.slice(0, 10)
+  if (horaDesconhecida(nova) && mesmoDia && !horaDesconhecida(anterior)) return anterior
+  return nova
+}
