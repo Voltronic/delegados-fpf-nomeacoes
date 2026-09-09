@@ -378,7 +378,7 @@ export function registarIpc(contexto: {
   // -- Dashboard ------------------------------------------------------------
   registar('dashboard:km', (seasonId?: number) => repos.tabelaKm(seasonId))
   registar('dashboard:porCompeticao', (seasonId?: number) => repos.matrizPorCompeticao(seasonId))
-  registar('dashboard:porClube', (seasonId?: number) => repos.matrizPorClube(seasonId))
+  registar('dashboard:repeticoesClube', (seasonId?: number) => repos.repeticoesPorDelegado(seasonId))
 
   // -- Importação FPF -------------------------------------------------------
   registar('fpf:catalogo', async (seasonId?: number): Promise<CatalogoFpf> => obterCatalogo(cliente(), seasonId))

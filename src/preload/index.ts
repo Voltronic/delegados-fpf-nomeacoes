@@ -87,7 +87,7 @@ const api = {
   dashboard: {
     km: invocar('dashboard:km'),
     porCompeticao: invocar('dashboard:porCompeticao'),
-    porClube: invocar('dashboard:porClube')
+    repeticoesClube: invocar('dashboard:repeticoesClube')
   },
   fpf: {
     catalogo: invocar('fpf:catalogo'),

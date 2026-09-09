@@ -379,6 +379,29 @@ export interface LinhaKmDelegado {
   minutos: number
 }
 
+/**
+ * Repetições de um par clube/competição por delegado.
+ *
+ * Fazer o mesmo clube em competições diferentes não é repetir — são jogos
+ * distintos, com equipas e escalões diferentes —, por isso a contagem é feita
+ * pelo par e não só pelo clube.
+ */
+export interface RepeticaoClube {
+  clubeId: number
+  clubeNome: string
+  competicaoId: number
+  competicaoNome: string
+  /** Sempre >= 2: uma única visita não é repetição. */
+  vezes: number
+}
+
+export interface LinhaRepeticoes {
+  delegadoId: number
+  numero: string
+  nome: string
+  repeticoes: RepeticaoClube[]
+}
+
 export interface MatrizDashboard {
   colunas: { chave: string; etiqueta: string }[]
   linhas: { delegadoId: number; numero: string; nome: string }[]

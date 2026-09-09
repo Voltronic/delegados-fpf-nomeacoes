@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Competicao, LinhaKmDelegado, MatrizDashboard } from '@shared/tipos'
+import type { Competicao, LinhaKmDelegado, LinhaRepeticoes, MatrizDashboard } from '@shared/tipos'
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 
@@ -8,7 +8,7 @@ export default function Dashboard(): JSX.Element {
   const [seasonId, setSeasonId] = useState<number | ''>('')
   const [km, setKm] = useState<LinhaKmDelegado[]>([])
   const [porCompeticao, setPorCompeticao] = useState<MatrizDashboard | null>(null)
-  const [porClube, setPorClube] = useState<MatrizDashboard | null>(null)
+  const [repeticoes, setRepeticoes] = useState<LinhaRepeticoes[]>([])
 
   useEffect(() => {
     void window.api.competicoes.listar().then((cs: Competicao[]) => {
@@ -30,7 +30,7 @@ export default function Dashboard(): JSX.Element {
     const epoca = seasonId === '' ? undefined : seasonId
     void window.api.dashboard.km(epoca).then(setKm)
     void window.api.dashboard.porCompeticao(epoca).then(setPorCompeticao)
-    void window.api.dashboard.porClube(epoca).then(setPorClube)
+    void window.api.dashboard.repeticoesClube(epoca).then(setRepeticoes)
   }, [seasonId])
 
   const colunasKm: Valores<LinhaKmDelegado, 'numero' | 'nome' | 'nivel' | 'jogos' | 'km' | 'desvio' | 'minutos'> =
@@ -187,7 +187,7 @@ export default function Dashboard(): JSX.Element {
         </div>
 
         <Matriz titulo="Jogos por competição" matriz={porCompeticao} />
-        <Matriz titulo="Clubes já feitos por delegado" matriz={porClube} />
+        <Repeticoes linhas={repeticoes} />
       </div>
     </>
   )
@@ -295,6 +295,117 @@ function Matriz({ titulo, matriz }: { titulo: string; matriz: MatrizDashboard | 
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Clubes repetidos por delegado, por número de repetições.
+ *
+ * Uma coluna por clube ficava ilegível a meio da época — são mais de cem clubes
+ * nas competições nacionais, e quase todas as células estariam vazias. Aqui as
+ * colunas são o número de vezes (2×, 3×, …) e cada célula diz *quais* os clubes
+ * repetidos, que é a pergunta que o coordenador faz de facto.
+ *
+ * O mesmo clube em competições diferentes não é repetição: são equipas e
+ * escalões diferentes.
+ */
+function Repeticoes({ linhas }: { linhas: LinhaRepeticoes[] }): JSX.Element {
+  const maximo = Math.max(2, ...linhas.flatMap((l) => l.repeticoes.map((r) => r.vezes)))
+  const colunas = Array.from({ length: maximo - 1 }, (_, i) => i + 2)
+
+  const valores = useMemo(() => {
+    const mapa: Record<string, (l: LinhaRepeticoes) => string | number> = {
+      delegado: (l) => Number(l.numero) || l.numero,
+      total: (l) => l.repeticoes.length
+    }
+    for (const vezes of colunas) {
+      mapa[String(vezes)] = (l) => l.repeticoes.filter((r) => r.vezes === vezes).length
+    }
+    return mapa
+  }, [colunas.join(',')])
+
+  const { ordenadas, ordem, alternar } = useOrdenacao(linhas, valores, {
+    coluna: 'delegado',
+    sentido: 'asc'
+  })
+
+  const comRepeticoes = linhas.filter((l) => l.repeticoes.length > 0).length
+
+  return (
+    <div className="cartao">
+      <h2>Clubes repetidos por delegado</h2>
+      <div className="silencioso" style={{ marginBottom: 10 }}>
+        Cada coluna é o número de vezes que o delegado já fez o mesmo clube <b>na mesma competição</b>.
+        O mesmo clube em competições diferentes não conta como repetição.{' '}
+        {comRepeticoes === 0
+          ? 'Ainda ninguém repetiu nenhum clube.'
+          : `${comRepeticoes} ${comRepeticoes === 1 ? 'delegado repetiu' : 'delegados repetiram'} pelo menos um clube.`}
+      </div>
+
+      {linhas.length === 0 ? (
+        <div className="vazio">Sem dados ainda.</div>
+      ) : (
+        <div className="envolve-tabela" style={{ border: 'none', maxHeight: 'none', overflowY: 'visible' }}>
+          <table className="tabela">
+            <thead>
+              <tr>
+                <ColunaOrdenavel
+                  coluna="delegado"
+                  ordem={ordem}
+                  alternar={alternar}
+                  style={{ position: 'sticky', left: 0, zIndex: 2, width: 200 }}
+                >
+                  Delegado
+                </ColunaOrdenavel>
+                {colunas.map((vezes) => (
+                  <ColunaOrdenavel key={vezes} coluna={String(vezes)} ordem={ordem} alternar={alternar}>
+                    {vezes}×
+                  </ColunaOrdenavel>
+                ))}
+                <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
+                  Total
+                </ColunaOrdenavel>
+              </tr>
+            </thead>
+            <tbody>
+              {ordenadas.map((l) => (
+                <tr key={l.delegadoId}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <span className="mono silencioso">{l.numero}</span> {l.nome}
+                  </td>
+                  {colunas.map((vezes) => {
+                    const doGrupo = l.repeticoes.filter((r) => r.vezes === vezes)
+                    return (
+                      <td key={vezes} className={doGrupo.length === 0 ? 'matriz-celula-0' : undefined}>
+                        {doGrupo.length === 0 ? (
+                          '·'
+                        ) : (
+                          <div className="chips">
+                            {doGrupo.map((r) => (
+                              <span
+                                key={`${r.clubeId}-${r.competicaoId}`}
+                                className="chip-delegado"
+                                title={`${r.clubeNome} — ${r.competicaoNome} (${r.vezes} vezes)`}
+                              >
+                                {r.clubeNome}
+                                <span className="silencioso"> · {r.competicaoNome}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    )
+                  })}
+                  <td className="num">
+                    <b>{l.repeticoes.length}</b>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

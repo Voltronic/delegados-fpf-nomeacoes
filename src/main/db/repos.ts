@@ -9,9 +9,11 @@ import type {
   JogoDetalhado,
   LinhaKmDelegado,
   MatrizDashboard,
+  LinhaRepeticoes,
   Nomeacao,
   NomeacaoDetalhada,
   Recinto,
+  RepeticaoClube,
   VetoClube
 } from '@shared/tipos'
 import { obterBaseDados, registarAuditoria } from './index'
@@ -939,23 +941,61 @@ export function matrizPorCompeticao(seasonId?: number): MatrizDashboard {
   }
 }
 
-export function matrizPorClube(seasonId?: number): MatrizDashboard {
-  const delegados = listarDelegados(false)
-  const stats = estatisticasPorDelegado(seasonId)
-  const clubesUsados = new Set<number>()
-  for (const e of stats.values()) for (const id of Object.keys(e.clubes)) clubesUsados.add(Number(id))
-  const clubes = listarClubes().filter((c) => clubesUsados.has(c.id))
-  return {
-    colunas: clubes.map((c) => ({ chave: String(c.id), etiqueta: c.nome })),
-    linhas: delegados.map((d) => ({ delegadoId: d.id, numero: d.numero, nome: d.nome })),
-    celulas: delegados.flatMap((d) =>
-      clubes.map((c) => ({
-        delegadoId: d.id,
-        chaveColuna: String(c.id),
-        valor: stats.get(d.id)?.clubes[c.id] ?? 0
-      }))
+/**
+ * Clubes repetidos por delegado, contados pelo par clube/competição.
+ *
+ * Uma tabela com uma coluna por clube tornava-se ilegível a meio da época (são
+ * mais de cem clubes nas competições nacionais) e mostrava sobretudo células
+ * vazias. O que interessa ao coordenador é o contrário: quem repetiu, o quê, e
+ * quantas vezes. Repetir o mesmo clube em competições diferentes não conta —
+ * são equipas e escalões diferentes.
+ */
+export function repeticoesPorDelegado(seasonId?: number): LinhaRepeticoes[] {
+  const filtroEpoca = seasonId != null ? 'AND comp.season_id = @seasonId' : ''
+  const linhas = obterBaseDados()
+    .prepare(
+      `SELECT n.delegado_id, j.competicao_id, comp.nome AS competicao_nome,
+              c.id AS clube_id, c.nome AS clube_nome, COUNT(*) AS vezes
+         FROM nomeacao n
+         JOIN jogo j ON j.id = n.jogo_id
+         JOIN competicao comp ON comp.id = j.competicao_id
+         -- Cada jogo conta para os dois clubes: o delegado esteve com ambos.
+         JOIN clube c ON c.id IN (j.clube_casa_id, j.clube_fora_id)
+        WHERE n.estado = 'CONFIRMADA' ${filtroEpoca}
+        GROUP BY n.delegado_id, j.competicao_id, c.id
+       HAVING COUNT(*) > 1
+        ORDER BY vezes DESC, c.nome`
     )
+    .all(seasonId != null ? { seasonId } : {}) as {
+    delegado_id: number
+    competicao_id: number
+    competicao_nome: string
+    clube_id: number
+    clube_nome: string
+    vezes: number
+  }[]
+
+  const porDelegado = new Map<number, RepeticaoClube[]>()
+  for (const l of linhas) {
+    const lista = porDelegado.get(l.delegado_id) ?? []
+    lista.push({
+      clubeId: l.clube_id,
+      clubeNome: l.clube_nome,
+      competicaoId: l.competicao_id,
+      competicaoNome: l.competicao_nome,
+      vezes: l.vezes
+    })
+    porDelegado.set(l.delegado_id, lista)
   }
+
+  // Todos os delegados ativos aparecem, mesmo sem repetições: a ausência é
+  // informação — é quem ainda está a rodar bem.
+  return listarDelegados(false).map((d) => ({
+    delegadoId: d.id,
+    numero: d.numero,
+    nome: d.nome,
+    repeticoes: porDelegado.get(d.id) ?? []
+  }))
 }
 
 // ---------------------------------------------------------------------------

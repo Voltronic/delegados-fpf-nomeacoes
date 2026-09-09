@@ -10,6 +10,7 @@ import type {
   Indisponibilidade,
   JogoDetalhado,
   LinhaKmDelegado,
+  LinhaRepeticoes,
   MatrizDashboard,
   OrganizacaoFpf,
   PapelNomeacao,
@@ -209,7 +210,8 @@ export interface Api {
   dashboard: {
     km(seasonId?: number): Promise<LinhaKmDelegado[]>
     porCompeticao(seasonId?: number): Promise<MatrizDashboard>
-    porClube(seasonId?: number): Promise<MatrizDashboard>
+    /** Pares clube/competição que cada delegado repetiu (2 ou mais vezes). */
+    repeticoesClube(seasonId?: number): Promise<LinhaRepeticoes[]>
   }
 
   fpf: {

@@ -531,6 +531,77 @@ async function principal(): Promise<void> {
       doHistorico.some((j) => j.id === ontem) && !doHistorico.some((j) => j.id === hojeCedo)
     )
 
+    // Repetições de clube: contam-se por par clube/competição. O mesmo clube
+    // noutra competição não é repetição — são equipas e escalões diferentes.
+    const segundaCompeticao = repos.guardarCompeticao({
+      fpfCompetitionId: 29442,
+      seasonId: 106,
+      seasonDescricao: '2026-2027',
+      nome: 'LIGA 3 DE TESTE',
+      organizacao: 'Competições FPF',
+      ativa: false,
+      nivelMinimo: null,
+      usaDelegadoCampo: true
+    })
+    const delegadoRepetidor = delegados[0]
+    // Um clube só deste cenário: o delegado já tem nomeações de outros clubes
+    // das secções anteriores, e com um clube partilhado os números do teste
+    // dependiam do que veio antes.
+    const clubeDoTeste = repos.encontrarOuCriarClube('Clube Só Para Repetições')
+    const criarJogoPara = (chave: string, competicaoId: number, dia: string): number =>
+      repos.guardarJogo({
+        chaveNatural: chave,
+        competicaoId,
+        fase: null,
+        serie: null,
+        jornada: null,
+        fpfFixtureId: null,
+        fpfMatchId: null,
+        dataHora: `${dia}T15:00`,
+        clubeCasaId: clubeDoTeste.id,
+        clubeForaId: clubes[2].id,
+        recintoId: repos.recintoDoClube(clubes[0].id, competicaoId),
+        recintoTextoFpf: null,
+        estado: 'AGENDADO'
+      })
+
+    // Duas visitas ao mesmo clube na mesma competição: é repetição.
+    for (const [i, dia] of ['2026-10-04', '2026-10-11'].entries()) {
+      const id = criarJogoPara(`teste:rep${i}`, competicao.id, dia)
+      await nomear({ jogoId: id, delegadoId: delegadoRepetidor.id, papel: 'PRINCIPAL' })
+    }
+    // E uma terceira ao mesmo clube, mas noutra competição: não conta.
+    const noutraCompeticao = criarJogoPara('teste:rep-outra', segundaCompeticao.id, '2026-10-18')
+    await nomear({ jogoId: noutraCompeticao, delegadoId: delegadoRepetidor.id, papel: 'PRINCIPAL' })
+
+    const repeticoes = repos.repeticoesPorDelegado()
+    const doRepetidor = repeticoes.find((l) => l.delegadoId === delegadoRepetidor.id)!
+    const nesteClube = doRepetidor.repeticoes.filter((r) => r.clubeId === clubeDoTeste.id)
+    verificar(
+      'conta as repetições por clube e competição',
+      nesteClube.length === 1 && nesteClube[0].vezes === 2,
+      `→ ${nesteClube.map((r) => `${r.clubeNome} ${r.vezes}× (${r.competicaoNome})`).join(', ') || 'nenhuma'}`
+    )
+    verificar(
+      'o mesmo clube noutra competição não conta como repetição',
+      // Três jogos deste clube ao todo, mas só dois na mesma competição: se a
+      // contagem fosse por clube, dariam 3× numa linha só.
+      !doRepetidor.repeticoes.some((r) => r.competicaoId === segundaCompeticao.id) &&
+        nesteClube.every((r) => r.vezes === 2),
+      `→ ${doRepetidor.repeticoes
+        .map((r) => `${r.clubeNome} ${r.vezes}× (${r.competicaoNome})`)
+        .join(', ')}`
+    )
+    verificar(
+      'quem só foi uma vez a cada clube não aparece com repetições',
+      repeticoes.every((l) => l.repeticoes.every((r) => r.vezes >= 2))
+    )
+    verificar(
+      'todos os delegados ativos aparecem na tabela, com ou sem repetições',
+      repeticoes.length === repos.listarDelegados(false).length,
+      `→ ${repeticoes.length} linhas`
+    )
+
     // Recinto sem coordenadas: tem de dar alerta, e o alerta tem de fechar-se
     // sozinho quando alguém puser a localização.
     const orfao = repos.encontrarOuCriarRecinto('Campo Sem Coordenadas Nenhumas')
