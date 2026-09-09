@@ -624,6 +624,35 @@ app.whenReady().then(async () => {
       (await janela.webContents.executeJavaScript("document.querySelector('.sync-estado') === null")) as boolean
     )
 
+    log('\n6b. Janela estreita')
+    // Na largura mínima que a janela permite, nada pode ficar cortado. Era o
+    // que acontecia no cabeçalho das nomeações: os filtros passavam para lá da
+    // margem e os botões ficavam meio escondidos.
+    await irPara('Nomeações')
+    janela.setSize(1100, 800)
+    await new Promise((r) => setTimeout(r, 900))
+    const medidas = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const alvos = ['.cabecalho-ecra', '.faixa-urgentes .resumo'];
+         const cortados = alvos
+           .map((sel) => ({ sel, el: document.querySelector(sel) }))
+           .filter(({ el }) => el && el.scrollWidth > el.clientWidth + 1)
+           .map(({ sel, el }) => sel + ' (' + el.scrollWidth + ' > ' + el.clientWidth + ')');
+         return JSON.stringify({
+           cortados,
+           paginaComScrollLateral: document.body.scrollWidth > document.body.clientWidth + 1
+         });
+       })()`
+    )) as string
+    const estreita = JSON.parse(medidas) as { cortados: string[]; paginaComScrollLateral: boolean }
+    verificar(
+      'numa janela estreita nada fica cortado no cabeçalho',
+      estreita.cortados.length === 0 && !estreita.paginaComScrollLateral,
+      `→ ${medidas}`
+    )
+    janela.setSize(1600, 980)
+    await new Promise((r) => setTimeout(r, 600))
+
     log('\n7. Erros de consola')
     const pilhas = (await janela.webContents.executeJavaScript('window.__pilhas ?? []')) as string[]
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')

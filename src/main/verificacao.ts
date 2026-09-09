@@ -20,6 +20,7 @@ import {
   versaoDoEsquema
 } from './db'
 import * as repos from './db/repos'
+import { MIGRACOES } from './db/schema'
 import { semearRecintos } from './db/semente'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
@@ -198,6 +199,49 @@ async function principal(): Promise<void> {
         (semente.prepare('SELECT COUNT(*) AS n FROM recinto').get() as { n: number }).n === totalSemeado
     )
     semente.close()
+
+    // A reparação das horas apagadas pelos jogos já realizados. Testa-se o SQL
+    // da migração tal como ele corre nas bases de dados existentes, sobre uma
+    // tabela com os casos que interessam.
+    const reparacao = new Database(join(pasta, 'data', 'reparacao.db'))
+    reparacao.exec('CREATE TABLE jogo (id INTEGER PRIMARY KEY, data_hora TEXT, ultima_alteracao TEXT)')
+    const casos = [
+      // O caso real: hora apagada no mesmo dia. Tem de voltar às 12:00.
+      [1, '2026-09-09T00:00', 'data 2026-09-09 às 12:00 → 2026-09-09 às 00:00'],
+      // Adiado mesmo para outro dia, ainda sem hora: não se inventa nada.
+      [2, '2026-09-20T00:00', 'data 2026-09-09 às 12:00 → 2026-09-20 às 00:00'],
+      // Jogo que nunca teve hora: nada a repor.
+      [3, '2026-09-13T00:00', 'data 2026-09-13 às 00:00 → 2026-09-13 às 00:00'],
+      // Alteração normal, com hora dos dois lados: não se toca.
+      [4, '2026-09-13T17:00', 'data 2026-09-13 às 15:00 → 2026-09-13 às 17:00'],
+      // Recinto alterado: texto diferente, fora do alcance da reparação.
+      [5, '2026-09-14T00:00', 'recinto Campo A → Campo B']
+    ]
+    const inserirCaso = reparacao.prepare('INSERT INTO jogo (id, data_hora, ultima_alteracao) VALUES (?, ?, ?)')
+    for (const [id, data, alteracao] of casos) inserirCaso.run(id, data, alteracao)
+
+    reparacao.exec(MIGRACOES.find((m) => m.versao === 10)!.sql)
+    const depois = new Map(
+      (reparacao.prepare('SELECT id, data_hora, ultima_alteracao FROM jogo').all() as {
+        id: number
+        data_hora: string
+        ultima_alteracao: string | null
+      }[]).map((l) => [l.id, l])
+    )
+    reparacao.close()
+
+    verificar(
+      'a reparação devolve a hora que a FPF apagou',
+      depois.get(1)?.data_hora === '2026-09-09T12:00' && depois.get(1)?.ultima_alteracao === null,
+      `→ ${depois.get(1)?.data_hora}, alteração ${depois.get(1)?.ultima_alteracao ?? 'limpa'}`
+    )
+    verificar(
+      'não mexe num jogo que mudou mesmo de dia',
+      depois.get(2)?.data_hora === '2026-09-20T00:00' && depois.get(2)?.ultima_alteracao !== null
+    )
+    verificar('não inventa hora onde nunca houve', depois.get(3)?.data_hora === '2026-09-13T00:00')
+    verificar('não toca numa alteração de hora normal', depois.get(4)?.data_hora === '2026-09-13T17:00')
+    verificar('não toca numa alteração de recinto', depois.get(5)?.data_hora === '2026-09-14T00:00')
 
     log('\n2. Delegados, clubes e recintos')
     const delegados = [

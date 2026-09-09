@@ -295,5 +295,29 @@ export const MIGRACOES: Migracao[] = [
       -- jogo. Sem isto, o cartão só podia dizer *que* mudou, não *o quê*.
       ALTER TABLE jogo ADD COLUMN ultima_alteracao TEXT;
     `
+  },
+  {
+    versao: 10,
+    descricao: 'Repor as horas apagadas pelos jogos já realizados',
+    sql: `
+      -- Quando um jogo era jogado, a página da FPF passava a mostrar o
+      -- resultado em vez da hora, a leitura devolvia "T00:00" e a
+      -- sincronização gravava isso por cima da hora certa.
+      --
+      -- A hora perdida está no texto da alteração que ficou registada
+      -- ("data 2026-09-09 às 12:00 → 2026-09-09 às 00:00"), e é de lá que se
+      -- recupera. Só se mexe nas linhas que têm exatamente esta assinatura: o
+      -- mesmo dia dos dois lados, hora válida à esquerda e meia-noite à
+      -- direita. Um jogo mesmo adiado para outro dia não entra aqui.
+      UPDATE jogo
+         SET data_hora = substr(ultima_alteracao, 6, 10) || 'T' || substr(ultima_alteracao, 20, 5),
+             ultima_alteracao = NULL
+       WHERE data_hora LIKE '%T00:00'
+         AND ultima_alteracao LIKE 'data %'
+         AND ultima_alteracao LIKE '%00:00'
+         AND substr(ultima_alteracao, 6, 10) = substr(data_hora, 1, 10)
+         AND substr(ultima_alteracao, 20, 5) GLOB '[0-9][0-9]:[0-9][0-9]'
+         AND substr(ultima_alteracao, 20, 5) <> '00:00';
+    `
   }
 ]

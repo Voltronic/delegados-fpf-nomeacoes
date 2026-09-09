@@ -341,7 +341,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           </div>
         </div>
 
-        <div style={{ width: 220 }}>
+        <div style={{ flex: '1 1 160px', maxWidth: 220, minWidth: 120 }}>
           <select value={competicaoId} onChange={(e) => setCompeticaoId(e.target.value ? Number(e.target.value) : '')}>
             <option value="">Todas as competições</option>
             {competicoes.map((c) => (
@@ -360,7 +360,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           ))}
         </div>
 
-        <div style={{ width: 180 }}>
+        <div style={{ flex: '1 1 140px', maxWidth: 180, minWidth: 110 }}>
           <input
             type="search"
             placeholder="Clube ou recinto…"

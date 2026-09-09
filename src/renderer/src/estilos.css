@@ -138,13 +138,33 @@ h4 {
   overflow: hidden;
 }
 
+/*
+ * Numa janela estreita os filtros deixam de caber. Em vez de os cortar — que é
+ * o que acontecia, com botões meio escondidos —, passam para a linha de baixo.
+ */
 .cabecalho-ecra {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 10px 14px;
   padding: 12px 18px;
   background: var(--superficie);
   border-bottom: 1px solid var(--borda);
+  flex: 0 0 auto;
+}
+
+/*
+ * Com `flex-wrap`, o espaçador deixaria sempre o que vem a seguir sozinho na
+ * linha; só empurra para a direita quando ainda há espaço na mesma linha.
+ */
+.cabecalho-ecra .espacador {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Grupos de botões e campos não encolhem até ficarem ilegíveis. */
+.cabecalho-ecra .grupo-botoes,
+.cabecalho-ecra .botao {
   flex: 0 0 auto;
 }
 
@@ -155,10 +175,6 @@ h4 {
 .cabecalho-ecra .subtitulo {
   color: var(--texto-suave);
   font-size: 12px;
-}
-
-.cabecalho-ecra .espacador {
-  margin-left: auto;
 }
 
 .corpo-ecra {
