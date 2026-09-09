@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Competicao, JogoDetalhado } from '@shared/tipos'
 import { classes, formatarDataHora, formatarKm } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
+import CorrigirNomeacao from '../components/CorrigirNomeacao'
 
 /**
  * O que já foi feito: jogos realizados que tiveram delegado nomeado.
@@ -16,6 +17,7 @@ export default function Historico(): JSX.Element {
   const [competicaoId, setCompeticaoId] = useState<number | ''>('')
   const [texto, setTexto] = useState('')
   const [aCarregar, setACarregar] = useState(true)
+  const [aCorrigir, setACorrigir] = useState<JogoDetalhado | null>(null)
 
   const carregar = useCallback(async () => {
     setACarregar(true)
@@ -148,6 +150,7 @@ export default function Historico(): JSX.Element {
                   <ColunaOrdenavel coluna="km" ordem={ordem} alternar={alternar} className="num">
                     Km
                   </ColunaOrdenavel>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -177,6 +180,15 @@ export default function Historico(): JSX.Element {
                     <td className="num">
                       {formatarKm(j.nomeacoes.reduce((s, n) => s + (n.km ?? 0), 0))}
                     </td>
+                    <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        className="botao pequeno"
+                        title="Corrigir quem foi a este jogo"
+                        onClick={() => setACorrigir(j)}
+                      >
+                        Corrigir
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -184,6 +196,20 @@ export default function Historico(): JSX.Element {
           )}
         </div>
       </div>
+
+      {aCorrigir && (
+        <CorrigirNomeacao
+          jogo={aCorrigir}
+          aoFechar={() => setACorrigir(null)}
+          aoGuardar={async () => {
+            await carregar()
+            // A lista foi recarregada: o diálogo tem de passar a mostrar o
+            // estado novo, senão continuava a exibir o delegado antigo.
+            const atualizado = await window.api.jogos.obter(aCorrigir.id)
+            if (atualizado) setACorrigir(atualizado)
+          }}
+        />
+      )}
     </>
   )
 }

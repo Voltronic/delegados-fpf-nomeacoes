@@ -105,8 +105,31 @@ function semear(): void {
   // Um recinto por localizar, para o ecrã de recintos ter o caso real a mostrar.
   repos.encontrarOuCriarRecinto('Campo Sem Coordenadas')
 
+  // Um jogo já realizado, com delegado: sem ele o ecrã de histórico ficava
+  // vazio consoante a hora a que a verificação corresse, e o teste da correção
+  // de nomeações não tinha o que testar.
+  const passado = new Date(hoje)
+  passado.setDate(hoje.getDate() - 3)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  const jogoPassado = repos.guardarJogo({
+    chaveNatural: 'ui:passado',
+    competicaoId: competicao.id,
+    fase: '1ª FASE',
+    serie: 'SÉRIE 1',
+    jornada: '0',
+    fpfFixtureId: 652300,
+    fpfMatchId: null,
+    dataHora: `${passado.getFullYear()}-${p(passado.getMonth() + 1)}-${p(passado.getDate())}T15:00`,
+    clubeCasaId: clubes[1].id,
+    clubeForaId: clubes[2].id,
+    recintoId: recintos[1].id,
+    recintoTextoFpf: null,
+    estado: 'REALIZADO'
+  })
+
   const jogos = repos.listarJogos()
   void nomear({ jogoId: jogos[0].id, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
+  void nomear({ jogoId: jogoPassado, delegadoId: delegados[1].id, papel: 'PRINCIPAL' })
 }
 
 app.whenReady().then(async () => {
@@ -663,6 +686,37 @@ app.whenReady().then(async () => {
       scrollInterno === 0,
       `→ ${scrollInterno} com scroll interno`
     )
+
+    log('\n3c. Corrigir uma nomeação no histórico')
+    await irPara('Histórico')
+    const temHistorico = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.tabela tbody tr').length"
+    )) as number
+    if (temHistorico > 0) {
+      await janela.webContents.executeJavaScript(
+        "[...document.querySelectorAll('.tabela button')].find((b) => b.textContent.trim() === 'Corrigir')?.click()"
+      )
+      await new Promise((r) => setTimeout(r, 800))
+      const dialogo = (await janela.webContents.executeJavaScript(
+        `JSON.stringify({
+           titulo: document.querySelector('.modal header h2')?.textContent ?? '',
+           selects: document.querySelectorAll('.modal select').length,
+           opcoes: document.querySelector('.modal select')?.options.length ?? 0
+         })`
+      )) as string
+      const conteudo = JSON.parse(dialogo) as { titulo: string; selects: number; opcoes: number }
+      verificar(
+        'o histórico deixa corrigir quem foi ao jogo',
+        conteudo.titulo.includes('Corrigir') && conteudo.selects === 2 && conteudo.opcoes > 1,
+        `→ ${dialogo}`
+      )
+      await janela.webContents.executeJavaScript(
+        "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Concluído')?.click()"
+      )
+      await new Promise((r) => setTimeout(r, 400))
+    } else {
+      verificar('o histórico deixa corrigir quem foi ao jogo', false, '→ sem jogos no histórico para testar')
+    }
 
     log('\n4. Recintos por confirmar')
     await janela.webContents.executeJavaScript(

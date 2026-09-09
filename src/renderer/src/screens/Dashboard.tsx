@@ -33,7 +33,10 @@ export default function Dashboard(): JSX.Element {
     void window.api.dashboard.repeticoesClube(epoca).then(setRepeticoes)
   }, [seasonId])
 
-  const colunasKm: Valores<LinhaKmDelegado, 'numero' | 'nome' | 'nivel' | 'jogos' | 'km' | 'desvio' | 'minutos'> =
+  const colunasKm: Valores<
+    LinhaKmDelegado,
+    'numero' | 'nome' | 'nivel' | 'jogos' | 'voos' | 'km' | 'desvio' | 'minutos'
+  > =
     useMemo(
       () => ({
         // O número é texto na base de dados mas lê-se como número: sem isto, o
@@ -42,6 +45,7 @@ export default function Dashboard(): JSX.Element {
         nome: (l) => l.nome,
         nivel: (l) => l.nivel,
         jogos: (l) => l.jogos,
+        voos: (l) => l.voos,
         km: (l) => l.km,
         desvio: (l) => l.desvio,
         minutos: (l) => l.minutos
@@ -56,13 +60,14 @@ export default function Dashboard(): JSX.Element {
   const kmMaximo = Math.max(1, ...km.map((l) => l.km))
   const totalKm = km.reduce((a, l) => a + l.km, 0)
   const totalJogos = km.reduce((a, l) => a + l.jogos, 0)
+  const totalVoos = km.reduce((a, l) => a + l.voos, 0)
   const amplitude = km.length ? Math.max(...km.map((l) => l.km)) - Math.min(...km.map((l) => l.km)) : 0
 
   function exportarCsv(): void {
     const linhas = [
-      ['Numero', 'Nome', 'Nivel', 'Jogos', 'Km', 'Desvio', 'Horas'].join(';'),
+      ['Numero', 'Nome', 'Nivel', 'Jogos', 'Voos', 'Km', 'Desvio', 'Horas'].join(';'),
       ...km.map((l) =>
-        [l.numero, l.nome, l.nivel, l.jogos, l.km, l.desvio, (l.minutos / 60).toFixed(1)].join(';')
+        [l.numero, l.nome, l.nivel, l.jogos, l.voos, l.km, l.desvio, (l.minutos / 60).toFixed(1)].join(';')
       )
     ].join('\n')
     const url = URL.createObjectURL(new Blob([`﻿${linhas}`], { type: 'text/csv;charset=utf-8' }))
@@ -90,6 +95,12 @@ export default function Dashboard(): JSX.Element {
         <div className="subtitulo">
           {totalJogos} nomeações · {formatarKm(totalKm)} no total · amplitude entre delegados{' '}
           <b>{formatarKm(amplitude)}</b>
+          {totalVoos > 0 && (
+            <>
+              {' '}
+              · <b>{totalVoos}</b> {totalVoos === 1 ? 'deslocação de avião' : 'deslocações de avião'}
+            </>
+          )}
         </div>
         <div className="espacador" />
         <button className="botao" onClick={exportarCsv} disabled={km.length === 0}>
@@ -123,6 +134,15 @@ export default function Dashboard(): JSX.Element {
                     style={{ width: 80 }}
                   >
                     Jogos
+                  </ColunaOrdenavel>
+                  <ColunaOrdenavel
+                    coluna="voos"
+                    ordem={ordemKm}
+                    alternar={alternarKm}
+                    className="num"
+                    style={{ width: 80 }}
+                  >
+                    Voos
                   </ColunaOrdenavel>
                   <ColunaOrdenavel
                     coluna="km"
@@ -165,6 +185,9 @@ export default function Dashboard(): JSX.Element {
                       </span>
                     </td>
                     <td className="num">{l.jogos}</td>
+                    <td className={classes('num', l.voos > 0 && 'com-voos')}>
+                      {l.voos === 0 ? '·' : l.voos}
+                    </td>
                     <td className="num">{formatarKm(l.km)}</td>
                     <td className="num" style={{ color: l.desvio > 0 ? 'var(--aviso)' : 'var(--sucesso)' }}>
                       {l.desvio > 0 ? '+' : '−'}

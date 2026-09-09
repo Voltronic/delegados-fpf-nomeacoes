@@ -636,6 +636,12 @@ table.tabela th.num {
   font-weight: 600;
 }
 
+/* Um voo salta à vista: é a deslocação que custa caro. */
+table.tabela td.com-voos {
+  color: var(--perigo);
+  font-weight: 600;
+}
+
 /* ------------------------------------------------------ tabelas ordenáveis */
 
 table.tabela th.ordenavel {

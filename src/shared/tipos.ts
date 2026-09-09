@@ -386,6 +386,8 @@ export interface LinhaKmDelegado {
   nome: string
   nivel: NivelDelegado
   jogos: number
+  /** Deslocações que obrigaram a avião — o que custa caro à FPF. */
+  voos: number
   km: number
   desvio: number
   minutos: number

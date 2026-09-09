@@ -583,6 +583,85 @@ async function principal(): Promise<void> {
       `→ ${doHistorico.length} no histórico`
     )
 
+    // Contagem de deslocações de avião por delegado. É o número que diz onde
+    // está o custo verdadeiro: um voo pesa muito mais do que os km mostram.
+    const recintoIlha = repos.encontrarOuCriarRecinto('Estádio de São Miguel')
+    repos.atualizarRecinto(recintoIlha.id, {
+      nome: recintoIlha.nome,
+      morada: null,
+      lat: 37.747,
+      lng: -25.651,
+      coordsManuais: true
+    })
+    const jogoNaIlha = repos.guardarJogo({
+      chaveNatural: 'teste:ilha',
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: null,
+      fpfMatchId: null,
+      dataHora: '2026-11-15T15:00',
+      clubeCasaId: clubes[0].id,
+      clubeForaId: clubes[1].id,
+      recintoId: recintoIlha.id,
+      recintoTextoFpf: null,
+      estado: 'AGENDADO'
+    })
+    // O delegado é do continente: para ir a São Miguel tem de voar.
+    const doContinente = delegados[0]
+    await nomear({ jogoId: jogoNaIlha, delegadoId: doContinente.id, papel: 'PRINCIPAL' })
+
+    const comVoos = repos.tabelaKm().find((l) => l.delegadoId === doContinente.id)!
+    verificar(
+      'conta as deslocações de avião de cada delegado',
+      comVoos.voos >= 1,
+      `→ ${comVoos.voos} voos, ${comVoos.jogos} jogos`
+    )
+    const semVoos = repos.tabelaKm().find((l) => l.delegadoId !== doContinente.id && l.jogos > 0)
+    verificar(
+      'quem só viaja por estrada fica a zero voos',
+      !semVoos || semVoos.voos === 0,
+      `→ ${semVoos?.voos ?? 0} voos em ${semVoos?.nome ?? 'ninguém'}`
+    )
+    verificar(
+      'o voo conta como jogo mas não infla os km com a distância aérea',
+      comVoos.km < 1000,
+      `→ ${comVoos.km} km`
+    )
+
+    // Corrigir quem foi a um jogo já realizado. Sem isto, um engano ficava a
+    // contar km ao delegado errado até ao fim da época.
+    const noHistorico = repos.historicoJogos()[0]
+    const antesDaTroca = noHistorico.nomeacoes.find((n) => n.papel === 'PRINCIPAL')!
+    const outroDelegado = delegados.find((d) => d.id !== antesDaTroca.delegadoId)!
+    await nomear({
+      jogoId: noHistorico.id,
+      delegadoId: outroDelegado.id,
+      papel: 'PRINCIPAL'
+    })
+    const jogoCorrigido = repos.obterJogoDetalhado(noHistorico.id)!
+    const agoraPrincipal = jogoCorrigido.nomeacoes.find((n) => n.papel === 'PRINCIPAL')!
+    verificar(
+      'dá para trocar o delegado de um jogo já realizado',
+      agoraPrincipal.delegadoId === outroDelegado.id &&
+        jogoCorrigido.nomeacoes.filter((n) => n.papel === 'PRINCIPAL').length === 1,
+      `→ ${antesDaTroca.delegadoNome} para ${agoraPrincipal.delegadoNome}`
+    )
+    verificar(
+      'e os km passam a ser os de quem passou a constar',
+      agoraPrincipal.km !== antesDaTroca.km,
+      `→ ${antesDaTroca.km} km para ${agoraPrincipal.km} km`
+    )
+    const estatisticas = repos.estatisticasPorDelegado()
+    verificar(
+      'os km da época seguem a correção',
+      (estatisticas.get(outroDelegado.id)?.km ?? 0) > 0,
+      `→ ${estatisticas.get(outroDelegado.id)?.km ?? 0} km em ${outroDelegado.nome}`
+    )
+    // Repor o estado anterior, para as verificações seguintes.
+    await nomear({ jogoId: noHistorico.id, delegadoId: antesDaTroca.delegadoId, papel: 'PRINCIPAL' })
+
     // Editar um jogo à mão: as nomeações ficam, a FPF deixa de lhe tocar, e o
     // que mudou fica registado para aparecer no cartão.
     const paraEditar = repos.listarJogos().find((j) => j.nomeacoes.length > 0)!

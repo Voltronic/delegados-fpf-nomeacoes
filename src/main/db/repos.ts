@@ -899,6 +899,8 @@ export interface EstatisticasDelegado {
   km: number
   minutos: number
   jogos: number
+  /** Deslocações que obrigaram a avião — custam à FPF muito mais do que os km. */
+  voos: number
   clubes: Record<number, number>
   competicoes: Record<number, number>
   ultimaNomeacaoEm: string | null
@@ -910,7 +912,7 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
   const filtroEpoca = seasonId != null ? 'AND comp.season_id = @seasonId' : ''
   const linhas = obterBaseDados()
     .prepare(
-      `SELECT n.delegado_id, n.km, n.minutos, j.id AS jogo_id, j.data_hora,
+      `SELECT n.delegado_id, n.km, n.minutos, n.fonte_distancia, j.id AS jogo_id, j.data_hora,
               j.clube_casa_id, j.clube_fora_id, j.competicao_id
        FROM nomeacao n
        JOIN jogo j ON j.id = n.jogo_id
@@ -921,6 +923,7 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
     delegado_id: number
     km: number | null
     minutos: number | null
+    fonte_distancia: string | null
     jogo_id: number
     data_hora: string | null
     clube_casa_id: number
@@ -937,6 +940,7 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
         km: 0,
         minutos: 0,
         jogos: 0,
+        voos: 0,
         clubes: {},
         competicoes: {},
         ultimaNomeacaoEm: null,
@@ -947,6 +951,7 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
     e.km += l.km ?? 0
     e.minutos += l.minutos ?? 0
     e.jogos += 1
+    if (l.fonte_distancia === 'AVIAO') e.voos += 1
     e.clubes[l.clube_casa_id] = (e.clubes[l.clube_casa_id] ?? 0) + 1
     e.clubes[l.clube_fora_id] = (e.clubes[l.clube_fora_id] ?? 0) + 1
     e.competicoes[l.competicao_id] = (e.competicoes[l.competicao_id] ?? 0) + 1
@@ -973,6 +978,7 @@ export function tabelaKm(seasonId?: number): LinhaKmDelegado[] {
         nome: d.nome,
         nivel: d.nivel,
         jogos: e?.jogos ?? 0,
+        voos: e?.voos ?? 0,
         km: Math.round(km * 10) / 10,
         desvio: Math.round((km - media) * 10) / 10,
         minutos: Math.round(e?.minutos ?? 0)
