@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { InfoAplicacao } from '@shared/api'
 import type { Alerta, ProgressoSincronizacao } from '@shared/tipos'
 import Avisos from './components/Avisos'
+import { Emblema } from './components/Marca'
 import Alertas from './screens/Alertas'
 import ClubesRecintos from './screens/ClubesRecintos'
 import Dashboard from './screens/Dashboard'
@@ -79,8 +80,11 @@ export default function App(): JSX.Element {
     <div className="aplicacao">
       <nav className="barra-lateral">
         <div className="marca">
-          Nomeações de Delegados
-          <small>Competições nacionais FPF</small>
+          <Emblema />
+          <div>
+            Nomeações de Delegados
+            <small>Competições nacionais FPF</small>
+          </div>
         </div>
         {MENU.map((m) => (
           <button key={m.chave} className={classes(ecra === m.chave && 'ativo')} onClick={() => setEcra(m.chave)}>

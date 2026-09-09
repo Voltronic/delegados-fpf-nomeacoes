@@ -9,6 +9,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "skipLibCheck": true,
+    "types": ["vite/client"],
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": { "@shared/*": ["src/shared/*"], "@/*": ["src/renderer/src/*"] },

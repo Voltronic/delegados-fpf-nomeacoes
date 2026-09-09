@@ -474,6 +474,58 @@ table.tabela th.num {
   background: rgba(255, 255, 255, 0.18);
 }
 
+/* ------------------------------------------------------------------ marca */
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  background: #111418;
+  color: #fff;
+  overflow: hidden;
+}
+
+.splash img {
+  max-width: 100%;
+  max-height: 250px;
+  object-fit: contain;
+}
+
+.splash .marca-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 20px;
+}
+
+.splash .marca-texto span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.splash .a-abrir {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+/* O emblema ao lado do nome, na barra lateral. */
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.emblema-fpf {
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
 /* -------------------------------------------------- faixa de jogos urgentes */
 
 /*
