@@ -523,6 +523,7 @@ table.tabela th.num {
 
 .emblema-fpf {
   flex: 0 0 auto;
+  width: auto;
   object-fit: contain;
 }
 

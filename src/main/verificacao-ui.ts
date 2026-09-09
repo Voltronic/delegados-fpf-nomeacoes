@@ -740,6 +740,38 @@ app.whenReady().then(async () => {
     janela.setSize(1600, 980)
     await new Promise((r) => setTimeout(r, 600))
 
+    log('\n6c. Marca da FPF')
+    // As imagens são opcionais no código, mas se estiverem no repositório têm
+    // de aparecer mesmo — e sem ficarem achatadas.
+    const emblema = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const img = document.querySelector('.marca .emblema-fpf');
+         if (!img) return JSON.stringify({ presente: false });
+         return JSON.stringify({
+           presente: true,
+           carregou: img.complete && img.naturalWidth > 0,
+           racioOriginal: Number((img.naturalWidth / img.naturalHeight).toFixed(2)),
+           racioDesenhado: Number((img.clientWidth / img.clientHeight).toFixed(2))
+         });
+       })()`
+    )) as string
+    const marca = JSON.parse(emblema) as {
+      presente: boolean
+      carregou?: boolean
+      racioOriginal?: number
+      racioDesenhado?: number
+    }
+    verificar(
+      'o emblema da FPF aparece na barra lateral',
+      marca.presente && marca.carregou === true,
+      `→ ${emblema}`
+    )
+    verificar(
+      'e não fica achatado',
+      !marca.presente || Math.abs((marca.racioDesenhado ?? 0) - (marca.racioOriginal ?? 1)) < 0.05,
+      `→ ${marca.racioDesenhado} vs ${marca.racioOriginal}`
+    )
+
     log('\n7. Erros de consola')
     const pilhas = (await janela.webContents.executeJavaScript('window.__pilhas ?? []')) as string[]
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
