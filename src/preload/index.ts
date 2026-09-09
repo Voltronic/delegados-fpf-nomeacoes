@@ -76,6 +76,8 @@ const api = {
     historico: invocar('jogos:historico')
   },
   nomeacoes: {
+    contar: invocar('nomeacoes:contar'),
+    apagarTodas: invocar('nomeacoes:apagarTodas'),
     candidatos: invocar('nomeacoes:candidatos'),
     nomear: invocar('nomeacoes:nomear'),
     remover: invocar('nomeacoes:remover'),

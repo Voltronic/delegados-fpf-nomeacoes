@@ -188,6 +188,13 @@ export interface Api {
 
   nomeacoes: {
     candidatos(jogoId: number, papel: PapelNomeacao): Promise<Candidato[]>
+    /** Quantas nomeações existem — para avisar antes de as apagar. */
+    contar(): Promise<number>
+    /**
+     * Apaga **todas** as nomeações, depois de gravar uma cópia de segurança.
+     * Devolve quantas apagou e o caminho da cópia.
+     */
+    apagarTodas(): Promise<{ apagadas: number; copia: string | null }>
     nomear(dados: {
       jogoId: number
       delegadoId: number

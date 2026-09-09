@@ -646,6 +646,7 @@ async function principal(): Promise<void> {
     log('\n10. Alertas de alteração e conflito')
     const margem = 180
     const jogoBase = repos.listarJogos().find((j) => j.nomeacoes.length > 0)
+    verificar('há um jogo nomeado para testar colisões', !!jogoBase)
     if (jogoBase) {
       const delegadoNomeado = jogoBase.nomeacoes[0].delegadoId
 
@@ -758,6 +759,48 @@ async function principal(): Promise<void> {
       `→ ${corrigido?.lat}, ${corrigido?.lng} (${corrigido?.morada})`
     )
     verificar('fica marcado como confirmado', corrigido?.confirmado === true)
+
+    log('\n13. Limpar as nomeações (dados de teste)')
+    // Apagar as nomeações (limpeza dos dados de teste) só pode levar as
+    // nomeações — delegados, clubes, recintos e jogos ficam.
+    const antesDeApagar = {
+      nomeacoes: repos.contarNomeacoes(),
+      delegados: repos.listarDelegados(true).length,
+      jogos: repos.listarJogos().length,
+      clubes: repos.listarClubes().length,
+      recintos: repos.listarRecintos().length
+    }
+    // Sem isto, a verificação dos km a seguir seria vazia: `estatisticasPorDelegado`
+    // só devolve linhas para quem tem nomeações, por isso depois de apagar o
+    // mapa fica vazio e qualquer `every` passa sem testar nada.
+    const kmAntes = [...repos.estatisticasPorDelegado().values()].map((e) => e.km)
+    verificar('há nomeações para apagar antes do teste', antesDeApagar.nomeacoes > 0, `→ ${antesDeApagar.nomeacoes}`)
+    verificar(
+      'e há km acumulados que têm de desaparecer',
+      kmAntes.some((km) => km > 0),
+      `→ ${kmAntes.map((km) => Math.round(km)).join(', ') || 'nenhum'} km`
+    )
+    const apagadas = repos.apagarTodasNomeacoes()
+    verificar(
+      'apagar nomeações leva todas',
+      apagadas === antesDeApagar.nomeacoes && repos.contarNomeacoes() === 0,
+      `→ ${apagadas} apagadas`
+    )
+    verificar(
+      'apagar nomeações não mexe em delegados, jogos, clubes nem recintos',
+      repos.listarDelegados(true).length === antesDeApagar.delegados &&
+        repos.listarJogos().length === antesDeApagar.jogos &&
+        repos.listarClubes().length === antesDeApagar.clubes &&
+        repos.listarRecintos().length === antesDeApagar.recintos
+    )
+    const kmDepois = [...repos.estatisticasPorDelegado().values()].map((e) => e.km)
+    verificar(
+      'os km da época voltam a zero',
+      kmDepois.every((km) => km === 0),
+      `→ ${kmAntes.filter((km) => km > 0).length} delegados com km antes, ${kmDepois.filter((km) => km > 0).length} depois`
+    )
+    verificar('o histórico fica vazio depois de apagar', repos.historicoJogos().length === 0)
+
   } finally {
     // O SQLite ainda tem o ficheiro aberto; se o Windows o bloquear, a pasta
     // temporária fica para trás e não vale a pena falhar a verificação por isso.

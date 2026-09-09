@@ -20,6 +20,7 @@ import type {
 } from '@shared/tipos'
 import {
   copiaSeguranca,
+  emTransacao,
   escreverConfig,
   lerConfig,
   listarCopiasSeguranca,
@@ -105,6 +106,17 @@ export function registarIpc(contexto: {
     const pasta = contexto.pastaCopias ?? PASTA_COPIAS
     mkdirSync(pasta, { recursive: true })
     await shell.openPath(pasta)
+  })
+
+  registar('nomeacoes:contar', () => repos.contarNomeacoes())
+  /**
+   * Apaga todas as nomeações. Grava sempre uma cópia de segurança primeiro: é
+   * uma operação sem retorno, e a cópia é a única forma de voltar atrás.
+   */
+  registar('nomeacoes:apagarTodas', (): { apagadas: number; copia: string | null } => {
+    const copia = copiaSeguranca(obterBaseDados(), contexto.pastaCopias ?? PASTA_COPIAS)
+    const apagadas = emTransacao(() => repos.apagarTodasNomeacoes())
+    return { apagadas, copia }
   })
 
   // -- Delegados ------------------------------------------------------------

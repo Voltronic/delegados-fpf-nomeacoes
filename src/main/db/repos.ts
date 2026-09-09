@@ -800,6 +800,30 @@ export function guardarNomeacao(dados: EntradaNomeacao): number {
   return id
 }
 
+/** Quantas nomeações existem, para avisar antes de as apagar. */
+export function contarNomeacoes(): number {
+  const linha = obterBaseDados().prepare('SELECT COUNT(*) AS n FROM nomeacao').get() as { n: number }
+  return linha.n
+}
+
+/**
+ * Apaga **todas** as nomeações — o que se usa para limpar os dados de uma fase
+ * de testes e começar a época a sério.
+ *
+ * Só mexe na tabela de nomeações: delegados, clubes, recintos e jogos ficam
+ * como estão. Os km da época e as contagens de clubes por delegado são
+ * derivados das nomeações, por isso voltam todos a zero. Quem chama isto tem de
+ * gravar uma cópia de segurança primeiro (ver `ipc`), porque não há maneira de
+ * desfazer.
+ */
+export function apagarTodasNomeacoes(): number {
+  const db = obterBaseDados()
+  const antes = contarNomeacoes()
+  db.prepare('DELETE FROM nomeacao').run()
+  registarAuditoria('nomeacao', null, 'apagar-todas', { apagadas: antes })
+  return antes
+}
+
 export function removerNomeacao(jogoId: number, papel: Nomeacao['papel']): void {
   obterBaseDados()
     .prepare(`DELETE FROM nomeacao WHERE jogo_id = ? AND papel = ?`)

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { Competicao, ConfiguracaoMotor, NivelDelegado } from '@shared/tipos'
 import type { CopiaSegurancaApi, InfoAplicacao } from '@shared/api'
-import { guardarCom } from '../lib/avisos'
+import { avisar, guardarCom, mensagemDeErro } from '../lib/avisos'
 
 export default function Definicoes(): JSX.Element {
   const [config, setConfig] = useState<ConfiguracaoMotor | null>(null)
   const [competicoes, setCompeticoes] = useState<Competicao[]>([])
   const [info, setInfo] = useState<InfoAplicacao | null>(null)
   const [copias, setCopias] = useState<CopiaSegurancaApi[]>([])
+  const [nomeacoes, setNomeacoes] = useState(0)
+  const [aConfirmarApagar, setAConfirmarApagar] = useState(false)
+  const [aApagar, setAApagar] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [syncAutomatico, setSyncAutomatico] = useState(true)
 
@@ -16,8 +19,33 @@ export default function Definicoes(): JSX.Element {
     void window.api.competicoes.listar().then(setCompeticoes)
     void window.api.app.info().then(setInfo)
     void window.api.app.copias().then(setCopias)
+    void window.api.nomeacoes.contar().then(setNomeacoes)
     void window.api.config.ler('sync.automatico').then((v) => setSyncAutomatico(v !== 'false'))
   }, [])
+
+  /**
+   * Apaga todas as nomeações — o que se usa para limpar uma fase de testes.
+   * A cópia de segurança é gravada do lado do processo principal antes de
+   * apagar seja o que for, e o caminho aparece no aviso: é a única forma de
+   * voltar atrás.
+   */
+  async function apagarNomeacoes(): Promise<void> {
+    setAApagar(true)
+    try {
+      const { apagadas, copia } = await window.api.nomeacoes.apagarTodas()
+      setNomeacoes(await window.api.nomeacoes.contar())
+      setCopias(await window.api.app.copias())
+      setAConfirmarApagar(false)
+      avisar(
+        `${apagadas} ${apagadas === 1 ? 'nomeação apagada' : 'nomeações apagadas'}.` +
+          (copia ? ` Cópia de segurança em ${copia}` : '')
+      )
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+    } finally {
+      setAApagar(false)
+    }
+  }
 
   async function guardar(): Promise<void> {
     if (!config) return
@@ -308,6 +336,50 @@ export default function Definicoes(): JSX.Element {
               </button>
               <span className="silencioso">Versão {info?.versao}</span>
             </div>
+          </div>
+        </div>
+
+        <div className="cartao">
+          <h2>Limpar nomeações</h2>
+          <div className="pilha">
+            <div className="silencioso">
+              Apaga <b>todas</b> as nomeações — as {nomeacoes} que existem neste momento. Serve para
+              deitar fora os dados de uma fase de testes e começar a época limpa. Delegados, clubes,
+              recintos e jogos ficam como estão; o que desaparece são as nomeações e, com elas, os km da
+              época e as contagens de clubes por delegado, que são calculados a partir delas.
+            </div>
+            <div className="silencioso">
+              É gravada uma cópia de segurança antes de apagar. Não há forma de desfazer sem ser por
+              essa cópia.
+            </div>
+
+            {!aConfirmarApagar ? (
+              <div className="linha">
+                <button
+                  className="botao perigo"
+                  disabled={nomeacoes === 0}
+                  onClick={() => setAConfirmarApagar(true)}
+                >
+                  Apagar todas as nomeações
+                </button>
+                {nomeacoes === 0 && <span className="silencioso">Não há nomeações para apagar.</span>}
+              </div>
+            ) : (
+              <div className="aviso-caixa erro">
+                <div style={{ marginBottom: 8 }}>
+                  Vai apagar <b>{nomeacoes}</b>{' '}
+                  {nomeacoes === 1 ? 'nomeação' : 'nomeações'}. Esta ação não se desfaz.
+                </div>
+                <div className="linha">
+                  <button className="botao perigo" disabled={aApagar} onClick={apagarNomeacoes}>
+                    {aApagar ? 'A apagar…' : `Sim, apagar ${nomeacoes}`}
+                  </button>
+                  <button className="botao" disabled={aApagar} onClick={() => setAConfirmarApagar(false)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
