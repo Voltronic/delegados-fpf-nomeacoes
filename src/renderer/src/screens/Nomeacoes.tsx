@@ -8,6 +8,7 @@ import type {
   ResultadoPropostaAutomatica
 } from '@shared/tipos'
 import CartaoCandidato from '../components/CartaoCandidato'
+import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
 import { avisar, mensagemDeErro } from '../lib/avisos'
@@ -54,6 +55,26 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     void window.api.competicoes.listar().then(setCompeticoes)
   }, [versaoDados])
 
+  const [urgentes, setUrgentes] = useState<JogoDetalhado[]>([])
+
+  /**
+   * Jogos que estão a chegar e ainda não têm ninguém: é a lista que não pode
+   * passar despercebida. Vai à base de dados à parte da semana escolhida, senão
+   * desapareciam ao navegar para outra semana — que é precisamente quando é
+   * mais fácil esquecê-los.
+   */
+  const carregarUrgentes = useCallback(async () => {
+    const daqui = new Date(hoje)
+    daqui.setDate(daqui.getDate() + 7)
+    setUrgentes(
+      await window.api.jogos.listar({
+        de: paraDataIso(hoje),
+        ate: `${paraDataIso(daqui)}T23:59`,
+        estadoNomeacao: 'POR_NOMEAR'
+      })
+    )
+  }, [hoje])
+
   const carregarJogos = useCallback(async () => {
     // Um jogo que já se realizou não é trabalho por fazer: sai daqui e passa ao
     // Histórico no dia seguinte. Por isso a semana nunca começa antes de hoje.
@@ -71,7 +92,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   useEffect(() => {
     void carregarJogos()
-  }, [carregarJogos, versaoDados])
+    void carregarUrgentes()
+  }, [carregarJogos, carregarUrgentes, versaoDados])
 
   const jogo = jogos.find((j) => j.id === selecionado) ?? null
   const competicaoDoJogo = competicoes.find((c) => c.id === jogo?.competicaoId)
@@ -149,6 +171,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     }
     setProposta(null)
     await carregarJogos()
+    await carregarUrgentes()
     if (selecionado != null) await carregarCandidatos(selecionado)
   }
 
@@ -193,8 +216,17 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   const nomeados = jogos.filter((j) => j.nomeacoes.length > 0).length
 
+  /** Levar a semana até ao jogo escolhido na faixa, e selecioná-lo. */
+  function irParaJogo(jogoId: number): void {
+    const jogo = urgentes.find((j) => j.id === jogoId)
+    if (jogo?.dataHora) setSemana(inicioDaSemana(new Date(jogo.dataHora)))
+    setSelecionado(jogoId)
+  }
+
   return (
     <>
+      <FaixaUrgentes jogos={urgentes} aoEscolher={irParaJogo} />
+
       <div className="cabecalho-ecra">
         <div className="linha">
           <button

@@ -15,6 +15,7 @@ import {
   escreverConfig,
   listarCopiasSeguranca,
   obterBaseDados,
+  reporCopiaSeguranca,
   versaoConhecida,
   versaoDoEsquema
 } from './db'
@@ -871,6 +872,59 @@ async function principal(): Promise<void> {
       `→ ${kmAntes.filter((km) => km > 0).length} delegados com km antes, ${kmDepois.filter((km) => km > 0).length} depois`
     )
     verificar('o histórico fica vazio depois de apagar', repos.historicoJogos().length === 0)
+
+    log('\n14. Repor uma cópia de segurança')
+    // Repor tem de trazer de volta o estado exato da cópia, e o estado de agora
+    // tem de ficar guardado — repor também é uma decisão que se pode desfazer.
+    const antesDaCopia = repos.listarDelegados(true).length
+    const copiaEscolhida = listarCopiasSeguranca(pastaCopias)[0]
+    repos.criarDelegado({
+      numero: '9999',
+      nome: 'Delegado Depois Da Cópia',
+      morada: null,
+      lat: 40,
+      lng: -8,
+      nivel: 'PRINCIPAL',
+      telefone: null,
+      email: null,
+      ativo: true,
+      notas: null,
+      coordsManuais: true
+    })
+    const copiasAntesDeRepor = listarCopiasSeguranca(pastaCopias).length
+    verificar(
+      'há uma cópia para repor e um estado diferente do dela',
+      !!copiaEscolhida && repos.listarDelegados(true).length === antesDaCopia + 1,
+      `→ ${copiaEscolhida?.ficheiro ?? 'nenhuma'}`
+    )
+
+    reporCopiaSeguranca(copiaEscolhida.caminho, caminho, pastaCopias)
+    verificar(
+      'repor devolve a base de dados ao estado da cópia',
+      !repos.listarDelegados(true).some((d) => d.numero === '9999'),
+      `→ ${repos.listarDelegados(true).length} delegados`
+    )
+    verificar(
+      'o estado anterior à reposição fica guardado como cópia',
+      listarCopiasSeguranca(pastaCopias).length > copiasAntesDeRepor,
+      `→ ${listarCopiasSeguranca(pastaCopias).length} cópias`
+    )
+    verificar(
+      'a base de dados fica utilizável a seguir a repor',
+      repos.listarJogos().length >= 0 && repos.contarNomeacoes() >= 0
+    )
+    // Um caminho que não seja uma cópia da aplicação não pode substituir nada.
+    let recusouReposicao = ''
+    try {
+      reporCopiaSeguranca(join(pasta, 'data', 'teste.db'), caminho, pastaCopias)
+    } catch (erro) {
+      recusouReposicao = (erro as Error).message
+    }
+    verificar(
+      'recusa repor a partir de um ficheiro que não é uma cópia',
+      recusouReposicao.includes('cópias de segurança criadas pela aplicação'),
+      `→ ${recusouReposicao || 'aceitou'}`
+    )
 
   } finally {
     // O SQLite ainda tem o ficheiro aberto; se o Windows o bloquear, a pasta

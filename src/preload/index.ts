@@ -18,6 +18,7 @@ const api = {
     abrirPastaDados: invocar('app:abrirPastaDados'),
     copias: invocar('app:copias'),
     criarCopia: invocar('app:criarCopia'),
+    reporCopia: invocar('app:reporCopia'),
     abrirPastaCopias: invocar('app:abrirPastaCopias')
   },
   geo: {

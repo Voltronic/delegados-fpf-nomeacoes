@@ -146,6 +146,14 @@ app.whenReady().then(async () => {
 
   try {
     await janela.loadFile(join(__dirname, '../renderer/index.html'))
+    // A mensagem de consola diz o quê mas não o porquê. Guardar a pilha de
+    // chamadas é o que permite saber de onde veio um erro de dentro do Leaflet.
+    await janela.webContents.executeJavaScript(
+      `(() => {
+         window.__pilhas = [];
+         addEventListener('error', (e) => window.__pilhas.push((e.error && e.error.stack) || e.message));
+       })()`
+    )
     await new Promise((r) => setTimeout(r, 1500))
 
     log('\n1. Arranque da interface')
@@ -307,6 +315,57 @@ app.whenReady().then(async () => {
       verificar(`ecrã "${nome}" desenha`, conteudo > 30, `→ título "${titulo}", ${conteudo} caracteres`)
     }
 
+    // A faixa dos jogos por nomear: a lista só aparece com o rato em cima, e
+    // clicar numa linha tem de levar ao jogo. A faixa vive no ecrã de
+    // nomeações, e a secção anterior deixou-nos nas definições.
+    await irPara('Nomeações')
+    const faixa = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.faixa-urgentes .resumo')?.innerText.replace(/\\s+/g, ' ') ?? ''"
+    )) as string
+    if (faixa === '') {
+      // Diagnóstico: sem isto ficava-se sem saber se o problema é a faixa não
+      // aparecer, o ecrã errado estar aberto, ou não haver jogos por nomear.
+      const contexto = (await janela.webContents.executeJavaScript(
+        `JSON.stringify({
+           ecra: document.querySelector('.cabecalho-ecra h1')?.textContent,
+           jogos: document.querySelectorAll('.item-jogo').length,
+           semNomeacoes: document.querySelectorAll('.item-jogo:not(.nomeado):not(.parcial)').length
+         })`
+      )) as string
+      log(`     (sem faixa: ${contexto})`)
+    }
+    verificar(
+      'a faixa anuncia os jogos por nomear que estão a chegar',
+      /por nomear/.test(faixa),
+      `→ ${faixa}`
+    )
+    const listaEscondida = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const lista = document.querySelector('.faixa-urgentes .lista');
+         return lista ? getComputedStyle(lista).display : 'sem faixa';
+       })()`
+    )) as string
+    verificar('a lista está fechada até o rato lá passar', listaEscondida === 'none', `→ ${listaEscondida}`)
+
+    // `:hover` não se simula com eventos, por isso pergunta-se ao CSS o que
+    // aconteceria — é o mesmo seletor que o browser aplica.
+    const abreComHover = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const regras = [...document.styleSheets].flatMap((f) => {
+           try { return [...f.cssRules] } catch { return [] }
+         });
+         return regras.some(
+           (r) => r.selectorText === '.faixa-urgentes:hover .lista' && r.style.display === 'block'
+         );
+       })()`
+    )) as boolean
+    verificar('passar o rato na faixa abre a lista', abreComHover)
+
+    const linhas = (await janela.webContents.executeJavaScript(
+      "document.querySelectorAll('.faixa-urgentes .linha-urgente').length"
+    )) as number
+    verificar('a faixa lista os jogos em falta', linhas > 0, `→ ${linhas} jogos`)
+
     log('\n3b. Dashboard: ordenação e altura das tabelas')
     await irPara('Dashboard')
 
@@ -431,7 +490,9 @@ app.whenReady().then(async () => {
     )
 
     log('\n7. Erros de consola')
+    const pilhas = (await janela.webContents.executeJavaScript('window.__pilhas ?? []')) as string[]
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
+    for (const pilha of pilhas) log(`     ${pilha.replace(/\n\s*/g, ' <- ').slice(0, 600)}`)
   } catch (erro) {
     verificar('percurso completo sem exceções', false, `→ ${(erro as Error).message}`)
   } finally {

@@ -58,10 +58,18 @@ export default function Mapa({
 
   useEffect(() => {
     if (!contentor.current || mapa.current) return
-    mapa.current = L.map(contentor.current, { zoomControl: true, attributionControl: true }).setView(
-      [39.6, -8.0],
-      6
-    )
+    mapa.current = L.map(contentor.current, {
+      zoomControl: true,
+      attributionControl: true,
+      /*
+       * Sem animação de zoom, de propósito. Com ela, mudar de ecrã logo a
+       * seguir a um zoom deixava a transição a meio: o Leaflet corria depois o
+       * `_onZoomTransitionEnd` sobre um mapa já destruído e rebentava em
+       * `getPosition` (o painel do mapa já não existia). Num painel lateral
+       * como este a animação não acrescenta nada, e sem ela o zoom é imediato.
+       */
+      zoomAnimation: false
+    }).setView([39.6, -8.0], 6)
     L.tileLayer(tilesUrl, {
       maxZoom: 18,
       attribution: '© OpenStreetMap'
@@ -78,9 +86,8 @@ export default function Mapa({
     marcarZoom()
 
     return () => {
-      // Desmontar com uma tooltip aberta rebenta no Leaflet: ela tenta
-      // reposicionar-se sobre um marcador que já não está no mapa. Fecha-se
-      // tudo antes de destruir.
+      // Fecha-se tudo antes de destruir, para não ficarem elementos do mapa
+      // agarrados a marcadores que já não existem.
       for (const marcador of marcadores.current.values()) marcador.closeTooltip()
       marcadores.current.clear()
       camada.current?.clearLayers()
@@ -95,9 +102,8 @@ export default function Mapa({
     const grupo = camada.current
     if (!m || !grupo) return
 
-    // Fechar as tooltips antes de limpar: uma tooltip aberta sobre um marcador
-    // que desaparece continua a tentar posicionar-se e rebenta no Leaflet
-    // ("_leaflet_pos"). Acontecia ao esconder um jogo com o rato sobre um pino.
+    // Fechar as tooltips antes de limpar os marcadores: uma tooltip aberta
+    // sobre um marcador que deixa de existir fica órfã no mapa.
     for (const marcador of marcadores.current.values()) marcador.closeTooltip()
     grupo.clearLayers()
     marcadores.current.clear()

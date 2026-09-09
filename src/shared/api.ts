@@ -106,6 +106,11 @@ export interface Api {
     copias(): Promise<CopiaSegurancaApi[]>
     /** Cópia imediata, além da que é feita em cada arranque. */
     criarCopia(): Promise<CopiaSegurancaApi[]>
+    /**
+     * Substitui a base de dados por uma cópia, guardando antes o estado atual.
+     * Quem chama tem de recarregar a janela a seguir.
+     */
+    reporCopia(caminho: string): Promise<CopiaSegurancaApi[]>
     abrirPastaCopias(): Promise<void>
   }
 

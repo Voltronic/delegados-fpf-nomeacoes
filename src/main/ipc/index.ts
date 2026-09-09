@@ -26,6 +26,7 @@ import {
   listarCopiasSeguranca,
   obterBaseDados,
   PASTA_COPIAS,
+  reporCopiaSeguranca,
   versaoConhecida,
   versaoDoEsquema
 } from '../db'
@@ -97,6 +98,15 @@ export function registarIpc(contexto: {
     await shell.openPath(dirname(contexto.caminhoBaseDados))
   })
   registar('app:copias', () => listarCopiasSeguranca(contexto.pastaCopias ?? PASTA_COPIAS))
+  /**
+   * Repõe uma cópia de segurança. O renderer recarrega a seguir, porque todos os
+   * ecrãs têm dados em memória vindos da base de dados que acabou de ser trocada.
+   */
+  registar('app:reporCopia', (caminho: string) => {
+    reporCopiaSeguranca(caminho, contexto.caminhoBaseDados, contexto.pastaCopias ?? PASTA_COPIAS)
+    return listarCopiasSeguranca(contexto.pastaCopias ?? PASTA_COPIAS)
+  })
+
   registar('app:criarCopia', () => {
     const destino = copiaSeguranca(obterBaseDados(), contexto.pastaCopias ?? PASTA_COPIAS)
     if (!destino) throw new Error('Não foi possível criar a cópia de segurança.')

@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import Database from 'better-sqlite3'
 import { MIGRACOES } from './schema'
 import { semearRecintos } from './semente'
@@ -174,6 +174,46 @@ function semearConfiguracao(conn: Database.Database): void {
     for (const [chave, valor] of Object.entries(CONFIG_POR_OMISSAO)) inserir.run(chave, valor)
   })
   correr()
+}
+
+/**
+ * Fecha a ligação. Só é preciso para repor uma cópia de segurança: no Windows o
+ * ficheiro não pode ser substituído enquanto estiver aberto.
+ */
+export function fecharBaseDados(): void {
+  db?.close()
+  db = null
+}
+
+/**
+ * Substitui a base de dados atual por uma cópia de segurança.
+ *
+ * Antes de trocar seja o que for, guarda o estado atual como mais uma cópia —
+ * repor é uma decisão que também se pode querer desfazer. Os ficheiros `-wal` e
+ * `-shm` da base antiga são removidos: se ficassem, o SQLite juntaria a eles a
+ * base restaurada e o resultado seria uma mistura das duas.
+ */
+export function reporCopiaSeguranca(origem: string, caminho: string, pastaCopias = PASTA_COPIAS): void {
+  // Só se aceita um ficheiro que esteja mesmo na pasta das cópias e com o nome
+  // que a aplicação lhes dá: isto substitui a base de dados do coordenador, não
+  // é sítio para aceitar um caminho qualquer.
+  const dentroDaPasta = resolve(origem).startsWith(resolve(pastaCopias) + sep)
+  if (!dentroDaPasta || !COPIAS.PADRAO_COPIA.test(basename(origem))) {
+    throw new Error('Só é possível repor cópias de segurança criadas pela aplicação.')
+  }
+  if (!existsSync(origem)) throw new Error('Essa cópia de segurança já não existe.')
+
+  if (existsSync(caminho)) copiaSeguranca(obterBaseDados(), pastaCopias)
+  fecharBaseDados()
+  copyFileSync(origem, caminho)
+  for (const extra of ['-wal', '-shm']) {
+    try {
+      rmSync(`${caminho}${extra}`, { force: true })
+    } catch {
+      /* pode não existir */
+    }
+  }
+  abrirBaseDados(caminho, { pastaCopias })
 }
 
 export function obterBaseDados(): Database.Database {

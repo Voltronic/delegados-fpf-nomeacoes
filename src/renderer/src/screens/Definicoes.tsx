@@ -11,6 +11,7 @@ export default function Definicoes(): JSX.Element {
   const [nomeacoes, setNomeacoes] = useState(0)
   const [aConfirmarApagar, setAConfirmarApagar] = useState(false)
   const [aApagar, setAApagar] = useState(false)
+  const [aRepor, setARepor] = useState<string | null>(null)
   const [guardado, setGuardado] = useState(false)
   const [syncAutomatico, setSyncAutomatico] = useState(true)
 
@@ -22,6 +23,21 @@ export default function Definicoes(): JSX.Element {
     void window.api.nomeacoes.contar().then(setNomeacoes)
     void window.api.config.ler('sync.automatico').then((v) => setSyncAutomatico(v !== 'false'))
   }, [])
+
+  /**
+   * Repõe uma cópia de segurança. Recarrega a janela a seguir porque todos os
+   * ecrãs têm em memória dados da base de dados que acabou de ser substituída —
+   * sem isto, ficariam a mostrar o estado antigo até se mudar de ecrã.
+   */
+  async function repor(caminho: string): Promise<void> {
+    try {
+      await window.api.app.reporCopia(caminho)
+      window.location.reload()
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+      setARepor(null)
+    }
+  }
 
   /**
    * Apaga todas as nomeações — o que se usa para limpar uma fase de testes.
@@ -297,8 +313,11 @@ export default function Definicoes(): JSX.Element {
             <div className="silencioso">
               É gravada uma cópia a cada arranque, antes de qualquer alteração, e guardam-se as 10 mais
               recentes. Ficam fora da pasta da aplicação de propósito: essa pasta é substituída a cada versão
-              nova, e uma cópia lá dentro desaparecia com ela. Para repor, feche a aplicação e substitua o
-              ficheiro da base de dados pela cópia escolhida.
+              nova, e uma cópia lá dentro desaparecia com ela.
+            </div>
+            <div className="silencioso">
+              <b>Repor</b> troca os dados atuais pelos dessa cópia. O estado de agora é guardado como mais
+              uma cópia antes da troca, por isso dá sempre para voltar atrás.
             </div>
             {copias.length > 0 && (
               <table className="tabela">
@@ -306,6 +325,7 @@ export default function Definicoes(): JSX.Element {
                   <tr>
                     <th>Cópia</th>
                     <th className="num">Tamanho</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -313,6 +333,22 @@ export default function Definicoes(): JSX.Element {
                     <tr key={copia.ficheiro}>
                       <td className="mono">{copia.ficheiro}</td>
                       <td className="num">{Math.max(1, Math.round(copia.bytes / 1024))} KB</td>
+                      <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                        {aRepor === copia.caminho ? (
+                          <>
+                            <button className="botao pequeno perigo" onClick={() => repor(copia.caminho)}>
+                              Confirmar
+                            </button>{' '}
+                            <button className="botao pequeno" onClick={() => setARepor(null)}>
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <button className="botao pequeno" onClick={() => setARepor(copia.caminho)}>
+                            Repor
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
