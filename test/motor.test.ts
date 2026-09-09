@@ -105,11 +105,12 @@ describe('ordenação de candidatos', () => {
    * Um voo custa à FPF muito mais do que os km mostram: numa ida a uma ilha só
    * contam os quilómetros até ao aeroporto, o que faria o jogo parecer barato.
    */
-  it('afunda quem precisa de avião, mesmo tendo a viagem mais curta e zero km na época', () => {
-    const daIlha = estado(delegado(1, 'Da Ilha'), { kmEpoca: 0 })
-    const doContinente = estado(delegado(2, 'Do Continente'), { kmEpoca: 2000 })
+  it('afunda quem tem de vir de uma ilha, mesmo com a viagem mais curta e zero km na época', () => {
+    // O jogo é no continente (ver JOGO). Quem vive nos Açores tem 20 km até ao
+    // aeroporto, o que pela distância o faria parecer o candidato ideal.
+    const daIlha = estado(delegado(1, 'Da Ilha', { lat: 37.747, lng: -25.651 }), { kmEpoca: 0 })
+    const doContinente = estado(delegado(2, 'Do Continente', { lat: 41.1, lng: -8.6 }), { kmEpoca: 2000 })
     const distancias = new Map<number, Distancia>([
-      // 20 km até ao aeroporto: pela distância, seria o candidato ideal.
       [1, { km: 20, minutos: 25, fonte: 'AVIAO' }],
       [2, { km: 300, minutos: 180, fonte: 'OSRM' }]
     ])
@@ -117,7 +118,28 @@ describe('ordenação de candidatos', () => {
     expect(candidatos[0].nome).toBe('Do Continente')
     const ilha = candidatos.find((c) => c.nome === 'Da Ilha')!
     expect(ilha.elegivel, 'o avião penaliza, não bloqueia').toBe(true)
-    expect(ilha.componentes.find((c) => c.componente === 'custoAviao')!.detalhe).toContain('avião')
+    expect(ilha.componentes.find((c) => c.componente === 'custoAviao')!.detalhe).toContain('arquipélago')
+  })
+
+  /**
+   * Para quem vive nos Açores, ir de São Miguel à Terceira é uma deslocação
+   * normal. Penalizá-la deixava os jogos das ilhas sem candidatos naturais.
+   */
+  it('não penaliza um voo entre ilhas do mesmo arquipélago', () => {
+    const jogoNosAcores: ContextoJogo = { ...JOGO, recintoLat: 38.655, recintoLng: -27.216 }
+    const outraIlha = estado(delegado(1, 'De São Miguel', { lat: 37.747, lng: -25.651 }))
+    const mesmaIlha = estado(delegado(2, 'Da Terceira', { lat: 38.66, lng: -27.22 }))
+    const distancias = new Map<number, Distancia>([
+      [1, { km: 15, minutos: 20, fonte: 'AVIAO' }],
+      [2, { km: 8, minutos: 12, fonte: 'OSRM' }]
+    ])
+    const candidatos = avaliarCandidatos(
+      entrada([outraIlha, mesmaIlha], {}, { distancias, jogo: jogoNosAcores })
+    )
+    const deSaoMiguel = candidatos.find((c) => c.nome === 'De São Miguel')!
+    const componente = deSaoMiguel.componentes.find((c) => c.componente === 'custoAviao')!
+    expect(componente.normalizado).toBe(1)
+    expect(componente.detalhe).toBe('voo dentro do arquipélago')
   })
 
   it('a penalização do avião pesa mais do que tudo o resto somado', () => {

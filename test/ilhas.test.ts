@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { aeroportoDePartida, CONTINENTE, exigeAviao, regiaoDe } from '../src/main/geo/ilhas'
+import {
+  aeroportoDePartida,
+  arquipelagoDe,
+  CONTINENTE,
+  exigeAviao,
+  mudaDeArquipelago,
+  regiaoDe
+} from '../src/main/geo/ilhas'
 
 const PORTO = { lat: 41.15, lng: -8.61 }
 const LISBOA = { lat: 38.72, lng: -9.14 }
@@ -19,6 +26,33 @@ describe('regiões', () => {
     expect(regiaoDe(PONTA_DELGADA)).toBe('São Miguel')
     expect(regiaoDe(ANGRA)).toBe('Terceira')
     expect(regiaoDe(FUNCHAL)).toBe('Madeira')
+  })
+})
+
+describe('arquipélagos', () => {
+  const PORTO_SANTO = { lat: 33.06, lng: -16.34 }
+  const HORTA = { lat: 38.53, lng: -28.63 }
+
+  it('agrupa as ilhas no arquipélago a que pertencem', () => {
+    expect(arquipelagoDe(PORTO)).toBe('Continente')
+    expect(arquipelagoDe(FUNCHAL)).toBe('Madeira')
+    expect(arquipelagoDe(PORTO_SANTO)).toBe('Madeira')
+    expect(arquipelagoDe(PONTA_DELGADA)).toBe('Açores')
+    expect(arquipelagoDe(HORTA)).toBe('Açores')
+  })
+
+  it('viajar entre ilhas do mesmo arquipélago não é sair do arquipélago', () => {
+    // São voos, mas do dia a dia de quem lá vive.
+    expect(exigeAviao(PONTA_DELGADA, ANGRA)).toBe(true)
+    expect(mudaDeArquipelago(PONTA_DELGADA, ANGRA)).toBe(false)
+    expect(mudaDeArquipelago(FUNCHAL, PORTO_SANTO)).toBe(false)
+  })
+
+  it('atravessar o Atlântico é sair do arquipélago', () => {
+    expect(mudaDeArquipelago(PORTO, PONTA_DELGADA)).toBe(true)
+    expect(mudaDeArquipelago(FUNCHAL, LISBOA)).toBe(true)
+    // Entre arquipélagos também conta.
+    expect(mudaDeArquipelago(FUNCHAL, ANGRA)).toBe(true)
   })
 })
 

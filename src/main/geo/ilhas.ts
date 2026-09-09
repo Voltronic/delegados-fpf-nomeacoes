@@ -75,6 +75,38 @@ export function regiaoDe(ponto: Ponto): string {
   return r?.nome ?? CONTINENTE
 }
 
+export type Arquipelago = 'Continente' | 'Madeira' | 'Açores'
+
+const ARQUIPELAGO_POR_REGIAO: Record<string, Arquipelago> = {
+  Madeira: 'Madeira',
+  'Porto Santo': 'Madeira',
+  'Santa Maria': 'Açores',
+  'São Miguel': 'Açores',
+  Terceira: 'Açores',
+  Graciosa: 'Açores',
+  'São Jorge': 'Açores',
+  Pico: 'Açores',
+  Faial: 'Açores',
+  Flores: 'Açores',
+  Corvo: 'Açores'
+}
+
+/** O arquipélago (ou o continente) a que um ponto pertence. */
+export function arquipelagoDe(ponto: Ponto): Arquipelago {
+  return ARQUIPELAGO_POR_REGIAO[regiaoDe(ponto)] ?? 'Continente'
+}
+
+/**
+ * Verdadeiro quando a viagem obriga a sair do arquipélago — do continente para
+ * uma ilha, de uma ilha para o continente, ou entre arquipélagos.
+ *
+ * Voar entre ilhas do mesmo arquipélago não conta: faz parte do normal de quem
+ * lá vive, ao contrário de atravessar o Atlântico, que é o que custa caro.
+ */
+export function mudaDeArquipelago(origem: Ponto, destino: Ponto): boolean {
+  return arquipelagoDe(origem) !== arquipelagoDe(destino)
+}
+
 /** Verdadeiro quando os dois pontos estão em massas de terra diferentes. */
 export function exigeAviao(origem: Ponto, destino: Ponto): boolean {
   return regiaoDe(origem) !== regiaoDe(destino)

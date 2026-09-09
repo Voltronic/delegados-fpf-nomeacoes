@@ -31,7 +31,8 @@ export const PESOS_POR_OMISSAO: PesoComponente[] = [
     componente: 'custoAviao',
     etiqueta: 'Custo de avião',
     descricao:
-      'Penaliza fortemente as deslocações que exigem avião — o voo custa à FPF muito mais do que os km mostram.',
+      'Penaliza fortemente os voos para fora do arquipélago — custam à FPF muito mais do que os km mostram. ' +
+      'Voar entre ilhas do mesmo arquipélago não é penalizado.',
     // Deliberadamente maior do que a soma dos outros pesos ativos (45+35+20):
     // um voo não se compensa com poucos km na época nem com um aeroporto ao
     // lado de casa. Na prática, só se manda alguém de avião quando não há

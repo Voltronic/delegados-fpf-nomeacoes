@@ -1,4 +1,5 @@
 import type { Componente, ContextoAvaliacao, ResultadoComponente } from '../tipos'
+import { mudaDeArquipelago } from '../../geo/ilhas'
 
 /** Normaliza `valor` para 0..1 dentro de [min,max]; devolve 0.5 quando não há amplitude. */
 export function normalizarInverso(valor: number, min: number, max: number): number {
@@ -123,29 +124,37 @@ const descanso: Componente = {
 }
 
 /**
- * Penaliza pesadamente as deslocações que exigem avião.
+ * Penaliza pesadamente as deslocações que obrigam a sair do arquipélago.
  *
- * Um voo custa à FPF muito mais do que qualquer viagem por estrada, e os km
- * contabilizados não o mostram: numa ida a uma ilha só contam os quilómetros
- * até ao aeroporto, o que faz um jogo nos Açores parecer mais barato do que
- * uma ida ao Algarve. Este componente repõe a verdade — quem não precisa de
- * voar recebe o peso todo, quem precisa recebe zero.
+ * Um voo do continente para uma ilha (ou o contrário) custa à FPF muito mais do
+ * que qualquer viagem por estrada, e os km contabilizados não o mostram: numa
+ * ida a uma ilha só contam os quilómetros até ao aeroporto, o que faz um jogo
+ * nos Açores parecer mais barato do que uma ida ao Algarve.
  *
- * Não é um bloqueio: alguém tem de ir. É uma desvantagem grande, que só se
- * compensa quando não há mesmo alternativa razoável.
+ * Voar **dentro** do mesmo arquipélago não é penalizado: para quem vive nos
+ * Açores, ir de São Miguel à Terceira é o equivalente a uma deslocação normal,
+ * e penalizá-lo deixaria os jogos das ilhas sem candidatos naturais.
+ *
+ * Não é um bloqueio: alguém tem de ir. É uma desvantagem grande, que só cede
+ * quando não há mesmo alternativa.
  */
 const custoAviao: Componente = {
   id: 'custoAviao',
-  avaliar({ distancia }: ContextoAvaliacao): ResultadoComponente {
+  avaliar({ entrada, estado, distancia }: ContextoAvaliacao): ResultadoComponente {
     // Sem distância não se sabe se há voo (recinto por localizar): não se
     // penaliza por suspeita.
-    if (!distancia) return { valorBruto: 0, normalizado: 1, detalhe: 'sem distância conhecida' }
-    const deAviao = distancia.fonte === 'AVIAO'
-    return {
-      valorBruto: deAviao ? 1 : 0,
-      normalizado: deAviao ? 0 : 1,
-      detalhe: deAviao ? 'exige viagem de avião' : 'viagem por estrada'
+    if (!distancia || distancia.fonte !== 'AVIAO') {
+      return { valorBruto: 0, normalizado: 1, detalhe: 'viagem por estrada' }
     }
+    const { lat, lng } = estado.delegado
+    const { recintoLat, recintoLng } = entrada.jogo
+    if (lat == null || lng == null || recintoLat == null || recintoLng == null) {
+      return { valorBruto: 0, normalizado: 1, detalhe: 'sem coordenadas para avaliar a viagem' }
+    }
+    if (!mudaDeArquipelago({ lat, lng }, { lat: recintoLat, lng: recintoLng })) {
+      return { valorBruto: 0, normalizado: 1, detalhe: 'voo dentro do arquipélago' }
+    }
+    return { valorBruto: 1, normalizado: 0, detalhe: 'exige voo para fora do arquipélago' }
   }
 }
 
