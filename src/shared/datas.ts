@@ -7,16 +7,34 @@
  */
 
 /**
+ * Lê uma data guardada (`YYYY-MM-DD` ou `YYYY-MM-DDTHH:mm`) como hora local.
+ *
+ * `new Date(texto)` não serve: uma data **com** hora é lida como local, mas uma
+ * data **sem** hora é lida como UTC. Num computador a oeste de Greenwich — nos
+ * Açores, por exemplo — isso punha o jogo no dia anterior. Aqui os números são
+ * usados tal como estão escritos, no fuso de quem está a usar a aplicação.
+ */
+export function paraDataLocal(texto: string | null): Date | null {
+  if (!texto) return null
+  const partes = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(texto.trim())
+  if (!partes) return null
+  const [, ano, mes, dia, hora, minuto] = partes
+  return new Date(Number(ano), Number(mes) - 1, Number(dia), Number(hora ?? 0), Number(minuto ?? 0))
+}
+
+/**
  * Dias de calendário até uma data: 0 é hoje, 1 é amanhã, negativo é passado.
  *
  * Conta de meia-noite a meia-noite, e não de horas. Comparar a hora do jogo com
  * o início de hoje dava 17 horas para um jogo hoje às 17:00, que arredondado
  * virava "amanhã" — e sexta-feira aparecia como três dias em vez de dois.
+ *
+ * O "hoje" é sempre o do relógio do computador: quem abrir a aplicação nos
+ * Açores conta os dias pela hora dos Açores.
  */
 export function diasAte(dataHora: string | null, agora = new Date()): number | null {
-  if (!dataHora) return null
-  const dia = new Date(dataHora)
-  if (Number.isNaN(dia.getTime())) return null
+  const dia = paraDataLocal(dataHora)
+  if (!dia) return null
   dia.setHours(0, 0, 0, 0)
   const hoje = new Date(agora)
   hoje.setHours(0, 0, 0, 0)

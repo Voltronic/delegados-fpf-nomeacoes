@@ -336,7 +336,7 @@ app.whenReady().then(async () => {
     }
     verificar(
       'a faixa anuncia os jogos por nomear que estão a chegar',
-      /por nomear/.test(faixa),
+      /jogos? por nomear nos próximos 7 dias/.test(faixa),
       `→ ${faixa}`
     )
     const listaEscondida = (await janela.webContents.executeJavaScript(

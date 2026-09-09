@@ -11,6 +11,7 @@ import CartaoCandidato from '../components/CartaoCandidato'
 import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa } from '../components/Mapa'
 import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
+import { paraDataLocal } from '@shared/datas'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 
 type EstadoNomeacao = 'TODOS' | 'POR_NOMEAR' | 'PARCIAL' | 'COMPLETO'
@@ -246,7 +247,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   /** Levar a semana até ao jogo escolhido na faixa, e selecioná-lo. */
   function irParaJogo(jogoId: number): void {
     const jogo = urgentes.find((j) => j.id === jogoId)
-    if (jogo?.dataHora) setSemana(inicioDaSemana(new Date(jogo.dataHora)))
+    const data = paraDataLocal(jogo?.dataHora ?? null)
+    if (data) setSemana(inicioDaSemana(data))
     setSelecionado(jogoId)
   }
 

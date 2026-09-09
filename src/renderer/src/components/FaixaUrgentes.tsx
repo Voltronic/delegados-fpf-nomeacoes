@@ -21,7 +21,6 @@ export default function FaixaUrgentes({ jogos, aoEscolher }: Props): JSX.Element
   if (jogos.length === 0) return null
 
   const dias = (jogo: JogoDetalhado): number => diasAte(jogo.dataHora) ?? DIAS
-  const emCima = jogos.filter((j) => dias(j) <= 1).length
 
   return (
     <div className="faixa-urgentes">
@@ -31,11 +30,6 @@ export default function FaixaUrgentes({ jogos, aoEscolher }: Props): JSX.Element
           {jogos.length} {jogos.length === 1 ? 'jogo por nomear' : 'jogos por nomear'} nos próximos {DIAS}{' '}
           dias
         </b>
-        {emCima > 0 && (
-          <span className="urgente">
-            {emCima} {emCima === 1 ? 'é' : 'são'} hoje ou amanhã
-          </span>
-        )}
         <span className="silencioso">passe o rato para ver a lista</span>
       </div>
 

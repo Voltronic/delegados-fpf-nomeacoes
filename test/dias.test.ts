@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diasAte } from '../src/shared/datas'
+import { diasAte, paraDataLocal } from '../src/shared/datas'
 
 /**
  * O caso que falhou em uso real: às 14:57 de 9 de setembro, um jogo desse mesmo
@@ -39,5 +39,29 @@ describe('dias até um jogo', () => {
     // 25 horas, que sem arredondamento dava um dia a menos.
     const antes = new Date(2026, 9, 23, 12, 0)
     expect(diasAte('2026-10-26T15:00', antes)).toBe(3)
+  })
+})
+
+describe('leitura de datas guardadas', () => {
+  it('usa os números tal como estão escritos, sem passar por UTC', () => {
+    const d = paraDataLocal('2026-09-13T15:00')!
+    expect([d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]).toEqual([
+      2026, 9, 13, 15, 0
+    ])
+  })
+
+  it('uma data sem hora fica no mesmo dia, em qualquer fuso', () => {
+    // `new Date('2026-09-13')` seria meia-noite UTC: nos Açores dava dia 12.
+    const d = paraDataLocal('2026-09-13')!
+    expect([d.getDate(), d.getMonth() + 1, d.getHours()]).toEqual([13, 9, 0])
+  })
+
+  it('e continua a ser hoje quando é hoje', () => {
+    expect(diasAte('2026-09-09', new Date(2026, 8, 9, 14, 57))).toBe(0)
+  })
+
+  it('devolve nulo para o que não é data', () => {
+    expect(paraDataLocal('')).toBeNull()
+    expect(paraDataLocal('qualquer coisa')).toBeNull()
   })
 })
