@@ -337,5 +337,24 @@ export const MIGRACOES: Migracao[] = [
       INSERT OR IGNORE INTO alerta_visto (chave, criado_em)
         SELECT chave, criado_em FROM alerta;
     `
+  },
+  {
+    versao: 12,
+    descricao: 'Competições com delegado em todos os jogos, e jogos marcados à parte',
+    sql: `
+      -- Há competições em que todos os jogos levam delegado, e outras — a Taça,
+      -- por exemplo — em que só alguns levam, escolhidos pelo coordenador.
+      -- Mostrar tudo misturado enchia a lista de jogos que não são para nomear.
+      ALTER TABLE competicao ADD COLUMN todos_com_delegado INTEGER NOT NULL DEFAULT 0;
+
+      -- Por jogo: NULL segue a competição, 1 e 0 são decisões do coordenador
+      -- para um jogo em concreto.
+      ALTER TABLE jogo ADD COLUMN leva_delegado INTEGER;
+
+      UPDATE competicao SET todos_com_delegado = 1
+       WHERE nome IN (
+         'LIGA 3 PLACARD', 'LIGA NEXT GEN', 'LIGA BPI', 'LIGA PLACARD', 'LIGA FEMININA PLACARD'
+       );
+    `
   }
 ]

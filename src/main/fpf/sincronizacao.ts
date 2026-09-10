@@ -7,6 +7,7 @@ import type {
   ResultadoSincronizacao
 } from '@shared/tipos'
 import { dataHoraAGuardar, dataMudou } from '../../shared/datas'
+import { COMPETICOES_COM_DELEGADO_SEMPRE } from '../../shared/tipos'
 import { ClienteFpf } from './cliente'
 import {
   anosDaEpoca,
@@ -140,7 +141,12 @@ export async function sincronizar(
       organizacao: pedido.organizacao,
       ativa: true,
       nivelMinimo: c.nivelMinimo as never,
-      usaDelegadoCampo: c.usaDelegadoCampo
+      usaDelegadoCampo: c.usaDelegadoCampo,
+      // Só conta quando a competição é criada: numa que já exista, o valor
+      // guardado é o do coordenador e não se mexe.
+      todosComDelegado: COMPETICOES_COM_DELEGADO_SEMPRE.some(
+        (n) => normalizarNome(n) === normalizarNome(c.nome)
+      )
     })
   ).filter((c, i, todas) => todas.findIndex((o) => o.id === c.id) === i)
 
@@ -278,13 +284,17 @@ export async function sincronizar(
 
     // Gravar já esta competição. A FPF é a fonte de verdade: guardar a data
     // antiga de um jogo adiado poria o coordenador a mandar um delegado no dia
-    // errado. O que muda em jogos nomeados vai para `sensiveis`, que gera
-    // alerta. Os jogos inalterados não são tocados.
+    // errado. Os jogos inalterados não são tocados.
+    //
+    // Qualquer alteração gera alerta, tenha o jogo delegado ou não: uma mudança
+    // de hora num jogo por nomear muda quem lhe pode ir, e o coordenador só
+    // dava por ela se calhasse reparar. O ruído é travado noutro sítio — não se
+    // avisa sobre jogos que já começaram, nem se repete o que já foi mostrado.
     const mudados = calcularDiffs(chavesDesta).filter((d) => d.tipo !== 'INALTERADO')
     aplicarSincronizacao(mudados.map((d) => d.chaveNatural))
     criados += mudados.filter((d) => d.tipo === 'NOVO').length
     atualizados += mudados.filter((d) => d.tipo === 'ALTERADO').length
-    sensiveis.push(...mudados.filter((d) => d.tipo === 'ALTERADO' && d.temNomeacoes))
+    sensiveis.push(...mudados.filter((d) => d.tipo === 'ALTERADO'))
 
     progresso({
       etapa: `${competicao.nome}: ${chavesDesta.length} jogos gravados`,
@@ -490,6 +500,9 @@ function importarLinhasCsv(
         nome: linha.competicao,
         organizacao: 'Importado de ficheiro',
         ativa: true,
+        todosComDelegado: COMPETICOES_COM_DELEGADO_SEMPRE.some(
+          (n) => normalizarNome(n) === normalizarNome(linha.competicao)
+        ),
         nivelMinimo: null,
         usaDelegadoCampo: true
       })

@@ -383,6 +383,7 @@ const paraCompeticao = (l: {
   ativa: number
   nivel_minimo: string | null
   usa_delegado_campo: number
+  todos_com_delegado: number
 }): Competicao => ({
   id: l.id,
   fpfCompetitionId: l.fpf_competition_id,
@@ -392,7 +393,8 @@ const paraCompeticao = (l: {
   organizacao: l.organizacao,
   ativa: bool(l.ativa),
   nivelMinimo: l.nivel_minimo as Competicao['nivelMinimo'],
-  usaDelegadoCampo: bool(l.usa_delegado_campo)
+  usaDelegadoCampo: bool(l.usa_delegado_campo),
+  todosComDelegado: bool(l.todos_com_delegado)
 })
 
 export function listarCompeticoes(seasonId?: number): Competicao[] {
@@ -415,13 +417,15 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
     organizacao: dados.organizacao,
     ativa: dados.ativa ? 1 : 0,
     nivelMinimo: dados.nivelMinimo,
-    usaDelegadoCampo: dados.usaDelegadoCampo ? 1 : 0
+    usaDelegadoCampo: dados.usaDelegadoCampo ? 1 : 0,
+    todosComDelegado: dados.todosComDelegado ? 1 : 0
   }
   if (dados.id) {
     db.prepare(
       `UPDATE competicao SET fpf_competition_id=@fpfCompetitionId, season_id=@seasonId,
         season_descricao=@seasonDescricao, nome=@nome, organizacao=@organizacao, ativa=@ativa,
-        nivel_minimo=@nivelMinimo, usa_delegado_campo=@usaDelegadoCampo WHERE id=@id`
+        nivel_minimo=@nivelMinimo, usa_delegado_campo=@usaDelegadoCampo,
+        todos_com_delegado=@todosComDelegado WHERE id=@id`
     ).run({ ...params, id: dados.id })
     return listarCompeticoes().find((c) => c.id === dados.id)!
   }
@@ -432,12 +436,14 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
   const linha = db
     .prepare(
       `INSERT INTO competicao (fpf_competition_id, season_id, season_descricao, nome, organizacao,
-         ativa, nivel_minimo, usa_delegado_campo)
+         ativa, nivel_minimo, usa_delegado_campo, todos_com_delegado)
        VALUES (@fpfCompetitionId, @seasonId, @seasonDescricao, @nome, @organizacao, @ativa,
-         @nivelMinimo, @usaDelegadoCampo)
+         @nivelMinimo, @usaDelegadoCampo, @todosComDelegado)
        ON CONFLICT(fpf_competition_id, season_id) DO UPDATE SET
          nome = excluded.nome, organizacao = excluded.organizacao, ativa = excluded.ativa,
          season_descricao = COALESCE(excluded.season_descricao, competicao.season_descricao)
+         -- todos_com_delegado fica de fora: é uma decisão do coordenador, e
+         -- uma resincronização não pode desfazê-la.
        RETURNING id`
     )
     .get(params) as { id: number } | undefined
@@ -479,6 +485,7 @@ type LinhaJogo = {
   alterado_em: string | null
   escondido: number
   escondido_em: string | null
+  leva_delegado: number | null
   editado_manualmente: number
   editado_em: string | null
   ultima_alteracao: string | null
@@ -503,6 +510,7 @@ const paraJogo = (l: LinhaJogo): Jogo => ({
   alteradoEm: l.alterado_em,
   escondido: !!l.escondido,
   escondidoEm: l.escondido_em,
+  levaDelegado: l.leva_delegado == null ? null : !!l.leva_delegado,
   editadoManualmente: !!l.editado_manualmente,
   editadoEm: l.editado_em,
   ultimaAlteracao: l.ultima_alteracao
@@ -511,6 +519,11 @@ const paraJogo = (l: LinhaJogo): Jogo => ({
 export interface FiltroJogos {
   /** `true` devolve **apenas** os escondidos; por omissão são omitidos. */
   escondidos?: boolean
+  /**
+   * Que jogos devolver quanto a levarem delegado:
+   * `'COM'` (por omissão) só os que levam, `'SEM'` só os outros, `'TODOS'` tudo.
+   */
+  levaDelegado?: 'COM' | 'SEM' | 'TODOS'
   de?: string
   ate?: string
   competicaoId?: number
@@ -551,6 +564,13 @@ export function listarJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
   }
   // Os escondidos ficam de fora de tudo menos de quem os peça de propósito.
   condicoes.push(filtro.escondidos ? 'j.escondido = 1' : 'j.escondido = 0')
+
+  // Nas competições em que todos os jogos levam delegado, o jogo entra sozinho;
+  // nas outras, só se o coordenador o tiver marcado. `leva_delegado` a NULL
+  // segue a competição, e um valor guardado manda sobre ela.
+  const LEVA = 'COALESCE(j.leva_delegado, comp.todos_com_delegado) = 1'
+  if (filtro.levaDelegado === 'SEM') condicoes.push(`NOT (${LEVA})`)
+  else if (filtro.levaDelegado !== 'TODOS') condicoes.push(LEVA)
   const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : ''
   const linhas = obterBaseDados()
     .prepare(`${SQL_JOGO_DETALHADO} ${where} ORDER BY j.data_hora, comp.nome`)
@@ -592,6 +612,20 @@ export function listarJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
  * fica no ecrã Escondidos até a data passar. Nomeações que existam ficam como
  * estão — se o jogo voltar, volta como estava.
  */
+/**
+ * Marca (ou desmarca) um jogo como levando delegado, à margem da competição.
+ *
+ * `null` devolve o jogo à regra da competição. É assim que se acrescenta à
+ * lista de trabalho um jogo da Taça, ou se tira um jogo de uma competição em
+ * que os restantes levam todos delegado.
+ */
+export function definirLevaDelegado(id: number, leva: boolean | null): void {
+  obterBaseDados()
+    .prepare('UPDATE jogo SET leva_delegado = ? WHERE id = ?')
+    .run(leva == null ? null : leva ? 1 : 0, id)
+  registarAuditoria('jogo', id, 'leva-delegado', { leva })
+}
+
 export function esconderJogo(id: number, escondido: boolean): void {
   obterBaseDados()
     .prepare('UPDATE jogo SET escondido = ?, escondido_em = ? WHERE id = ?')

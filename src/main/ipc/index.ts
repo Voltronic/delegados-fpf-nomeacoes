@@ -498,6 +498,12 @@ export function registarIpc(contexto: {
   /** Devolve o jogo ao controlo da FPF, voltando a ser atualizado. */
   registar('jogos:seguirFpf', (id: number) => repos.seguirFpfDeNovo(id))
 
+  /** Marca um jogo como levando delegado (ou devolve-o à regra da competição). */
+  registar('jogos:levaDelegado', (id: number, leva: boolean | null) => {
+    repos.definirLevaDelegado(id, leva)
+    return repos.obterJogoDetalhado(id)
+  })
+
   registar('jogos:esconder', (id: number, escondido: boolean) => {
     repos.esconderJogo(id, escondido)
     return repos.obterJogoDetalhado(id)

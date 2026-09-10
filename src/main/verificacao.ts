@@ -25,6 +25,7 @@ import { semearRecintos } from './db/semente'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
 import { limiteDeTrabalho } from '../shared/datas'
+import { alertasDeAlteracao } from './sync/agendador'
 import { obterTrajeto } from './geo'
 import { RECINTOS_CONHECIDOS } from './geo/recintosConhecidos'
 import {
@@ -302,7 +303,8 @@ async function principal(): Promise<void> {
       organizacao: 'Competições FPF',
       ativa: true,
       nivelMinimo: null,
-      usaDelegadoCampo: true
+      usaDelegadoCampo: true,
+      todosComDelegado: true
     })
 
     const clubes = ['Clube Braga', 'Clube Coimbra', 'Clube Faro', 'Clube Lisboa'].map((n) =>
@@ -335,6 +337,77 @@ async function principal(): Promise<void> {
     repos.definirRecintoDoClube(clubes[0].id, competicao.id, recintos[0].id)
 
     log('\n3. Jogos')
+    // Competições em que só alguns jogos levam delegado — a Taça é o caso real.
+    // Os jogos dessas ficam fora da lista de trabalho até serem escolhidos.
+    const taca = repos.guardarCompeticao({
+      fpfCompetitionId: 29999,
+      seasonId: 106,
+      seasonDescricao: '2026-2027',
+      nome: 'TAÇA DE TESTE SEM DELEGADO FIXO',
+      organizacao: 'Competições FPF',
+      ativa: true,
+      nivelMinimo: null,
+      usaDelegadoCampo: false,
+      todosComDelegado: false
+    })
+    const jogoDaTaca = repos.guardarJogo({
+      chaveNatural: 'teste:taca',
+      competicaoId: taca.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: null,
+      fpfMatchId: null,
+      dataHora: '2026-10-25T15:00',
+      clubeCasaId: clubes[0].id,
+      clubeForaId: clubes[1].id,
+      recintoId: repos.recintoDoClube(clubes[0].id, taca.id),
+      recintoTextoFpf: null,
+      estado: 'AGENDADO'
+    })
+
+    verificar(
+      'os jogos de competições sem delegado fixo ficam fora da lista',
+      !repos.listarJogos().some((j) => j.id === jogoDaTaca),
+      `→ ${repos.listarJogos().length} jogos na lista`
+    )
+    verificar(
+      'mas encontram-se quando se pedem à parte',
+      repos.listarJogos({ levaDelegado: 'SEM' }).some((j) => j.id === jogoDaTaca)
+    )
+
+    repos.definirLevaDelegado(jogoDaTaca, true)
+    verificar(
+      'marcar um jogo trá-lo para a lista de nomeações',
+      repos.listarJogos().some((j) => j.id === jogoDaTaca) &&
+        !repos.listarJogos({ levaDelegado: 'SEM' }).some((j) => j.id === jogoDaTaca)
+    )
+
+    repos.definirLevaDelegado(jogoDaTaca, null)
+    verificar(
+      'e desmarcar devolve-o à regra da competição',
+      !repos.listarJogos().some((j) => j.id === jogoDaTaca)
+    )
+
+    // A decisão do coordenador não pode ser desfeita por uma resincronização.
+    repos.guardarCompeticao({ ...taca, todosComDelegado: true })
+    repos.guardarCompeticao({
+      fpfCompetitionId: taca.fpfCompetitionId,
+      seasonId: taca.seasonId,
+      seasonDescricao: taca.seasonDescricao,
+      nome: taca.nome,
+      organizacao: taca.organizacao,
+      ativa: true,
+      nivelMinimo: null,
+      usaDelegadoCampo: false,
+      todosComDelegado: false
+    })
+    verificar(
+      'resincronizar não desfaz a definição da competição',
+      repos.listarCompeticoes().find((c) => c.id === taca.id)?.todosComDelegado === true
+    )
+    repos.guardarCompeticao({ ...taca, todosComDelegado: false })
+
     const jogoIds: number[] = []
     for (let i = 0; i < 8; i++) {
       const casa = clubes[i % 4]
@@ -789,7 +862,8 @@ async function principal(): Promise<void> {
       organizacao: 'Competições FPF',
       ativa: false,
       nivelMinimo: null,
-      usaDelegadoCampo: true
+      usaDelegadoCampo: true,
+      todosComDelegado: true
     })
     const delegadoRepetidor = delegados[0]
     // Um clube só deste cenário: o delegado já tem nomeações de outros clubes
@@ -848,6 +922,41 @@ async function principal(): Promise<void> {
       'todos os delegados ativos aparecem na tabela, com ou sem repetições',
       repeticoes.length === repos.listarDelegados(false).length,
       `→ ${repeticoes.length} linhas`
+    )
+
+    // Uma alteração de hora avisa mesmo que ninguém esteja nomeado: muda quem
+    // pode ir ao jogo, e antes só se avisava sobre jogos já nomeados.
+    // Um jogo criado para este cenário: escolher um qualquer da lista dava um
+    // jogo do passado, que as regras filtram — e o teste falhava por isso.
+    const idSemDelegado = jogoEm('teste:sem-delegado', horasDaqui(72))
+    const semDelegado = repos.obterJogoDetalhado(idSemDelegado)!
+    const alertaSemDelegado = repos.criarAlertas(
+      alertasDeAlteracao([
+        {
+          tipo: 'ALTERADO',
+          chaveNatural: semDelegado.chaveNatural,
+          competicaoNome: semDelegado.competicaoNome,
+          clubeCasa: semDelegado.clubeCasaNome,
+          clubeFora: semDelegado.clubeForaNome,
+          jornada: semDelegado.jornada,
+          dataHora: semDelegado.dataHora,
+          recinto: semDelegado.recintoNome,
+          alteracoes: [
+            { campo: 'Data e hora', antes: '2026-09-19T15:00', depois: semDelegado.dataHora }
+          ],
+          temNomeacoes: false,
+          jogoId: semDelegado.id
+        }
+      ])
+    )
+    verificar(
+      'uma alteração num jogo sem delegado também avisa',
+      alertaSemDelegado.length === 1,
+      `→ ${alertaSemDelegado[0]?.detalhe ?? 'sem alerta'}`
+    )
+    verificar(
+      'e o aviso diz que o jogo ainda não tem delegado',
+      (alertaSemDelegado[0]?.detalhe ?? '').includes('sem delegado nomeado')
     )
 
     // Regras dos alertas: nada sobre jogos que já começaram, e nada repetido —
@@ -1125,7 +1234,10 @@ async function principal(): Promise<void> {
       importarCsv(csv, 106, '2026-2027').criados === 0
     )
 
-    verificar('lista os alertas por ler', repos.listarAlertas(true).length === 1)
+    // Quantos alertas existem depende do que as secções anteriores geraram; o
+    // que interessa é que os por ler aparecem e que marcar como lido os limpa.
+    const porLer = repos.listarAlertas(true).length
+    verificar('lista os alertas por ler', porLer > 0, `→ ${porLer} por ler`)
     repos.marcarTodosAlertasLidos()
     verificar('marcar como lido limpa a lista de por ler', repos.listarAlertas(true).length === 0)
 

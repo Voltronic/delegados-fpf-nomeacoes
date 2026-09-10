@@ -64,7 +64,8 @@ function semear(): void {
     organizacao: 'Competições FPF',
     ativa: true,
     nivelMinimo: null,
-    usaDelegadoCampo: true
+    usaDelegadoCampo: true,
+    todosComDelegado: true
   })
 
   const clubes = ['Sc Braga "B"', 'Cdc Montalegre', 'Fc Tirsense'].map((n) => repos.encontrarOuCriarClube(n))

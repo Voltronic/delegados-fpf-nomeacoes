@@ -108,6 +108,7 @@ export default function Definicoes(): JSX.Element {
             <thead>
               <tr>
                 <th style={{ width: 70 }}>Ativo</th>
+                <th style={{ width: 150 }}>Delegado em todos</th>
                 <th>Critério</th>
                 <th style={{ width: 220 }}>Peso</th>
                 <th className="num" style={{ width: 90 }}>
@@ -203,7 +204,9 @@ export default function Definicoes(): JSX.Element {
         <div className="cartao">
           <h2>Competições</h2>
           <p className="silencioso" style={{ marginTop: 0 }}>
-            Defina se uma competição exige delegado de elite e se leva delegado de campo além do principal.
+            Defina se todos os jogos da competição levam delegado, se exige delegado de elite e se leva
+            delegado de campo além do principal. Nas competições sem delegado em todos os jogos — a Taça,
+            por exemplo — os jogos ficam fora da lista de nomeações até serem escolhidos um a um.
           </p>
           <table className="tabela">
             <thead>
@@ -220,6 +223,22 @@ export default function Definicoes(): JSX.Element {
                 <tr key={c.id}>
                   <td>{c.nome}</td>
                   <td className="silencioso">{c.seasonDescricao ?? `Época ${c.seasonId}`}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      style={{ width: 'auto' }}
+                      checked={c.todosComDelegado}
+                      title="Todos os jogos desta competição levam delegado"
+                      onChange={async (e) => {
+                        const lista = await guardarCom(
+                          () =>
+                            window.api.competicoes.guardar({ ...c, todosComDelegado: e.target.checked }),
+                          `${c.nome}: ${e.target.checked ? 'todos os jogos levam delegado' : 'só os jogos escolhidos levam delegado'}.`
+                        )
+                        if (lista) setCompeticoes(lista)
+                      }}
+                    />
+                  </td>
                   <td>
                     <select
                       value={c.nivelMinimo ?? ''}

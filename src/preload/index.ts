@@ -97,6 +97,7 @@ const api = {
     importarCsv: invocar('jogos:importarCsv'),
     editar: invocar('jogos:editar'),
     seguirFpf: invocar('jogos:seguirFpf'),
+    levaDelegado: invocar('jogos:levaDelegado'),
     esconder: invocar('jogos:esconder'),
     escondidos: invocar('jogos:escondidos'),
     historico: invocar('jogos:historico')

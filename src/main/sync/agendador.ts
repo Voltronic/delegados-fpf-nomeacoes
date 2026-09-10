@@ -36,6 +36,13 @@ function nomesDosDelegados(jogo: JogoDetalhado): string {
     .join(' e ')
 }
 
+/** A parte do aviso que diz quem é afetado pela alteração. */
+function quemEAfetado(jogo: JogoDetalhado): string {
+  return jogo.nomeacoes.length
+    ? `Nomeado: ${nomesDosDelegados(jogo)}.`
+    : 'Ainda sem delegado nomeado.'
+}
+
 function formatarData(iso: string | null): string {
   if (!iso) return 'sem data'
   const [data, hora] = iso.split('T')
@@ -44,11 +51,13 @@ function formatarData(iso: string | null): string {
 }
 
 /**
- * Alertas para os jogos alterados que já têm delegado nomeado. A alteração já
- * foi aplicada — o alerta é o que garante que o coordenador não descobre o
- * adiamento tarde de mais.
+ * Alertas para os jogos alterados. A alteração já foi aplicada — o alerta é o
+ * que garante que o coordenador não descobre o adiamento tarde de mais.
+ *
+ * Vale para qualquer jogo, tenha delegado ou não: uma mudança de hora num jogo
+ * por nomear muda quem lhe pode ir.
  */
-function alertasDeAlteracao(diffs: DiffJogo[]): EntradaAlerta[] {
+export function alertasDeAlteracao(diffs: DiffJogo[]): EntradaAlerta[] {
   const entradas: EntradaAlerta[] = []
   for (const d of diffs) {
     if (!d.jogoId) continue
@@ -70,7 +79,7 @@ function alertasDeAlteracao(diffs: DiffJogo[]): EntradaAlerta[] {
       competicao: d.competicaoNome,
       descricao: descreverJogo(jogo),
       dataHora: d.dataHora,
-      detalhe: `${mudancas}. Nomeado: ${nomesDosDelegados(jogo)}.`
+      detalhe: `${mudancas}. ${quemEAfetado(jogo)}`
     })
   }
   return entradas

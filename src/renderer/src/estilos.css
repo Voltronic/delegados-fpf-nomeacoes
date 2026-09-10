@@ -552,6 +552,69 @@ table.tabela th.num {
   object-fit: contain;
 }
 
+/* ------------------------------------ jogos de competições sem delegado fixo */
+
+/*
+ * Ficam no fundo da lista, fechados. Não são trabalho até alguém decidir que
+ * são — mas têm de estar à mão, senão o coordenador não sabe que existem.
+ */
+.outros-jogos {
+  border-top: 1px solid var(--borda);
+  background: var(--superficie-2);
+}
+
+.outros-jogos .cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--texto-suave);
+  text-align: left;
+  cursor: pointer;
+}
+
+.outros-jogos .cabecalho:hover {
+  color: var(--texto);
+}
+
+.outros-jogos .cabecalho .seta {
+  font-size: 9px;
+}
+
+.outros-jogos .explicacao {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: var(--texto-fraco);
+}
+
+.outros-jogos .outro-jogo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--borda);
+}
+
+.outros-jogos .outro-jogo .topo {
+  font-size: 11px;
+  color: var(--texto-suave);
+}
+
+.outros-jogos .outro-jogo .equipas {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.outros-jogos .outro-jogo .botao {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 /* -------------------------------------------------- faixa de jogos urgentes */
 
 /*

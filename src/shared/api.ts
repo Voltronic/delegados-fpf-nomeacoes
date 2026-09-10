@@ -27,6 +27,11 @@ import type {
 } from './tipos'
 
 export interface FiltroJogosApi {
+  /**
+   * Jogos que levam delegado (`'COM'`, por omissão), os que não levam
+   * (`'SEM'`), ou todos.
+   */
+  levaDelegado?: 'COM' | 'SEM' | 'TODOS'
   de?: string
   ate?: string
   competicaoId?: number
@@ -222,6 +227,11 @@ export interface Api {
     editar(id: number, dados: EdicaoJogo): Promise<JogoDetalhado | null>
     /** Devolve o jogo ao controlo da FPF. */
     seguirFpf(id: number): Promise<JogoDetalhado | null>
+    /**
+     * Marca um jogo como levando delegado, ou devolve-o à regra da competição
+     * com `null`. É assim que entra na lista um jogo da Taça.
+     */
+    levaDelegado(id: number, leva: boolean | null): Promise<JogoDetalhado | null>
     /** Tira (ou repõe) um jogo das listas de trabalho, sem apagar nada. */
     esconder(id: number, escondido: boolean): Promise<JogoDetalhado | null>
     /** Jogos escondidos que ainda estão para acontecer. */

@@ -96,6 +96,21 @@ export interface ClubeRecinto {
   recintoId: number
 }
 
+/**
+ * Competições em que todos os jogos levam delegado.
+ *
+ * Nas restantes — Taça, por exemplo — só alguns jogos levam, e é o coordenador
+ * que os escolhe. Esta lista é o valor de partida de cada competição nova; a
+ * partir daí, quem manda é a definição guardada.
+ */
+export const COMPETICOES_COM_DELEGADO_SEMPRE = [
+  'LIGA 3 PLACARD',
+  'LIGA NEXT GEN',
+  'LIGA BPI',
+  'LIGA PLACARD',
+  'LIGA FEMININA PLACARD'
+]
+
 export interface Competicao {
   id: number
   fpfCompetitionId: number | null
@@ -107,6 +122,8 @@ export interface Competicao {
   ativa: boolean
   nivelMinimo: NivelDelegado | null
   usaDelegadoCampo: boolean
+  /** Todos os jogos levam delegado, ou só os que o coordenador marcar. */
+  todosComDelegado: boolean
 }
 
 export interface Jogo {
@@ -129,6 +146,11 @@ export interface Jogo {
   /** Retirado da lista pelo coordenador; recuperável no ecrã Escondidos. */
   escondido: boolean
   escondidoEm: string | null
+  /**
+   * Se este jogo leva delegado. `null` segue a competição; `true`/`false` são
+   * decisões do coordenador para este jogo em concreto.
+   */
+  levaDelegado: boolean | null
   /** Corrigido à mão: a sincronização deixa de lhe tocar. */
   editadoManualmente: boolean
   editadoEm: string | null
