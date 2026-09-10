@@ -130,6 +130,16 @@ h4 {
   line-height: 1.5;
 }
 
+/* A hora da última atualização é o que se vem aqui ver: destaca-se do resto. */
+.barra-lateral .rodape .actualizacao {
+  color: #93a2ba;
+  margin-bottom: 3px;
+}
+
+.barra-lateral .rodape .actualizacao b {
+  color: #d7e0ee;
+}
+
 .conteudo {
   display: flex;
   flex-direction: column;

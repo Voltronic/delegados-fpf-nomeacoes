@@ -54,3 +54,26 @@ export function paraDataIso(data: Date): string {
 export function classes(...valores: (string | false | null | undefined)[]): string {
   return valores.filter(Boolean).join(' ')
 }
+
+/**
+ * A hora de um instante guardado em ISO (UTC), no relógio de quem está a ver.
+ * As atualizações são gravadas com `toISOString()`, ao contrário das datas dos
+ * jogos, que são hora local sem fuso.
+ */
+export function horaCurta(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** Se um instante ISO é de hoje, para não repetir a data quando é óbvia. */
+export function eHoje(iso: string): boolean {
+  const d = new Date(iso)
+  const agora = new Date()
+  return (
+    d.getFullYear() === agora.getFullYear() &&
+    d.getMonth() === agora.getMonth() &&
+    d.getDate() === agora.getDate()
+  )
+}

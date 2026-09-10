@@ -12,7 +12,7 @@ import Escondidos from './screens/Escondidos'
 import Historico from './screens/Historico'
 import Importacao from './screens/Importacao'
 import Nomeacoes from './screens/Nomeacoes'
-import { classes } from './lib/formato'
+import { classes, eHoje, formatarData, horaCurta } from './lib/formato'
 
 type Ecra =
   | 'nomeacoes'
@@ -43,6 +43,7 @@ export default function App(): JSX.Element {
   const [alertas, setAlertas] = useState<Alerta[]>([])
   const [aviso, setAviso] = useState<Alerta[] | null>(null)
   const [progresso, setProgresso] = useState<ProgressoSincronizacao | null>(null)
+  const [ultimaEm, setUltimaEm] = useState<string | null>(null)
   // Muda sempre que uma atualização termina, para os ecrãs recarregarem sozinhos.
   const [versaoDados, setVersaoDados] = useState(0)
 
@@ -52,6 +53,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     void window.api.app.info().then(setInfo)
+    void window.api.sync.estado().then((e) => setUltimaEm(e.ultimaEm))
     void recarregarAlertas()
 
     // A atualização automática corre em segundo plano; quando traz novidades,
@@ -60,7 +62,8 @@ export default function App(): JSX.Element {
       void recarregarAlertas()
       setAviso(novos)
     })
-    const largarSync = window.api.sync.aoConcluir(() => {
+    const largarSync = window.api.sync.aoConcluir((resultado) => {
+      setUltimaEm(resultado.quando)
       void recarregarAlertas()
       setProgresso(null)
       setVersaoDados((v) => v + 1)
@@ -107,9 +110,22 @@ export default function App(): JSX.Element {
         )}
 
         <div className="rodape">
-          v{info?.versao ?? '—'}
-          <br />
-          Atualiza de hora a hora
+          {/*
+            De quando são os dados que estão no ecrã. Sem isto, uma falha de
+            rede passava despercebida: a lista continuava a mostrar o que havia
+            e nada dizia que estava parada.
+          */}
+          <div className="actualizacao">
+            {ultimaEm ? (
+              <>
+                Jogos atualizados às <b>{horaCurta(ultimaEm)}</b>
+                {!eHoje(ultimaEm) && <> de {formatarData(ultimaEm)}</>}
+              </>
+            ) : (
+              'Jogos ainda não atualizados'
+            )}
+          </div>
+          v{info?.versao ?? '—'} · atualiza de hora a hora
         </div>
       </nav>
 

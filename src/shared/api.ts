@@ -278,7 +278,12 @@ export interface Api {
   }
 
   sync: {
-    estado(): Promise<{ aCorrer: boolean; ultima: ResultadoAtualizacao | null }>
+    estado(): Promise<{
+      aCorrer: boolean
+      ultima: ResultadoAtualizacao | null
+      /** Quando terminou a última atualização, mesmo de sessões anteriores. */
+      ultimaEm: string | null
+    }>
     agora(): Promise<ResultadoAtualizacao>
     aoConcluir(ouvinte: (r: ResultadoAtualizacao) => void): () => void
   }

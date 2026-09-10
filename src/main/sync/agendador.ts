@@ -6,7 +6,7 @@ import type {
   ProgressoSincronizacao,
   ResultadoAtualizacao
 } from '@shared/tipos'
-import { lerConfig } from '../db'
+import { escreverConfig, lerConfig } from '../db'
 import * as repos from '../db/repos'
 import type { EntradaAlerta } from '../db/repos'
 import { ClienteFpf } from '../fpf/cliente'
@@ -234,6 +234,10 @@ export async function atualizarJogos(
   resultado.alertas.push(...repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas()))
 
   ultimaAtualizacao = resultado
+  // Guardado em base de dados, e não só em memória: ao abrir a aplicação o
+  // coordenador tem de saber de quando são os dados que está a ver, mesmo antes
+  // de a primeira atualização do dia terminar — ou se estiver sem rede.
+  escreverConfig('sync.ultimaEm', resultado.quando)
   return resultado
 }
 
@@ -283,8 +287,18 @@ export function pararAgendador(): void {
   temporizador = null
 }
 
-export function estadoAtualizacao(): { aCorrer: boolean; ultima: ResultadoAtualizacao | null } {
-  return { aCorrer, ultima: ultimaAtualizacao }
+export function estadoAtualizacao(): {
+  aCorrer: boolean
+  ultima: ResultadoAtualizacao | null
+  ultimaEm: string | null
+} {
+  return {
+    aCorrer,
+    ultima: ultimaAtualizacao,
+    // Vale a de memória se houve atualização nesta sessão; senão, a que ficou
+    // guardada da última vez que a aplicação esteve aberta.
+    ultimaEm: ultimaAtualizacao?.quando ?? lerConfig('sync.ultimaEm')
+  }
 }
 
 export type { Alerta }

@@ -857,6 +857,18 @@ app.whenReady().then(async () => {
       `→ ${marca.racioDesenhado} vs ${marca.racioOriginal}`
     )
 
+    log('\n6d. Hora da última atualização')
+    // A verificação corre uma atualização (secção 6); a barra lateral tem de
+    // passar a dizer de quando são os dados que estão no ecrã.
+    const rodape = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.barra-lateral .rodape')?.innerText.replace(/\\s+/g, ' ') ?? ''"
+    )) as string
+    verificar(
+      'a barra lateral diz a hora da última atualização dos jogos',
+      /atualizados às \d{2}:\d{2}/.test(rodape),
+      `→ ${rodape}`
+    )
+
     log('\n7. Erros de consola')
     const pilhas = (await janela.webContents.executeJavaScript('window.__pilhas ?? []')) as string[]
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
