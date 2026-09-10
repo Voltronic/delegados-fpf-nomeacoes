@@ -559,8 +559,24 @@ table.tabela th.num {
  * são — mas têm de estar à mão, senão o coordenador não sabe que existem.
  */
 .outros-jogos {
-  border-top: 1px solid var(--borda);
+  /*
+   * Colado ao fundo do painel: com dezenas de jogos na lista, um bloco no fim
+   * ficava fora do ecrã e ninguém sabia que existia. Assim está sempre à vista
+   * sem ocupar espaço de trabalho.
+   */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--borda-forte);
   background: var(--superficie-2);
+  box-shadow: 0 -4px 10px rgba(20, 28, 40, 0.06);
+}
+
+/* A lista aberta não pode empurrar o painel: rola dentro do próprio bloco. */
+.outros-jogos .lista {
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--superficie);
 }
 
 .outros-jogos .cabecalho {

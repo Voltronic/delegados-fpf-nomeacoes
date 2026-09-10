@@ -106,6 +106,38 @@ function semear(): void {
   // Um recinto por localizar, para o ecrã de recintos ter o caso real a mostrar.
   repos.encontrarOuCriarRecinto('Campo Sem Coordenadas')
 
+  // Uma competição em que só alguns jogos levam delegado, com um jogo nesta
+  // semana: é o caso da Taça, e é o que faz aparecer o bloco no fim da lista.
+  const taca = repos.guardarCompeticao({
+    fpfCompetitionId: 29999,
+    seasonId: 106,
+    seasonDescricao: '2026-2027',
+    nome: 'TAÇA DE PORTUGAL DE TESTE',
+    organizacao: 'Competições FPF',
+    ativa: true,
+    nivelMinimo: null,
+    usaDelegadoCampo: false,
+    todosComDelegado: false
+  })
+  const amanha = new Date(hoje)
+  amanha.setDate(hoje.getDate() + 1)
+  const pd = (n: number): string => String(n).padStart(2, '0')
+  repos.guardarJogo({
+    chaveNatural: 'ui:taca',
+    competicaoId: taca.id,
+    fase: null,
+    serie: null,
+    jornada: null,
+    fpfFixtureId: 652399,
+    fpfMatchId: null,
+    dataHora: `${amanha.getFullYear()}-${pd(amanha.getMonth() + 1)}-${pd(amanha.getDate())}T16:00`,
+    clubeCasaId: clubes[2].id,
+    clubeForaId: clubes[0].id,
+    recintoId: recintos[2].id,
+    recintoTextoFpf: null,
+    estado: 'AGENDADO'
+  })
+
   // Um jogo já realizado, com delegado: sem ele o ecrã de histórico ficava
   // vazio consoante a hora a que a verificação corresse, e o teste da correção
   // de nomeações não tinha o que testar.
@@ -642,6 +674,81 @@ app.whenReady().then(async () => {
       "document.querySelectorAll('.tres-paineis > .painel:not(.escondido)').length"
     )) as number
     verificar('fechar a janela devolve o mapa ao ecrã', voltou === 3, `→ ${voltou} painéis`)
+
+    log('\n2d. Jogos de competições sem delegado fixo')
+    await irPara('Nomeações')
+    // O jogo da Taça não pode estar na lista de trabalho, mas tem de estar
+    // à mão: é isso que o bloco no fim da lista serve.
+    const bloco = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const b = document.querySelector('.outros-jogos');
+         if (!b) return JSON.stringify({ presente: false });
+         const lista = document.querySelector('.painel-corpo');
+         const itens = [...(lista?.children ?? [])];
+         return JSON.stringify({
+           presente: true,
+           texto: b.querySelector('.cabecalho')?.textContent?.replace(/\\s+/g, ' ').trim(),
+           noFim: itens.indexOf(b) === itens.length - 1,
+           jogosNaLista: document.querySelectorAll('.item-jogo').length
+         });
+       })()`
+    )) as string
+    const outros = JSON.parse(bloco) as {
+      presente: boolean
+      texto?: string
+      noFim?: boolean
+      jogosNaLista?: number
+    }
+    verificar(
+      'os jogos sem delegado fixo aparecem num bloco no fim da lista',
+      outros.presente && outros.noFim === true && /sem delegado fixo/.test(outros.texto ?? ''),
+      `→ ${bloco}`
+    )
+
+    // Com a lista rolada até ao fim, o bloco tem de continuar visível: era
+    // assim que ele desaparecia do ecrã em semanas com dezenas de jogos.
+    const visivelComScroll = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const corpo = document.querySelector('.painel-corpo');
+         const b = document.querySelector('.outros-jogos');
+         if (!corpo || !b) return JSON.stringify({ erro: 'sem bloco' });
+         corpo.scrollTop = 0;
+         const r = b.getBoundingClientRect();
+         const c = corpo.getBoundingClientRect();
+         return JSON.stringify({
+           dentroDoPainel: r.bottom <= c.bottom + 1 && r.top >= c.top - 1,
+           altura: Math.round(r.height)
+         });
+       })()`
+    )) as string
+    const fixo = JSON.parse(visivelComScroll) as { dentroDoPainel?: boolean; altura?: number }
+    verificar(
+      'o bloco fica à vista mesmo com a lista no topo',
+      fixo.dentroDoPainel === true && (fixo.altura ?? 0) > 0,
+      `→ ${visivelComScroll}`
+    )
+
+    // E trazer um para a lista tem de funcionar com um clique.
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.outros-jogos .cabecalho')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.outros-jogos .botao')].find((b) => b.textContent.includes('Nomear'))?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 1200))
+    const depois = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         jogos: document.querySelectorAll('.item-jogo').length,
+         restam: document.querySelectorAll('.outros-jogos .outro-jogo').length
+       })`
+    )) as string
+    const trazido = JSON.parse(depois) as { jogos: number; restam: number }
+    verificar(
+      '"+ Nomear" traz o jogo para a lista de trabalho',
+      trazido.jogos === (outros.jogosNaLista ?? 0) + 1 && trazido.restam === 0,
+      `→ ${depois}`
+    )
 
     log('\n3b. Dashboard: ordenação e altura das tabelas')
     await irPara('Dashboard')

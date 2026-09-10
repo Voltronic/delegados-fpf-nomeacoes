@@ -471,44 +471,6 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   )}
                 </div>
               )}
-              {outros.length > 0 && (
-                <div className="outros-jogos">
-                  <button className="cabecalho" onClick={() => setVerOutros((v) => !v)}>
-                    <span className="seta" aria-hidden>
-                      {verOutros ? '▾' : '▸'}
-                    </span>
-                    {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado
-                    fixo
-                  </button>
-                  {verOutros && (
-                    <div className="lista">
-                      <div className="explicacao">
-                        Nestas competições só alguns jogos levam delegado. Escolha os que quer nomear.
-                      </div>
-                      {outros.map((j) => (
-                        <div key={j.id} className="outro-jogo">
-                          <div>
-                            <div className="topo">
-                              {formatarDataHora(j.dataHora)} · {j.competicaoNome}
-                            </div>
-                            <div className="equipas">
-                              {j.clubeCasaNome} × {j.clubeForaNome}
-                            </div>
-                          </div>
-                          <button
-                            className="botao pequeno"
-                            title="Trazer este jogo para a lista de nomeações"
-                            onClick={() => marcarLevaDelegado(j, true)}
-                          >
-                            + Nomear
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {jogos.map((j) => (
                 <div
                   key={j.id}
@@ -587,6 +549,44 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   )}
                 </div>
               ))}
+
+              {outros.length > 0 && (
+                <div className="outros-jogos">
+                  <button className="cabecalho" onClick={() => setVerOutros((v) => !v)}>
+                    <span className="seta" aria-hidden>
+                      {verOutros ? '▾' : '▸'}
+                    </span>
+                    {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado
+                    fixo
+                  </button>
+                  {verOutros && (
+                    <div className="lista">
+                      <div className="explicacao">
+                        Nestas competições só alguns jogos levam delegado. Escolha os que quer nomear.
+                      </div>
+                      {outros.map((j) => (
+                        <div key={j.id} className="outro-jogo">
+                          <div>
+                            <div className="topo">
+                              {formatarDataHora(j.dataHora)} · {j.competicaoNome}
+                            </div>
+                            <div className="equipas">
+                              {j.clubeCasaNome} × {j.clubeForaNome}
+                            </div>
+                          </div>
+                          <button
+                            className="botao pequeno"
+                            title="Trazer este jogo para a lista de nomeações"
+                            onClick={() => marcarLevaDelegado(j, true)}
+                          >
+                            + Nomear
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
