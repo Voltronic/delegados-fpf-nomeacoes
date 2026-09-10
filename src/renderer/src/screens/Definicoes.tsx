@@ -108,7 +108,6 @@ export default function Definicoes(): JSX.Element {
             <thead>
               <tr>
                 <th style={{ width: 70 }}>Ativo</th>
-                <th style={{ width: 150 }}>Delegado em todos</th>
                 <th>Critério</th>
                 <th style={{ width: 220 }}>Peso</th>
                 <th className="num" style={{ width: 90 }}>
@@ -213,6 +212,7 @@ export default function Definicoes(): JSX.Element {
               <tr>
                 <th>Competição</th>
                 <th style={{ width: 90 }}>Época</th>
+                <th style={{ width: 150 }}>Delegado em todos os jogos</th>
                 <th style={{ width: 170 }}>Nível mínimo</th>
                 <th style={{ width: 140 }}>Delegado de campo</th>
                 <th style={{ width: 90 }}>Ativa</th>

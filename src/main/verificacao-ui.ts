@@ -870,6 +870,29 @@ app.whenReady().then(async () => {
       `→ ${rodape}`
     )
 
+    log('\n6e. Tabelas com cabeçalhos completos')
+    // Uma coluna sem cabeçalho é uma coluna que ninguém sabe o que é. Foi o
+    // que aconteceu ao acrescentar "delegado em todos os jogos": a célula
+    // entrou numa tabela e o cabeçalho noutra.
+    await irPara('Definições')
+    const cabecalhos = (await janela.webContents.executeJavaScript(
+      `(() => {
+         const erradas = [...document.querySelectorAll('.tabela')]
+           .map((t) => ({
+             titulo: t.closest('.cartao')?.querySelector('h2')?.textContent ?? '?',
+             cabecalhos: t.querySelectorAll('thead th').length,
+             celulas: t.querySelector('tbody tr')?.children.length ?? 0
+           }))
+           .filter((t) => t.celulas > 0 && t.cabecalhos !== t.celulas);
+         return JSON.stringify(erradas);
+       })()`
+    )) as string
+    verificar(
+      'nenhuma tabela tem colunas sem cabeçalho',
+      cabecalhos === '[]',
+      `→ ${cabecalhos}`
+    )
+
     log('\n7. Erros de consola')
     const pilhas = (await janela.webContents.executeJavaScript('window.__pilhas ?? []')) as string[]
     verificar('sem erros no renderer', erros.length === 0, erros.length ? `→ ${erros.join(' || ')}` : '')
