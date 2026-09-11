@@ -404,6 +404,7 @@ export function reconciliarRecintos(desde = limiteDeTrabalho()): RecintoCorrigid
         jornada: antes.jornada
       })
       atualizar.run(certo, agora(), alteracao, l.id)
+      associarRecintoDoJogo(l.clube_casa_id, l.competicao_id, certo)
       corrigidos.push({ jogoId: l.id, temNomeacoes: antes.nomeacoes.length > 0 })
     }
   })()
@@ -450,6 +451,26 @@ export function listarRecintosDoClube(clubeId: number): RecintoDoClube[] {
 
 export function apagarRecintoDoClube(id: number): void {
   obterBaseDados().prepare('DELETE FROM clube_recinto WHERE id = ?').run(id)
+}
+
+/**
+ * Regista o recinto de um jogo na lista de recintos do clube da casa, para a
+ * competição do jogo — só se o clube ainda não tiver recinto para essa
+ * competição. Assim a lista fica a mostrar onde cada clube joga em cada
+ * competição (a equipa B no estádio, os sub-19 na academia...).
+ *
+ * Nunca substitui uma associação que já exista, seja escolhida pelo coordenador
+ * ou registada antes. E é só informativa: o recinto de cada jogo continua a
+ * ser o que a FPF indica (ver `resolverRecinto`).
+ */
+export function associarRecintoDoJogo(clubeCasaId: number, competicaoId: number, recintoId: number | null): void {
+  if (recintoId == null) return
+  obterBaseDados()
+    .prepare(
+      `INSERT INTO clube_recinto (clube_id, competicao_id, recinto_id) VALUES (?, ?, ?)
+       ON CONFLICT(clube_id, competicao_id) WHERE competicao_id IS NOT NULL DO NOTHING`
+    )
+    .run(clubeCasaId, competicaoId, recintoId)
 }
 
 // ---------------------------------------------------------------------------
@@ -828,6 +849,7 @@ export function guardarJogo(dados: EntradaJogo): number {
         ultima_alteracao=COALESCE(@alteracao, ultima_alteracao)
        WHERE id=@id`
     ).run({ ...comHora, id: existente.id, alteradoEm: agora(), alteracao })
+    associarRecintoDoJogo(dados.clubeCasaId, dados.competicaoId, dados.recintoId)
     return existente.id
   }
   const info = db
@@ -838,6 +860,7 @@ export function guardarJogo(dados: EntradaJogo): number {
         @dataHora, @clubeCasaId, @clubeForaId, @recintoId, @recintoTextoFpf, @estado, @importadoEm)`
     )
     .run({ ...dados, importadoEm: agora() })
+  associarRecintoDoJogo(dados.clubeCasaId, dados.competicaoId, dados.recintoId)
   return Number(info.lastInsertRowid)
 }
 
@@ -861,6 +884,7 @@ export function editarJogo(id: number, dados: EdicaoJogo): JogoDetalhado | null 
        WHERE id=@id`
     )
     .run({ ...dados, id, quando: agora(), alteracao })
+  associarRecintoDoJogo(antes.clubeCasaId, antes.competicaoId, dados.recintoId)
   registarAuditoria('jogo', id, 'editar', { antes: alteracao, dados })
   return obterJogoDetalhado(id)
 }

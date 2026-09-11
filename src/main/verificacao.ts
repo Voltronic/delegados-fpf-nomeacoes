@@ -246,6 +246,46 @@ async function principal(): Promise<void> {
     verificar('não toca numa alteração de hora normal', depois.get(4)?.data_hora === '2026-09-13T17:00')
     verificar('não toca numa alteração de recinto', depois.get(5)?.data_hora === '2026-09-14T00:00')
 
+    // Os recintos de cada clube por competição, preenchidos a partir dos jogos
+    // que já existem. Mesmo método: o SQL da migração sobre os casos que contam.
+    const migracao13 = new Database(join(pasta, 'data', 'recintos-por-competicao.db'))
+    migracao13.exec(`
+      CREATE TABLE clube_recinto (id INTEGER PRIMARY KEY, clube_id INTEGER, competicao_id INTEGER, recinto_id INTEGER);
+      CREATE UNIQUE INDEX ux_d ON clube_recinto(clube_id) WHERE competicao_id IS NULL;
+      CREATE UNIQUE INDEX ux_c ON clube_recinto(clube_id, competicao_id) WHERE competicao_id IS NOT NULL;
+      CREATE TABLE jogo (id INTEGER PRIMARY KEY, clube_casa_id INTEGER, competicao_id INTEGER,
+                         recinto_id INTEGER, data_hora TEXT);
+      -- Clube 1 tem um recinto por omissão, que não pode mudar.
+      INSERT INTO clube_recinto (clube_id, competicao_id, recinto_id) VALUES (1, NULL, 99);
+      -- Clube 2 já tem um recinto escolhido para a competição 1.
+      INSERT INTO clube_recinto (clube_id, competicao_id, recinto_id) VALUES (2, 1, 20);
+      INSERT INTO jogo (clube_casa_id, competicao_id, recinto_id, data_hora) VALUES
+        (1, 1, 10, '2026-09-01T15:00'), (1, 1, 10, '2026-09-08T15:00'), (1, 1, 11, '2026-09-15T15:00'),
+        (1, 2, 11, '2026-09-02T15:00'), (1, 2, 12, '2026-09-09T15:00'),
+        (2, 1, 21, '2026-09-03T15:00'),
+        (3, 1, NULL, '2026-09-04T15:00');
+    `)
+    migracao13.exec(MIGRACOES.find((m) => m.versao === 13)!.sql)
+    const associacoes = new Map(
+      (migracao13.prepare('SELECT clube_id, competicao_id, recinto_id FROM clube_recinto').all() as {
+        clube_id: number
+        competicao_id: number | null
+        recinto_id: number
+      }[]).map((l) => [`${l.clube_id}:${l.competicao_id ?? 'omissao'}`, l.recinto_id])
+    )
+    migracao13.close()
+    verificar(
+      'cada clube fica com o recinto onde mais joga em cada competição',
+      associacoes.get('1:1') === 10,
+      `→ ${associacoes.get('1:1')}`
+    )
+    verificar('em empate, fica o recinto do jogo mais recente', associacoes.get('1:2') === 12)
+    verificar(
+      'não toca num recinto já associado, nem no por omissão',
+      associacoes.get('2:1') === 20 && associacoes.get('1:omissao') === 99
+    )
+    verificar('um jogo sem recinto não cria associação', !associacoes.has('3:1'))
+
     log('\n2. Delegados, clubes e recintos')
     const delegados = [
       { numero: '101', nome: 'Delegado Norte', lat: 41.35, lng: -8.62, nivel: 'ELITE' as const },
@@ -1156,6 +1196,53 @@ async function principal(): Promise<void> {
     verificar(
       'um recinto sem coordenadas onde ninguém joga não gera alerta',
       !alertasRecintos.some((a) => a.recintoId === semCoordsSemJogos.id)
+    )
+
+    // Cada jogo gravado regista o recinto na lista do clube da casa, para a
+    // competição do jogo — só quando essa competição ainda não tem recinto.
+    const clubeComEquipas = repos.encontrarOuCriarClube('Clube Com Equipas Em Vários Campos')
+    const campoA = repos.encontrarOuCriarRecinto('Campo A Do Clube Com Equipas')
+    const campoB = repos.encontrarOuCriarRecinto('Campo B Do Clube Com Equipas')
+    const jogoDoClube = (chave: string, competicaoId: number, recintoId: number | null): number =>
+      repos.guardarJogo({
+        chaveNatural: chave,
+        competicaoId,
+        fase: null,
+        serie: null,
+        jornada: null,
+        fpfFixtureId: null,
+        fpfMatchId: null,
+        dataHora: horasDaqui(140),
+        clubeCasaId: clubeComEquipas.id,
+        clubeForaId: clubes[1].id,
+        recintoId,
+        recintoTextoFpf: null,
+        estado: 'AGENDADO'
+      })
+    const recintoNaLista = (competicaoId: number): number | undefined =>
+      repos.listarRecintosDoClube(clubeComEquipas.id).find((a) => a.competicaoId === competicaoId)?.recintoId
+
+    jogoDoClube('teste:equipas-1', competicao.id, campoA.id)
+    verificar(
+      'um jogo novo acrescenta o recinto à lista do clube, para a competição do jogo',
+      recintoNaLista(competicao.id) === campoA.id
+    )
+    jogoDoClube('teste:equipas-2', competicao.id, campoB.id)
+    verificar(
+      'outro recinto na mesma competição não substitui o que já está',
+      recintoNaLista(competicao.id) === campoA.id
+    )
+    jogoDoClube('teste:equipas-3', taca.id, campoB.id)
+    verificar(
+      'noutra competição fica registado o recinto dessa competição',
+      recintoNaLista(taca.id) === campoB.id && recintoNaLista(competicao.id) === campoA.id
+    )
+    const semRecintoAinda = jogoDoClube('teste:equipas-4', semDelegadoFixo.id, null)
+    verificar('um jogo sem recinto não acrescenta nada', recintoNaLista(semDelegadoFixo.id) === undefined)
+    repos.editarJogo(semRecintoAinda, { dataHora: horasDaqui(140), recintoId: campoA.id, jornada: null })
+    verificar(
+      'corrigir um jogo à mão também regista o recinto',
+      recintoNaLista(semDelegadoFixo.id) === campoA.id
     )
 
     // Recinto sem coordenadas: tem de dar alerta, e o alerta tem de fechar-se

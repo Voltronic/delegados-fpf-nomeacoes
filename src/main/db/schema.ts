@@ -356,5 +356,28 @@ export const MIGRACOES: Migracao[] = [
          'LIGA 3 PLACARD', 'LIGA NEXT GEN', 'LIGA BPI', 'LIGA PLACARD', 'LIGA FEMININA PLACARD'
        );
     `
+  },
+  {
+    versao: 13,
+    descricao: 'Recintos de cada clube por competição, a partir dos jogos',
+    sql: `
+      -- A partir desta versão, cada jogo gravado regista o seu recinto na lista
+      -- do clube da casa, para a competição do jogo, se ainda lá não houver
+      -- nenhum. Os jogos que já existem entram aqui: por clube e competição,
+      -- o recinto com mais jogos (e, em empate, o do jogo mais recente).
+      -- Associações que já existam não são tocadas.
+      INSERT OR IGNORE INTO clube_recinto (clube_id, competicao_id, recinto_id)
+        SELECT clube_casa_id, competicao_id, recinto_id FROM (
+          SELECT clube_casa_id, competicao_id, recinto_id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY clube_casa_id, competicao_id
+                   ORDER BY COUNT(*) DESC, MAX(data_hora) DESC
+                 ) AS ordem
+            FROM jogo
+           WHERE recinto_id IS NOT NULL
+           GROUP BY clube_casa_id, competicao_id, recinto_id
+        )
+        WHERE ordem = 1;
+    `
   }
 ]
