@@ -649,9 +649,11 @@ export function jogosEscondidos(desde = limiteDeTrabalho()): JogoDetalhado[] {
  */
 export function historicoJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
   const ate = filtro.ate ?? limiteDeTrabalho()
-  return listarJogos({ ...filtro, ate })
-    .filter((j) => j.nomeacoes.length > 0)
-    .reverse()
+  // Entram os jogos que deviam ter levado delegado, tenham levado ou não: nas
+  // competições em que todos levam, um jogo que passou sem ninguém nomeado é
+  // precisamente o que interessa ver. Nas outras, entram só os que o
+  // coordenador escolheu — `listarJogos` já aplica essa regra.
+  return listarJogos({ ...filtro, ate }).reverse()
 }
 
 /**

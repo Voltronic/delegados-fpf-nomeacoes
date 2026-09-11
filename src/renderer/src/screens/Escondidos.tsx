@@ -3,6 +3,7 @@ import type { JogoDetalhado } from '@shared/tipos'
 import { classes, formatarDataHora } from '../lib/formato'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
+import Paginacao, { usePaginacao } from '../components/Paginacao'
 
 /**
  * Jogos que o coordenador tirou da lista de trabalho.
@@ -41,6 +42,7 @@ export default function Escondidos(): JSX.Element {
     []
   )
   const { ordenadas, ordem, alternar } = useOrdenacao(jogos, colunas, { coluna: 'data', sentido: 'asc' })
+  const paginacao = usePaginacao(ordenadas)
 
   async function repor(jogo: JogoDetalhado): Promise<void> {
     try {
@@ -103,7 +105,7 @@ export default function Escondidos(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {ordenadas.map((j) => (
+                {paginacao.visiveis.map((j) => (
                   <tr key={j.id}>
                     <td>{formatarDataHora(j.dataHora)}</td>
                     <td>{j.competicaoNome}</td>
@@ -140,6 +142,13 @@ export default function Escondidos(): JSX.Element {
               </tbody>
             </table>
           )}
+
+          <Paginacao
+            pagina={paginacao.pagina}
+            paginas={paginacao.paginas}
+            total={ordenadas.length}
+            irPara={paginacao.irPara}
+          />
         </div>
       </div>
     </>

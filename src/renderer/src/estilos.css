@@ -731,6 +731,15 @@ table.tabela td.com-voos {
   font-weight: 600;
 }
 
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 0 2px;
+  font-size: 11.5px;
+}
+
 /* ------------------------------------------------------ tabelas ordenáveis */
 
 table.tabela th.ordenavel {

@@ -138,6 +138,29 @@ function semear(): void {
     estado: 'AGENDADO'
   })
 
+  // Jogos passados que cheguem para a paginação ter o que paginar: com 25 por
+  // página, trinta chegam para duas.
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(hoje)
+    d.setDate(hoje.getDate() - 10 - i)
+    const pp = (n: number): string => String(n).padStart(2, '0')
+    repos.guardarJogo({
+      chaveNatural: `ui:antigo${i}`,
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: String(i),
+      fpfFixtureId: 651000 + i,
+      fpfMatchId: null,
+      dataHora: `${d.getFullYear()}-${pp(d.getMonth() + 1)}-${pp(d.getDate())}T15:00`,
+      clubeCasaId: clubes[i % 3].id,
+      clubeForaId: clubes[(i + 1) % 3].id,
+      recintoId: recintos[i % 3].id,
+      recintoTextoFpf: null,
+      estado: 'REALIZADO'
+    })
+  }
+
   // Um jogo já realizado, com delegado: sem ele o ecrã de histórico ficava
   // vazio consoante a hora a que a verificação corresse, e o teste da correção
   // de nomeações não tinha o que testar.
@@ -815,6 +838,41 @@ app.whenReady().then(async () => {
       'nenhuma tabela do dashboard tem scroll vertical próprio',
       scrollInterno === 0,
       `→ ${scrollInterno} com scroll interno`
+    )
+
+    log('\n3b2. Paginação do histórico')
+    await irPara('Histórico')
+    // Com uma época inteira o histórico chega a centenas de linhas:
+    // desenhá-las todas torna o ecrã lento e ilegível.
+    const pagina1 = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         linhas: document.querySelectorAll('.tabela tbody tr').length,
+         contador: document.querySelector('.paginacao .silencioso')?.textContent ?? '',
+         primeira: document.querySelector('.tabela tbody tr td')?.textContent ?? ''
+       })`
+    )) as string
+    const p1 = JSON.parse(pagina1) as { linhas: number; contador: string; primeira: string }
+    verificar(
+      'o histórico mostra uma página de cada vez',
+      p1.linhas > 0 && p1.linhas <= 25 && /de \d+/.test(p1.contador),
+      `→ ${pagina1}`
+    )
+
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.paginacao .botao')].find((b) => b.textContent.includes('Seguinte'))?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 500))
+    const pagina2 = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         contador: document.querySelector('.paginacao .silencioso')?.textContent ?? '',
+         primeira: document.querySelector('.tabela tbody tr td')?.textContent ?? ''
+       })`
+    )) as string
+    const p2 = JSON.parse(pagina2) as { contador: string; primeira: string }
+    verificar(
+      'e a página seguinte mostra outras linhas',
+      p2.contador !== p1.contador && p2.primeira !== p1.primeira,
+      `→ ${p1.contador} para ${p2.contador}`
     )
 
     log('\n3c. Corrigir uma nomeação no histórico')

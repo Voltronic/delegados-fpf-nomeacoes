@@ -590,17 +590,11 @@ async function principal(): Promise<void> {
 
     // Histórico: só entram jogos passados que tiveram delegado.
     repos.esconderJogo(passado, false)
-    const semNomeacao = repos.historicoJogos()
-    verificar(
-      'um jogo passado sem delegado não entra no histórico',
-      semNomeacao.every((j) => j.id !== passado),
-      `→ ${semNomeacao.length} no histórico`
-    )
     await nomear({ jogoId: passado, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
     const historico = repos.historicoJogos()
     verificar(
       'um jogo passado com delegado entra no histórico',
-      historico.some((j) => j.id === passado) && historico.every((j) => j.nomeacoes.length > 0),
+      historico.some((j) => j.id === passado),
       `→ ${historico.length} no histórico`
     )
     verificar(
@@ -651,9 +645,54 @@ async function principal(): Promise<void> {
     )
     const doHistorico = repos.historicoJogos()
     verificar(
-      'e passa ao histórico se teve delegado',
+      'e passa ao histórico',
       doHistorico.some((j) => j.id === acabado) && !doHistorico.some((j) => j.id === aDecorrer),
       `→ ${doHistorico.length} no histórico`
+    )
+
+    // Nas competições em que todos os jogos levam delegado, um jogo que passou
+    // sem ninguém nomeado é precisamente o que interessa ver no histórico.
+    const passadoSemNinguem = jogoEm('teste:passado-sem-delegado', horasDaqui(-6))
+    verificar(
+      'um jogo passado sem delegado entra no histórico quando a competição exige delegado',
+      repos.historicoJogos().some((j) => j.id === passadoSemNinguem)
+    )
+
+    // Nas outras, só entra o que o coordenador escolheu.
+    const semDelegadoFixo = repos.guardarCompeticao({
+      fpfCompetitionId: 29998,
+      seasonId: 106,
+      seasonDescricao: '2026-2027',
+      nome: 'TAÇA SÓ COM ESCOLHIDOS',
+      organizacao: 'Competições FPF',
+      ativa: true,
+      nivelMinimo: null,
+      usaDelegadoCampo: false,
+      todosComDelegado: false
+    })
+    const daTaca = repos.guardarJogo({
+      chaveNatural: 'teste:taca-passada',
+      competicaoId: semDelegadoFixo.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: null,
+      fpfMatchId: null,
+      dataHora: horasDaqui(-8),
+      clubeCasaId: clubes[0].id,
+      clubeForaId: clubes[1].id,
+      recintoId: repos.recintoDoClube(clubes[0].id, semDelegadoFixo.id),
+      recintoTextoFpf: null,
+      estado: 'REALIZADO'
+    })
+    verificar(
+      'um jogo de competição sem delegado fixo não entra no histórico',
+      !repos.historicoJogos().some((j) => j.id === daTaca)
+    )
+    repos.definirLevaDelegado(daTaca, true)
+    verificar(
+      'a não ser que tenha sido escolhido para nomeação',
+      repos.historicoJogos().some((j) => j.id === daTaca)
     )
 
     // Contagem de deslocações de avião por delegado. É o número que diz onde
@@ -1303,7 +1342,15 @@ async function principal(): Promise<void> {
       kmDepois.every((km) => km === 0),
       `→ ${kmAntes.filter((km) => km > 0).length} delegados com km antes, ${kmDepois.filter((km) => km > 0).length} depois`
     )
-    verificar('o histórico fica vazio depois de apagar', repos.historicoJogos().length === 0)
+    // O histórico continua a mostrar os jogos que deviam ter levado delegado —
+    // é o que ficou por nomear. O que desaparece são as nomeações.
+    verificar(
+      'o histórico deixa de ter nomeações depois de apagar',
+      repos.historicoJogos().every((j) => j.nomeacoes.length === 0),
+      `→ ${repos.historicoJogos().length} jogos, ${repos
+        .historicoJogos()
+        .reduce((n, j) => n + j.nomeacoes.length, 0)} nomeações`
+    )
 
     log('\n14. Repor uma cópia de segurança')
     // Repor tem de trazer de volta o estado exato da cópia, e o estado de agora

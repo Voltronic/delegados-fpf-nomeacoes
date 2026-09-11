@@ -3,6 +3,7 @@ import type { Competicao, JogoDetalhado } from '@shared/tipos'
 import { classes, formatarDataHora, formatarKm } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 import CorrigirNomeacao from '../components/CorrigirNomeacao'
+import Paginacao, { usePaginacao } from '../components/Paginacao'
 
 /**
  * O que já foi feito: jogos realizados que tiveram delegado nomeado.
@@ -69,12 +70,16 @@ export default function Historico(): JSX.Element {
   )
   // Por omissão, o mais recente primeiro: é o que se procura num histórico.
   const { ordenadas, ordem, alternar } = useOrdenacao(visiveis, colunas, { coluna: 'data', sentido: 'desc' })
+  const paginacao = usePaginacao(ordenadas)
 
   const kmTotais = visiveis.reduce(
     (soma, j) => soma + j.nomeacoes.reduce((s, n) => s + (n.km ?? 0), 0),
     0
   )
   const nomeacoes = visiveis.reduce((soma, j) => soma + j.nomeacoes.length, 0)
+  // Jogos que deviam ter levado delegado e passaram sem ninguém: é a falha
+  // que o histórico agora deixa ver.
+  const semDelegado = visiveis.filter((j) => j.nomeacoes.length === 0).length
 
   return (
     <>
@@ -83,6 +88,12 @@ export default function Historico(): JSX.Element {
         <div className="subtitulo">
           {visiveis.length} {visiveis.length === 1 ? 'jogo realizado' : 'jogos realizados'} · {nomeacoes}{' '}
           {nomeacoes === 1 ? 'nomeação' : 'nomeações'} · {formatarKm(kmTotais)}
+          {semDelegado > 0 && (
+            <>
+              {' '}
+              · <b>{semDelegado}</b> {semDelegado === 1 ? 'ficou' : 'ficaram'} sem delegado
+            </>
+          )}
         </div>
       </div>
 
@@ -122,9 +133,9 @@ export default function Historico(): JSX.Element {
 
           {!aCarregar && visiveis.length === 0 && (
             <div className="vazio">
-              Ainda não há jogos realizados com delegado nomeado.
+              Ainda não há jogos realizados nesta lista.
               <br />
-              Um jogo entra aqui sozinho depois de passar a data.
+              Um jogo entra aqui sozinho quatro horas depois da hora de início.
             </div>
           )}
 
@@ -154,7 +165,7 @@ export default function Historico(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {ordenadas.map((j) => (
+                {paginacao.visiveis.map((j) => (
                   <tr key={j.id}>
                     <td>{formatarDataHora(j.dataHora)}</td>
                     <td>{j.competicaoNome}</td>
@@ -165,6 +176,9 @@ export default function Historico(): JSX.Element {
                     </td>
                     <td className="silencioso">{j.recintoNome ?? '—'}</td>
                     <td>
+                      {j.nomeacoes.length === 0 && (
+                        <span className="emblema alerta">sem delegado</span>
+                      )}
                       <div className="chips">
                         {j.nomeacoes.map((n) => (
                           <span
@@ -194,6 +208,13 @@ export default function Historico(): JSX.Element {
               </tbody>
             </table>
           )}
+
+          <Paginacao
+            pagina={paginacao.pagina}
+            paginas={paginacao.paginas}
+            total={ordenadas.length}
+            irPara={paginacao.irPara}
+          />
         </div>
       </div>
 
