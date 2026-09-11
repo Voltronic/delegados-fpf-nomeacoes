@@ -23,19 +23,16 @@ import {
 } from './parsers'
 import { emTransacao } from '../db'
 import { normalizarNome } from './html'
-import { eRecintoPorIndicar } from './recintoPorIndicar'
 import { lerCsv } from './csv'
 import {
-  definirRecintoDoClube,
   encontrarOuCriarClube,
-  encontrarOuCriarRecinto,
   guardarCompeticao,
   guardarJogo,
   listarClubes,
   listarCompeticoes,
   listarNomeacoesDoJogo,
   obterJogoPorChave,
-  recintoDoClube
+  resolverRecinto
 } from '../db/repos'
 
 export interface Catalogo {
@@ -405,18 +402,9 @@ function aplicarJogos(chaves: string[]): { aplicados: number; ignorados: number 
     const casa = encontrarOuCriarClube(p.clubeCasa)
     const fora = encontrarOuCriarClube(p.clubeFora)
 
-    // "Recinto A Indicar" quer dizer que o local ainda não está decidido. Fica
-    // sem recinto, e não se assume o campo habitual do clube: a FPF está
-    // explicitamente a dizer que ainda não se sabe onde se joga.
-    let recintoId: number | null = null
-    if (!eRecintoPorIndicar(p.recintoTexto)) {
-      recintoId = recintoDoClube(casa.id, p.competicaoId)
-      if (recintoId == null && p.recintoTexto) {
-        const recinto = encontrarOuCriarRecinto(p.recintoTexto)
-        definirRecintoDoClube(casa.id, null, recinto.id)
-        recintoId = recinto.id
-      }
-    }
+    // A regra toda está em `resolverRecinto`: "a indicar" fica sem recinto, a
+    // escolha do coordenador por competição manda, e senão vale o que a FPF diz.
+    const recintoId = resolverRecinto(casa.id, p.competicaoId, p.recintoTexto)
 
     guardarJogo({
       chaveNatural: p.chaveNatural,
@@ -511,12 +499,7 @@ function importarLinhasCsv(
     const casa = encontrarOuCriarClube(linha.clubeCasa)
     const fora = encontrarOuCriarClube(linha.clubeFora)
 
-    let recintoId = eRecintoPorIndicar(linha.recinto) ? null : recintoDoClube(casa.id, competicao.id)
-    if (linha.recinto && !eRecintoPorIndicar(linha.recinto)) {
-      const recinto = encontrarOuCriarRecinto(linha.recinto)
-      if (recintoId == null) definirRecintoDoClube(casa.id, null, recinto.id)
-      recintoId = recinto.id
-    }
+    const recintoId = resolverRecinto(casa.id, competicao.id, linha.recinto)
 
     const chave = `csv:${chaveNatural(competicao.id, 0, linha.clubeCasa, linha.clubeFora)}`
     const existente = obterJogoPorChave(chave)

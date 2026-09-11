@@ -928,6 +928,36 @@ app.whenReady().then(async () => {
     )) as string
     verificar('oferece localizar de uma vez os que faltam', botaoLote.includes('em falta'), `→ ${botaoLote}`)
 
+    // As abas contam só o que a procura deixa ver: antes diziam "Por confirmar
+    // (12)" ao lado de uma lista vazia, porque nenhum dos 12 correspondia à
+    // procura escrita.
+    await janela.webContents.executeJavaScript(
+      `(() => {
+         const campo = document.querySelector('.painel-cabecalho input[type=search]');
+         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+         setter.call(campo, 'nada-corresponde-a-isto');
+         campo.dispatchEvent(new Event('input', { bubbles: true }));
+       })()`
+    )
+    await new Promise((r) => setTimeout(r, 400))
+    const abas = (await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.painel-cabecalho .grupo-botoes button')].map((b) => b.textContent.trim()).join(' | ')"
+    )) as string
+    verificar(
+      'as contagens das abas seguem a procura',
+      /Todos \(0\)/.test(abas) && /Sem coords \(0\)/.test(abas) && /Por confirmar \(0\)/.test(abas),
+      `→ ${abas}`
+    )
+    await janela.webContents.executeJavaScript(
+      `(() => {
+         const campo = document.querySelector('.painel-cabecalho input[type=search]');
+         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+         setter.call(campo, '');
+         campo.dispatchEvent(new Event('input', { bubbles: true }));
+       })()`
+    )
+    await new Promise((r) => setTimeout(r, 300))
+
     log('\n5. Aviso de gravação')
     // Sem isto, carregar em "Guardar" não dava sinal nenhum de ter resultado.
     await janela.webContents.executeJavaScript(

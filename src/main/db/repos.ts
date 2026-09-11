@@ -20,6 +20,7 @@ import type {
 import { obterBaseDados, registarAuditoria } from './index'
 import { dataHoraAGuardar, limiteDeTrabalho, vaiAcontecer } from '../../shared/datas'
 import { normalizarNome } from '../fpf/html'
+import { eRecintoPorIndicar } from '../fpf/recintoPorIndicar'
 import { jogosQueColidem } from '../sync/conflitos'
 
 const agora = (): string => new Date().toISOString()
@@ -325,6 +326,96 @@ export function recintoDoClube(clubeId: number, competicaoId: number | null): nu
     )
     .get(clubeId, competicaoId) as { recinto_id: number } | undefined
   return linha?.recinto_id ?? null
+}
+
+/** O recinto que o coordenador definiu para um clube numa competição concreta. */
+export function recintoDoClubeNaCompeticao(clubeId: number, competicaoId: number): number | null {
+  const linha = obterBaseDados()
+    .prepare('SELECT recinto_id FROM clube_recinto WHERE clube_id = ? AND competicao_id = ?')
+    .get(clubeId, competicaoId) as { recinto_id: number } | undefined
+  return linha?.recinto_id ?? null
+}
+
+/**
+ * Em que recinto se joga um jogo.
+ *
+ * Por ordem:
+ * 1. "A indicar" (ou nada) — a FPF ainda não sabe; o jogo fica sem recinto.
+ * 2. O recinto que o coordenador definiu para o clube **nesta competição** —
+ *    é uma decisão explícita e manda sobre tudo.
+ * 3. O recinto que a FPF indica para o jogo.
+ *
+ * O recinto habitual do clube já não entra aqui. Mandava sobre o texto da FPF,
+ * e um clube joga em sítios diferentes consoante a equipa — a B no estádio, os
+ * sub-19 na academia, o feminino noutro pavilhão. Resultado: 134 de 744 jogos
+ * futuros estavam com o recinto errado, e com eles as distâncias e os km.
+ */
+export function resolverRecinto(
+  clubeCasaId: number,
+  competicaoId: number,
+  recintoTexto: string | null
+): number | null {
+  if (eRecintoPorIndicar(recintoTexto)) return null
+  const explicito = recintoDoClubeNaCompeticao(clubeCasaId, competicaoId)
+  if (explicito != null) return explicito
+  const recinto = encontrarOuCriarRecinto(recintoTexto!.trim())
+  // O primeiro recinto conhecido de um clube continua a ser o habitual dele —
+  // serve de sugestão no ecrã de clubes, mas já não se sobrepõe à FPF.
+  if (recintoDoClube(clubeCasaId, null) == null) definirRecintoDoClube(clubeCasaId, null, recinto.id)
+  return recinto.id
+}
+
+export interface RecintoCorrigido {
+  jogoId: number
+  temNomeacoes: boolean
+}
+
+/**
+ * Põe cada jogo futuro no recinto que a regra de `resolverRecinto` manda.
+ *
+ * Existe para reparar os jogos gravados com a regra antiga: a sincronização só
+ * reescreve jogos cujo texto mudou, e esses tinham o texto certo e o recinto
+ * errado — nunca seriam corrigidos sozinhos. Corre a seguir a cada atualização,
+ * e não mexe em jogos corrigidos à mão nem em jogos já realizados.
+ */
+export function reconciliarRecintos(desde = limiteDeTrabalho()): RecintoCorrigido[] {
+  const db = obterBaseDados()
+  const linhas = db
+    .prepare(
+      `SELECT id, clube_casa_id, competicao_id, recinto_id, recinto_texto_fpf
+         FROM jogo
+        WHERE editado_manualmente = 0 AND data_hora >= ?`
+    )
+    .all(desde) as {
+    id: number
+    clube_casa_id: number
+    competicao_id: number
+    recinto_id: number | null
+    recinto_texto_fpf: string | null
+  }[]
+
+  const atualizar = db.prepare(
+    `UPDATE jogo SET recinto_id = ?, alterado_em = ?,
+       ultima_alteracao = COALESCE(?, ultima_alteracao)
+     WHERE id = ?`
+  )
+  const corrigidos: RecintoCorrigido[] = []
+  db.transaction(() => {
+    for (const l of linhas) {
+      const certo = resolverRecinto(l.clube_casa_id, l.competicao_id, l.recinto_texto_fpf)
+      if (certo === l.recinto_id) continue
+      const antes = obterJogoDetalhado(l.id)
+      if (!antes) continue
+      const alteracao = descreverAlteracao(antes, {
+        dataHora: antes.dataHora,
+        recintoId: certo,
+        jornada: antes.jornada
+      })
+      atualizar.run(certo, agora(), alteracao, l.id)
+      corrigidos.push({ jogoId: l.id, temNomeacoes: antes.nomeacoes.length > 0 })
+    }
+  })()
+  return corrigidos
 }
 
 export function definirRecintoDoClube(clubeId: number, competicaoId: number | null, recintoId: number): void {
@@ -893,6 +984,22 @@ export function guardarNomeacao(dados: EntradaNomeacao): number {
   const id = transacao()
   registarAuditoria('nomeacao', id, 'guardar', dados)
   return id
+}
+
+/**
+ * Acerta os km de uma nomeação. Só se usa quando o recinto de um jogo ainda
+ * por realizar muda: o delegado vai ao recinto novo, e os km da época têm de
+ * contar essa viagem, não a antiga.
+ */
+export function atualizarKmNomeacao(
+  id: number,
+  km: number | null,
+  minutos: number | null,
+  fonte: string | null
+): void {
+  obterBaseDados()
+    .prepare('UPDATE nomeacao SET km = ?, minutos = ?, fonte_distancia = ? WHERE id = ?')
+    .run(km, minutos, fonte, id)
 }
 
 /** Quantas nomeações existem, para avisar antes de as apagar. */

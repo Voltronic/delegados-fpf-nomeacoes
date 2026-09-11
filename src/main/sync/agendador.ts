@@ -11,6 +11,7 @@ import * as repos from '../db/repos'
 import type { EntradaAlerta } from '../db/repos'
 import { ClienteFpf } from '../fpf/cliente'
 import { chavesPendentes, sincronizar } from '../fpf/sincronizacao'
+import { obterDistancia } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { obterConfiguracaoMotor } from '../engine/servico'
 
@@ -218,6 +219,11 @@ export async function atualizarJogos(
   // abaixo: só interessam os que ficaram mesmo sem coordenadas.
   resultado.alertas = repos.criarAlertas(entradas)
 
+  // Jogos gravados com a regra antiga podem estar no recinto errado, e a
+  // sincronização não lhes toca porque o texto da FPF não mudou. Corrige-se
+  // aqui, antes de localizar: os recintos que isto cria são procurados já.
+  const recintosCorrigidos = repos.reconciliarRecintos()
+
   // Um recinto sem coordenadas não tem distâncias, e sem distâncias o motor não
   // ordena ninguém — não faz sentido deixar isto à espera de alguém se lembrar
   // de carregar num botão. Cada recinto só é procurado uma vez.
@@ -239,6 +245,10 @@ export async function atualizarJogos(
   // vistas: sem coordenadas não há distâncias, e sem distâncias os jogos desse
   // recinto ficam sem candidatos ordenados. O alerta fecha-se sozinho quando
   // alguém puser a localização.
+  // Um delegado nomeado para um jogo que mudou de recinto vai ao recinto novo:
+  // os km da época têm de contar essa viagem.
+  await recalcularKm(recintosCorrigidos.filter((c) => c.temNomeacoes).map((c) => c.jogoId))
+
   repos.apagarAlertasDeRecintosLocalizados()
   resultado.alertas.push(...repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas()))
 
@@ -248,6 +258,32 @@ export async function atualizarJogos(
   // de a primeira atualização do dia terminar — ou se estiver sem rede.
   escreverConfig('sync.ultimaEm', resultado.quando)
   return resultado
+}
+
+/**
+ * Refaz os km das nomeações de jogos cujo recinto mudou. Só para jogos ainda
+ * por realizar — o histórico fica como estava.
+ */
+async function recalcularKm(jogoIds: number[]): Promise<void> {
+  for (const jogoId of jogoIds) {
+    const jogo = repos.obterJogoDetalhado(jogoId)
+    if (!jogo?.recintoId) continue
+    const recinto = repos.obterRecinto(jogo.recintoId)
+    const destino = recinto?.lat != null && recinto.lng != null ? { lat: recinto.lat, lng: recinto.lng } : null
+    for (const nomeacao of jogo.nomeacoes) {
+      const delegado = repos.obterDelegado(nomeacao.delegadoId)
+      const origem =
+        delegado?.lat != null && delegado.lng != null ? { lat: delegado.lat, lng: delegado.lng } : null
+      const distancia = await obterDistancia(nomeacao.delegadoId, jogo.recintoId, origem, destino)
+      if (!distancia) continue
+      repos.atualizarKmNomeacao(
+        nomeacao.id,
+        Math.round(distancia.km * 2 * 10) / 10,
+        distancia.minutos != null ? Math.round(distancia.minutos * 2) : null,
+        distancia.fonte
+      )
+    }
+  }
 }
 
 function emitir(canal: string, dados: unknown): void {

@@ -1037,6 +1037,71 @@ async function principal(): Promise<void> {
       `→ ${depoisDeApagar.length} recriados`
     )
 
+    // O recinto de um jogo é o que a FPF diz, não o habitual do clube. Um clube
+    // joga em sítios diferentes consoante a equipa, e a regra antiga pôs 134
+    // de 744 jogos futuros no recinto errado.
+    const clubeVariosCampos = repos.encontrarOuCriarClube('Clube Com Vários Campos')
+    const habitual = repos.encontrarOuCriarRecinto('Estádio Habitual do Clube')
+    repos.definirRecintoDoClube(clubeVariosCampos.id, null, habitual.id)
+
+    const noOutroCampo = repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Pavilhão Municipal Moreira Da Maia')
+    const recintoCriado = noOutroCampo != null ? repos.obterRecinto(noOutroCampo) : null
+    verificar(
+      'o recinto que a FPF indica manda sobre o habitual do clube',
+      noOutroCampo !== habitual.id && recintoCriado?.nome === 'Pavilhão Municipal Moreira Da Maia',
+      `→ ${recintoCriado?.nome ?? 'nenhum'}`
+    )
+    verificar(
+      '"a indicar" continua a deixar o jogo sem recinto',
+      repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Recinto A Indicar') === null
+    )
+
+    // A escolha do coordenador para o clube numa competição manda sobre a FPF.
+    const escolhido = repos.encontrarOuCriarRecinto('Campo Escolhido Pelo Coordenador')
+    repos.definirRecintoDoClube(clubeVariosCampos.id, competicao.id, escolhido.id)
+    verificar(
+      'a escolha do coordenador para a competição manda sobre o texto da FPF',
+      repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Qualquer Outro Campo') === escolhido.id
+    )
+    repos.apagarRecintoDoClube(
+      repos.listarRecintosDoClube(clubeVariosCampos.id).find((a) => a.competicaoId === competicao.id)!.id
+    )
+
+    // Os jogos gravados com a regra antiga têm de ser corrigidos: o texto da
+    // FPF não muda, por isso a sincronização sozinha nunca lhes tocaria.
+    const jogoNoSitioErrado = repos.guardarJogo({
+      chaveNatural: 'teste:recinto-errado',
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: null,
+      fpfMatchId: null,
+      dataHora: horasDaqui(96),
+      clubeCasaId: clubeVariosCampos.id,
+      clubeForaId: clubes[1].id,
+      recintoId: habitual.id,
+      recintoTextoFpf: 'Pavilhão Do Centro Comunitário Das Caxinas',
+      estado: 'AGENDADO'
+    })
+    const corrigidos = repos.reconciliarRecintos()
+    const jogoReconciliado = repos.obterJogoDetalhado(jogoNoSitioErrado)!
+    verificar(
+      'a reconciliação põe o jogo no recinto que a FPF indica',
+      corrigidos.some((c) => c.jogoId === jogoNoSitioErrado) &&
+        jogoReconciliado.recintoNome === 'Pavilhão Do Centro Comunitário Das Caxinas',
+      `→ ${jogoReconciliado.recintoNome}`
+    )
+    verificar(
+      'e o cartão do jogo diz que o recinto mudou',
+      (jogoReconciliado.ultimaAlteracao ?? '').includes('recinto'),
+      `→ ${jogoReconciliado.ultimaAlteracao ?? 'nada'}`
+    )
+    verificar(
+      'correr outra vez não mexe em nada',
+      !repos.reconciliarRecintos().some((c) => c.jogoId === jogoNoSitioErrado)
+    )
+
     // Recinto sem coordenadas: tem de dar alerta, e o alerta tem de fechar-se
     // sozinho quando alguém puser a localização.
     const orfao = repos.encontrarOuCriarRecinto('Campo Sem Coordenadas Nenhumas')

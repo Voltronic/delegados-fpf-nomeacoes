@@ -339,10 +339,19 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
     }
   }
 
+  // Totais de toda a base de dados: é o que os botões de ação usam, e esses
+  // atuam sobre todos os recintos, não só sobre os que a procura mostra.
   const semCoordenadas = recintos.filter((r) => r.lat == null).length
   const porConfirmar = recintos.filter((r) => r.lat != null && !r.confirmado).length
-  const visiveis = recintos
-    .filter((r) => r.nome.toLowerCase().includes(filtro.toLowerCase()))
+
+  // As abas contam só o que a procura deixa ver. Contar tudo dizia "Por
+  // confirmar (12)" ao lado de uma lista vazia, porque nenhum dos 12
+  // correspondia ao que estava escrito na procura.
+  const porTexto = recintos.filter((r) => r.nome.toLowerCase().includes(filtro.toLowerCase()))
+  const semCoordenadasNaProcura = porTexto.filter((r) => r.lat == null).length
+  const porConfirmarNaProcura = porTexto.filter((r) => r.lat != null && !r.confirmado).length
+
+  const visiveis = porTexto
     .filter((r) => {
       if (vista === 'SEM_COORDS') return r.lat == null
       if (vista === 'POR_CONFIRMAR') return r.lat != null && !r.confirmado
@@ -378,19 +387,19 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
           />
           <div className="grupo-botoes" style={{ marginTop: 8 }}>
             <button className={classes(vista === 'TODOS' && 'ativo')} onClick={() => setVista('TODOS')}>
-              Todos ({recintos.length})
+              Todos ({porTexto.length})
             </button>
             <button
               className={classes(vista === 'SEM_COORDS' && 'ativo')}
               onClick={() => setVista('SEM_COORDS')}
             >
-              Sem coords ({semCoordenadas})
+              Sem coords ({semCoordenadasNaProcura})
             </button>
             <button
               className={classes(vista === 'POR_CONFIRMAR' && 'ativo')}
               onClick={() => setVista('POR_CONFIRMAR')}
             >
-              Por confirmar ({porConfirmar})
+              Por confirmar ({porConfirmarNaProcura})
             </button>
           </div>
         </div>
@@ -425,7 +434,11 @@ function PainelRecintos({ tilesUrl }: { tilesUrl: string }): JSX.Element {
               </div>
             </div>
           ))}
-          {visiveis.length === 0 && <div className="vazio">Nada nesta vista.</div>}
+          {visiveis.length === 0 && (
+            <div className="vazio">
+              {filtro.trim() ? 'Nenhum recinto corresponde à procura nesta vista.' : 'Nada nesta vista.'}
+            </div>
+          )}
         </div>
         <div className="painel-cabecalho" style={{ borderTop: '1px solid var(--borda)', borderBottom: 'none' }}>
           <div className="pilha">
