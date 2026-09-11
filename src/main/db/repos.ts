@@ -328,39 +328,28 @@ export function recintoDoClube(clubeId: number, competicaoId: number | null): nu
   return linha?.recinto_id ?? null
 }
 
-/** O recinto que o coordenador definiu para um clube numa competição concreta. */
-export function recintoDoClubeNaCompeticao(clubeId: number, competicaoId: number): number | null {
-  const linha = obterBaseDados()
-    .prepare('SELECT recinto_id FROM clube_recinto WHERE clube_id = ? AND competicao_id = ?')
-    .get(clubeId, competicaoId) as { recinto_id: number } | undefined
-  return linha?.recinto_id ?? null
-}
-
 /**
- * Em que recinto se joga um jogo.
+ * Em que recinto se joga um jogo: o que a FPF indica, e nada mais.
  *
- * Por ordem:
- * 1. "A indicar" (ou nada) — a FPF ainda não sabe; o jogo fica sem recinto.
- * 2. O recinto que o coordenador definiu para o clube **nesta competição** —
- *    é uma decisão explícita e manda sobre tudo.
- * 3. O recinto que a FPF indica para o jogo.
+ * Se a FPF diz "a indicar" (ou não diz nada), o jogo fica por indicar — não se
+ * vai buscar o recinto habitual do clube nem nenhuma outra escolha local. Os
+ * recintos só existem na aplicação por causa das coordenadas, para calcular os
+ * km; quem decide onde se joga é a FPF.
  *
- * O recinto habitual do clube já não entra aqui. Mandava sobre o texto da FPF,
- * e um clube joga em sítios diferentes consoante a equipa — a B no estádio, os
- * sub-19 na academia, o feminino noutro pavilhão. Resultado: 134 de 744 jogos
- * futuros estavam com o recinto errado, e com eles as distâncias e os km.
+ * A regra antiga dava prioridade ao recinto habitual do clube, e um clube joga
+ * em sítios diferentes consoante a equipa — a B no estádio, os sub-19 na
+ * academia, o feminino noutro pavilhão. Resultado: 134 de 744 jogos futuros
+ * estavam com o recinto errado, e com eles as distâncias e os km.
  */
 export function resolverRecinto(
   clubeCasaId: number,
-  competicaoId: number,
+  _competicaoId: number,
   recintoTexto: string | null
 ): number | null {
   if (eRecintoPorIndicar(recintoTexto)) return null
-  const explicito = recintoDoClubeNaCompeticao(clubeCasaId, competicaoId)
-  if (explicito != null) return explicito
   const recinto = encontrarOuCriarRecinto(recintoTexto!.trim())
-  // O primeiro recinto conhecido de um clube continua a ser o habitual dele —
-  // serve de sugestão no ecrã de clubes, mas já não se sobrepõe à FPF.
+  // O primeiro recinto conhecido de um clube fica registado como o habitual
+  // dele, só como referência no ecrã de clubes. Não entra na decisão acima.
   if (recintoDoClube(clubeCasaId, null) == null) definirRecintoDoClube(clubeCasaId, null, recinto.id)
   return recinto.id
 }
@@ -371,12 +360,15 @@ export interface RecintoCorrigido {
 }
 
 /**
- * Põe cada jogo futuro no recinto que a regra de `resolverRecinto` manda.
+ * Põe cada jogo futuro da FPF no recinto que a FPF indica.
  *
  * Existe para reparar os jogos gravados com a regra antiga: a sincronização só
  * reescreve jogos cujo texto mudou, e esses tinham o texto certo e o recinto
- * errado — nunca seriam corrigidos sozinhos. Corre a seguir a cada atualização,
- * e não mexe em jogos corrigidos à mão nem em jogos já realizados.
+ * errado — nunca seriam corrigidos sozinhos. Corre a seguir a cada atualização.
+ *
+ * Só toca em jogos vindos da FPF (com id de jornada): os criados à mão ou por
+ * ficheiro têm o recinto escolhido pelo coordenador, e não há texto da FPF que
+ * os corrija. Também não mexe em jogos corrigidos à mão nem em jogos passados.
  */
 export function reconciliarRecintos(desde = limiteDeTrabalho()): RecintoCorrigido[] {
   const db = obterBaseDados()
@@ -384,7 +376,7 @@ export function reconciliarRecintos(desde = limiteDeTrabalho()): RecintoCorrigid
     .prepare(
       `SELECT id, clube_casa_id, competicao_id, recinto_id, recinto_texto_fpf
          FROM jogo
-        WHERE editado_manualmente = 0 AND data_hora >= ?`
+        WHERE editado_manualmente = 0 AND fpf_fixture_id IS NOT NULL AND data_hora >= ?`
     )
     .all(desde) as {
     id: number
@@ -1285,23 +1277,61 @@ export function criarAlertas(entradas: EntradaAlerta[]): Alerta[] {
 }
 
 /**
- * Alertas dos recintos que continuam sem ponto no mapa. Sem coordenadas não há
- * distâncias, e sem distâncias o motor não consegue ordenar candidatos para
- * esses jogos — por isso isto tem de saltar à vista em vez de falhar calado.
+ * Alertas dos recintos sem coordenadas que têm um jogo marcado.
+ *
+ * Os recintos só interessam por causa dos km: sem coordenadas, os jogos que lá
+ * se realizam ficam sem distâncias e os candidatos não podem ser ordenados.
+ * Por isso o alerta nasce do jogo, não do recinto — um recinto sem coordenadas
+ * onde ninguém vai jogar não é trabalho para ninguém.
+ *
+ * Contam os jogos por realizar que levam delegado. A chave inclui o próximo
+ * desses jogos: se o coordenador apagar o alerta sem pôr coordenadas, o
+ * próximo jogo marcado para lá volta a avisar.
  */
-export function alertasDeRecintosSemCoordenadas(): EntradaAlerta[] {
-  return recintosSemCoordenadas().map((r) => ({
-    chave: `recinto-sem-coords:${r.id}`,
+export function alertasDeRecintosSemCoordenadas(desde = limiteDeTrabalho()): EntradaAlerta[] {
+  const RELEVANTE = `j.recinto_id = r.id AND j.data_hora >= @desde AND j.escondido = 0
+    AND COALESCE(j.leva_delegado, c.todos_com_delegado) = 1`
+  const linhas = obterBaseDados()
+    .prepare(
+      `SELECT r.id AS recinto_id, r.nome AS recinto_nome,
+              pj.id AS jogo_id, pj.data_hora, cc.nome AS casa, cf.nome AS fora, pc.nome AS competicao,
+              (SELECT COUNT(*) FROM jogo j JOIN competicao c ON c.id = j.competicao_id
+                WHERE ${RELEVANTE}) AS jogos
+         FROM recinto r
+         JOIN jogo pj ON pj.id = (
+           SELECT j.id FROM jogo j JOIN competicao c ON c.id = j.competicao_id
+            WHERE ${RELEVANTE}
+            ORDER BY j.data_hora LIMIT 1)
+         JOIN clube cc ON cc.id = pj.clube_casa_id
+         JOIN clube cf ON cf.id = pj.clube_fora_id
+         JOIN competicao pc ON pc.id = pj.competicao_id
+        WHERE r.lat IS NULL OR r.lng IS NULL
+        ORDER BY pj.data_hora`
+    )
+    .all({ desde }) as {
+    recinto_id: number
+    recinto_nome: string
+    jogo_id: number
+    data_hora: string | null
+    casa: string
+    fora: string
+    competicao: string
+    jogos: number
+  }[]
+
+  return linhas.map((l) => ({
+    chave: `recinto-sem-coords:${l.recinto_id}:${l.jogo_id}`,
     tipo: 'RECINTO_SEM_COORDENADAS' as const,
-    jogoId: null,
-    recintoId: r.id,
-    competicao: null,
-    descricao: r.nome,
-    dataHora: null,
+    jogoId: l.jogo_id,
+    recintoId: l.recinto_id,
+    competicao: l.competicao,
+    descricao: l.recinto_nome,
+    dataHora: l.data_hora,
     detalhe:
-      'Este recinto ficou sem coordenadas, por isso os jogos que lá se realizam não têm distâncias ' +
-      'e os candidatos não podem ser ordenados. Abra "Clubes e recintos" e defina a localização ' +
-      '(pode colar um link do Google Maps).'
+      `${l.casa} × ${l.fora} está marcado para este recinto, que não tem coordenadas` +
+      (l.jogos > 1 ? ` (tal como mais ${l.jogos - 1} ${l.jogos - 1 === 1 ? 'jogo' : 'jogos'})` : '') +
+      '. Sem elas não há km nem distâncias para ordenar os candidatos. Abra "Clubes e recintos" ' +
+      'e defina a localização — pode colar um link do Google Maps.'
   }))
 }
 

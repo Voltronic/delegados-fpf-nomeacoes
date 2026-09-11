@@ -92,6 +92,17 @@ function emitirAlertas(alertas: unknown[]): void {
 let janelaDoMapa: BrowserWindow | null = null
 let ultimoEstadoDoMapa: unknown = null
 
+/**
+ * Depois de um gesto que marca um jogo para um recinto — trazê-lo para a lista,
+ * corrigi-lo à mão —, avisa logo se esse recinto não tem coordenadas, em vez de
+ * esperar pela atualização seguinte.
+ */
+function avisarRecintosSemCoordenadas(): void {
+  repos.apagarAlertasDeRecintosLocalizados()
+  const novos = repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas())
+  if (novos.length) emitirAlertas(novos)
+}
+
 export function registarIpc(contexto: {
   versao: string
   caminhoBaseDados: string
@@ -493,6 +504,8 @@ export function registarIpc(contexto: {
     }
     const criados = repos.criarAlertas(alertas)
     if (criados.length) emitirAlertas(criados)
+    // A correção pode ter posto o jogo num recinto ainda por localizar.
+    avisarRecintosSemCoordenadas()
     return jogo
   })
   /** Devolve o jogo ao controlo da FPF, voltando a ser atualizado. */
@@ -501,6 +514,9 @@ export function registarIpc(contexto: {
   /** Marca um jogo como levando delegado (ou devolve-o à regra da competição). */
   registar('jogos:levaDelegado', (id: number, leva: boolean | null) => {
     repos.definirLevaDelegado(id, leva)
+    // Um jogo trazido para a lista passa a precisar de km: se o recinto não
+    // tiver coordenadas, é agora que o coordenador tem de saber.
+    if (leva) avisarRecintosSemCoordenadas()
     return repos.obterJogoDetalhado(id)
   })
 

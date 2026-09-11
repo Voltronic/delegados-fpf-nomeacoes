@@ -1056,12 +1056,18 @@ async function principal(): Promise<void> {
       repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Recinto A Indicar') === null
     )
 
-    // A escolha do coordenador para o clube numa competição manda sobre a FPF.
-    const escolhido = repos.encontrarOuCriarRecinto('Campo Escolhido Pelo Coordenador')
+    // Nada local substitui a FPF: nem um recinto definido para o clube nesta
+    // competição, nem quando a FPF ainda não sabe onde se joga.
+    const escolhido = repos.encontrarOuCriarRecinto('Campo Escolhido Localmente')
     repos.definirRecintoDoClube(clubeVariosCampos.id, competicao.id, escolhido.id)
     verificar(
-      'a escolha do coordenador para a competição manda sobre o texto da FPF',
-      repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Qualquer Outro Campo') === escolhido.id
+      'um recinto definido localmente não substitui o que a FPF indica',
+      repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Qualquer Outro Campo') !== escolhido.id
+    )
+    verificar(
+      'nem preenche um jogo que a FPF ainda não sabe onde é',
+      repos.resolverRecinto(clubeVariosCampos.id, competicao.id, 'Recinto A Indicar') === null &&
+        repos.resolverRecinto(clubeVariosCampos.id, competicao.id, null) === null
     )
     repos.apagarRecintoDoClube(
       repos.listarRecintosDoClube(clubeVariosCampos.id).find((a) => a.competicaoId === competicao.id)!.id
@@ -1075,7 +1081,7 @@ async function principal(): Promise<void> {
       fase: null,
       serie: null,
       jornada: null,
-      fpfFixtureId: null,
+      fpfFixtureId: 990001,
       fpfMatchId: null,
       dataHora: horasDaqui(96),
       clubeCasaId: clubeVariosCampos.id,
@@ -1102,9 +1108,74 @@ async function principal(): Promise<void> {
       !repos.reconciliarRecintos().some((c) => c.jogoId === jogoNoSitioErrado)
     )
 
+    const jogoManual = repos.guardarJogo({
+      chaveNatural: 'teste:manual-com-recinto',
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: null,
+      fpfMatchId: null,
+      dataHora: horasDaqui(100),
+      clubeCasaId: clubeVariosCampos.id,
+      clubeForaId: clubes[1].id,
+      recintoId: escolhido.id,
+      recintoTextoFpf: null,
+      estado: 'AGENDADO'
+    })
+    repos.reconciliarRecintos()
+    verificar(
+      'um jogo criado à mão fica no recinto que o coordenador escolheu',
+      repos.obterJogoDetalhado(jogoManual)?.recintoId === escolhido.id
+    )
+
+    // Alerta de recinto sem coordenadas: nasce de um jogo marcado para lá.
+    const semCoordsSemJogos = repos.encontrarOuCriarRecinto('Recinto Sem Coordenadas Nem Jogos')
+    const semCoordsComJogo = repos.encontrarOuCriarRecinto('Recinto Sem Coordenadas Com Jogo')
+    const jogoNoRecintoPorLocalizar = repos.guardarJogo({
+      chaveNatural: 'teste:no-recinto-por-localizar',
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: 990002,
+      fpfMatchId: null,
+      dataHora: horasDaqui(120),
+      clubeCasaId: clubes[0].id,
+      clubeForaId: clubes[1].id,
+      recintoId: semCoordsComJogo.id,
+      recintoTextoFpf: 'Recinto Sem Coordenadas Com Jogo',
+      estado: 'AGENDADO'
+    })
+    const alertasRecintos = repos.alertasDeRecintosSemCoordenadas()
+    verificar(
+      'um jogo marcado para um recinto sem coordenadas gera alerta',
+      alertasRecintos.some((a) => a.recintoId === semCoordsComJogo.id && a.jogoId === jogoNoRecintoPorLocalizar),
+      `→ ${alertasRecintos.find((a) => a.recintoId === semCoordsComJogo.id)?.detalhe ?? 'sem alerta'}`
+    )
+    verificar(
+      'um recinto sem coordenadas onde ninguém joga não gera alerta',
+      !alertasRecintos.some((a) => a.recintoId === semCoordsSemJogos.id)
+    )
+
     // Recinto sem coordenadas: tem de dar alerta, e o alerta tem de fechar-se
     // sozinho quando alguém puser a localização.
     const orfao = repos.encontrarOuCriarRecinto('Campo Sem Coordenadas Nenhumas')
+    repos.guardarJogo({
+      chaveNatural: 'teste:no-campo-orfao',
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: 990003,
+      fpfMatchId: null,
+      dataHora: horasDaqui(130),
+      clubeCasaId: clubes[2].id,
+      clubeForaId: clubes[3].id,
+      recintoId: orfao.id,
+      recintoTextoFpf: 'Campo Sem Coordenadas Nenhumas',
+      estado: 'AGENDADO'
+    })
     const criados = repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas())
     verificar(
       'um recinto sem coordenadas gera alerta',

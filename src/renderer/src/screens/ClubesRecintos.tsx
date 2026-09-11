@@ -30,7 +30,7 @@ export default function ClubesRecintos({ tilesUrl }: Props): JSX.Element {
           </button>
         </div>
         <div className="subtitulo">
-          O recinto de um clube pode ser diferente por competição — o mais específico ganha.
+          Cada jogo fica no recinto que a FPF indica. Aqui só se guardam as coordenadas, para calcular os km.
         </div>
       </div>
       <div className="corpo-ecra sem-padding">
