@@ -161,6 +161,28 @@ function semear(): void {
   })
 
   const jogos = repos.listarJogos()
+
+  // Um alerta por ler, para o ecrã de alertas ter conteúdo a sério — e para se
+  // poder verificar que marcar como lido não o faz desaparecer.
+  //
+  // Tem de ser sobre um jogo ainda por acontecer: não se avisa sobre jogos que
+  // já começaram, e o primeiro da lista é o de hoje.
+  const jogoFuturo = jogos.reduce((maisTarde, j) =>
+    (j.dataHora ?? '') > (maisTarde.dataHora ?? '') ? j : maisTarde
+  )
+  repos.criarAlertas([
+    {
+      chave: 'ui:alerta-teste',
+      tipo: 'ALTERADO',
+      jogoId: jogoFuturo.id,
+      recintoId: null,
+      competicao: competicao.nome,
+      descricao: `${jogoFuturo.clubeCasaNome} × ${jogoFuturo.clubeForaNome}`,
+      dataHora: jogoFuturo.dataHora,
+      detalhe: 'data passou de 15:00 para 17:00. Ainda sem delegado nomeado.'
+    }
+  ])
+
   void nomear({ jogoId: jogos[0].id, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
   void nomear({ jogoId: jogoPassado, delegadoId: delegados[1].id, papel: 'PRINCIPAL' })
 }
@@ -964,6 +986,48 @@ app.whenReady().then(async () => {
       !marca.presente || Math.abs((marca.racioDesenhado ?? 0) - (marca.racioOriginal ?? 1)) < 0.05,
       `→ ${marca.racioDesenhado} vs ${marca.racioOriginal}`
     )
+
+    log('\n6c2. Marcar um alerta como lido')
+    await irPara('Alertas')
+    // Marcar como lido é dizer "já vi", não "já não interessa": o alerta
+    // continua na lista, só perde o destaque. Antes desaparecia do ecrã.
+    const antesDeLer = (await janela.webContents.executeJavaScript(
+      `JSON.stringify({
+         cartoes: document.querySelectorAll('.corpo-ecra .cartao').length,
+         botao: !!document.querySelector('.corpo-ecra .cartao .botao')
+       })`
+    )) as string
+    const alertas = JSON.parse(antesDeLer) as { cartoes: number; botao: boolean }
+
+    if (alertas.cartoes > 0 && alertas.botao) {
+      await janela.webContents.executeJavaScript(
+        "[...document.querySelectorAll('.corpo-ecra .botao')].find((b) => b.textContent.trim() === 'Marcar lido')?.click()"
+      )
+      await new Promise((r) => setTimeout(r, 800))
+      const depoisDeLer = (await janela.webContents.executeJavaScript(
+        `(() => {
+           const cartoes = [...document.querySelectorAll('.corpo-ecra .cartao')];
+           const lido = cartoes.find((c) => c.querySelector('.botao')?.textContent?.includes('Marcar por ler'));
+           return JSON.stringify({
+             cartoes: cartoes.length,
+             continuaNaLista: !!lido,
+             semDestaque: lido ? getComputedStyle(lido).borderLeftColor : null
+           });
+         })()`
+      )) as string
+      const lido = JSON.parse(depoisDeLer) as {
+        cartoes: number
+        continuaNaLista: boolean
+        semDestaque: string | null
+      }
+      verificar(
+        'marcar como lido não tira o alerta da lista',
+        lido.cartoes === alertas.cartoes && lido.continuaNaLista,
+        `→ ${depoisDeLer}`
+      )
+    } else {
+      verificar('marcar como lido não tira o alerta da lista', false, '→ sem alertas para testar')
+    }
 
     log('\n6d. Hora da última atualização')
     // A verificação corre uma atualização (secção 6); a barra lateral tem de

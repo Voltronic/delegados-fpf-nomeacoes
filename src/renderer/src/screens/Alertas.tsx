@@ -22,7 +22,9 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
   })
   const [aAtualizar, setAAtualizar] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<'PORLER' | 'TODOS'>('PORLER')
+  // Por omissão mostram-se todos: marcar como lido é dizer "já vi", não "já não
+  // interessa". Um alerta só sai da lista quando é apagado.
+  const [filtro, setFiltro] = useState<'PORLER' | 'TODOS'>('TODOS')
   const [progresso, setProgresso] = useState<ProgressoSincronizacao | null>(null)
 
   useEffect(() => {
@@ -151,8 +153,13 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
                 className="cartao"
                 style={{
                   marginBottom: 10,
-                  opacity: a.lido ? 0.62 : 1,
-                  borderLeft: `3px solid var(--${a.tipo === 'CONFLITO' ? 'perigo' : 'aviso'})`
+                  // Lido perde o destaque, mas continua legível e no sítio: a
+                  // barra de cor e o fundo são o que distingue o que falta ver.
+                  opacity: a.lido ? 0.72 : 1,
+                  background: a.lido ? 'var(--superficie-2)' : undefined,
+                  borderLeft: a.lido
+                    ? '3px solid var(--borda-forte)'
+                    : `3px solid var(--${a.tipo === 'CONFLITO' ? 'perigo' : 'aviso'})`
                 }}
               >
                 <div className="linha" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
