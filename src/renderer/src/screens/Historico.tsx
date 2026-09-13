@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Competicao, JogoDetalhado } from '@shared/tipos'
-import { classes, formatarDataHora, formatarKm } from '../lib/formato'
+import { classes, formatarDataHora, formatarKm, paraDataIso } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 import CorrigirNomeacao from '../components/CorrigirNomeacao'
 import EscolherOutrosJogos from '../components/EscolherOutrosJogos'
@@ -14,9 +14,10 @@ import { avisar, mensagemDeErro } from '../lib/avisos'
  * jogos e quilómetros leva cada delegado, quando é que alguém esteve num clube.
  *
  * Entram todos os jogos passados das competições com delegado em todos os
- * jogos, e das outras só os escolhidos. Os restantes jogos passados dessas
- * competições ficam num bloco à parte, como na lista da semana, para se poder
- * trazer um jogo que afinal teve delegado e registar quem lá foi.
+ * jogos, e das outras só os escolhidos. Os jogos de hoje e de ontem dessas
+ * competições que ninguém escolheu podem ser recuperados num popup, como na
+ * lista da semana, para trazer um jogo que afinal teve delegado e registar
+ * quem lá foi.
  */
 export default function Historico(): JSX.Element {
   const [jogos, setJogos] = useState<JogoDetalhado[]>([])
@@ -42,10 +43,14 @@ export default function Historico(): JSX.Element {
     }
   }, [competicaoId, texto])
 
-  // Os jogos passados das competições sem delegado fixo que ninguém escolheu.
-  // Todos: a competição e a procura escolhem-se dentro do popup.
+  // Os jogos das competições sem delegado fixo que ninguém escolheu, só de hoje
+  // e de ontem: recuperar serve para um jogo que acabou de acontecer, e uma
+  // época inteira de jogos antigos só atrapalhava a escolha. A competição e a
+  // procura escolhem-se dentro do popup.
   const carregarOutros = useCallback(async () => {
-    setOutros(await window.api.jogos.historico({ levaDelegado: 'SEM' }))
+    const ontem = new Date()
+    ontem.setDate(ontem.getDate() - 1)
+    setOutros(await window.api.jogos.historico({ levaDelegado: 'SEM', de: paraDataIso(ontem) }))
   }, [])
 
   useEffect(() => {
@@ -295,7 +300,7 @@ export default function Historico(): JSX.Element {
       {escolherOutros && (
         <EscolherOutrosJogos
           titulo="Jogos de competições sem delegado fixo"
-          subtitulo="Jogos já realizados em que só alguns levam delegado. Escolha os que tiveram delegado."
+          subtitulo="Jogos de hoje e de ontem, já realizados, de competições em que só alguns levam delegado. Escolha os que tiveram delegado."
           jogos={outros}
           textoConfirmar={(n) => (n === 1 ? 'Trazer 1 jogo para o histórico' : `Trazer ${n} jogos para o histórico`)}
           aFechar={() => setEscolherOutros(false)}

@@ -138,10 +138,12 @@ function semear(): void {
     estado: 'AGENDADO'
   })
 
-  // E um jogo da mesma Taça já realizado, que ninguém escolheu: é o que tem de
-  // aparecer no bloco das outras competições do histórico.
-  const anteontem = new Date(hoje)
-  anteontem.setDate(hoje.getDate() - 2)
+  // E dois jogos da mesma Taça já realizados, que ninguém escolheu: o de ontem
+  // tem de aparecer para recuperar no histórico, o de há três dias não.
+  const ontem = new Date(hoje)
+  ontem.setDate(hoje.getDate() - 1)
+  const haTresDias = new Date(hoje)
+  haTresDias.setDate(hoje.getDate() - 3)
   repos.guardarJogo({
     chaveNatural: 'ui:taca-passada',
     competicaoId: taca.id,
@@ -150,10 +152,25 @@ function semear(): void {
     jornada: null,
     fpfFixtureId: 652398,
     fpfMatchId: null,
-    dataHora: `${anteontem.getFullYear()}-${pd(anteontem.getMonth() + 1)}-${pd(anteontem.getDate())}T11:00`,
+    dataHora: `${ontem.getFullYear()}-${pd(ontem.getMonth() + 1)}-${pd(ontem.getDate())}T11:00`,
     clubeCasaId: clubes[1].id,
     clubeForaId: clubes[0].id,
     recintoId: recintos[1].id,
+    recintoTextoFpf: null,
+    estado: 'REALIZADO'
+  })
+  repos.guardarJogo({
+    chaveNatural: 'ui:taca-antiga',
+    competicaoId: taca.id,
+    fase: null,
+    serie: null,
+    jornada: null,
+    fpfFixtureId: 652397,
+    fpfMatchId: null,
+    dataHora: `${haTresDias.getFullYear()}-${pd(haTresDias.getMonth() + 1)}-${pd(haTresDias.getDate())}T11:00`,
+    clubeCasaId: clubes[0].id,
+    clubeForaId: clubes[2].id,
+    recintoId: recintos[0].id,
     recintoTextoFpf: null,
     estado: 'REALIZADO'
   })
@@ -1029,7 +1046,7 @@ app.whenReady().then(async () => {
       const m = document.querySelector('.escolher-outros-jogos');
       return { aberto: !!m, linhas: m ? [...m.querySelectorAll('tbody tr')].map((tr) => tr.textContent) : [] };`)
     verificar(
-      'a barra do histórico abre o popup, só com o jogo que já passou',
+      'o popup do histórico só tem os jogos de hoje e de ontem, não os mais antigos',
       popupHistorico.aberto &&
         popupHistorico.linhas.length === 1 &&
         popupHistorico.linhas[0].includes('TAÇA DE PORTUGAL DE TESTE'),
