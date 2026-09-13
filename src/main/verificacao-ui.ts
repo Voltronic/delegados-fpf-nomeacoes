@@ -793,26 +793,113 @@ app.whenReady().then(async () => {
       `→ ${visivelComScroll}`
     )
 
-    // E trazer um para a lista tem de funcionar com um clique.
-    await janela.webContents.executeJavaScript(
-      "document.querySelector('.outros-jogos .cabecalho')?.click()"
-    )
-    await new Promise((r) => setTimeout(r, 400))
-    await janela.webContents.executeJavaScript(
-      "[...document.querySelectorAll('.outros-jogos .botao')].find((b) => b.textContent.includes('Nomear'))?.click()"
-    )
-    await new Promise((r) => setTimeout(r, 1200))
-    const depois = (await janela.webContents.executeJavaScript(
-      `JSON.stringify({
-         jogos: document.querySelectorAll('.item-jogo').length,
-         restam: document.querySelectorAll('.outros-jogos .outro-jogo').length
-       })`
-    )) as string
-    const trazido = JSON.parse(depois) as { jogos: number; restam: number }
+    // A barra abre um popup para escolher os jogos, com filtro por competição
+    // e procura por competição ou clube.
+    const DEFINIR = `const definir = (el, v) => {
+      const p = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(p, 'value').set.call(el, v);
+      el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+    };`
+    const noEcra = async <T,>(codigo: string): Promise<T> =>
+      JSON.parse((await janela.webContents.executeJavaScript(`JSON.stringify((() => { ${codigo} })())`)) as string) as T
+    const esperar = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+    await janela.webContents.executeJavaScript("document.querySelector('.outros-jogos .cabecalho')?.click()")
+    await esperar(500)
+    const popupAberto = await noEcra<{ aberto: boolean; competicao: string; linhas: number; opcoes: string[] }>(`
+      const m = document.querySelector('.escolher-outros-jogos');
+      return {
+        aberto: !!m,
+        competicao: m?.querySelector('select')?.value ?? 'sem filtro',
+        linhas: m ? m.querySelectorAll('tbody tr').length : 0,
+        opcoes: m ? [...m.querySelectorAll('select option')].map((o) => o.textContent) : []
+      };`)
     verificar(
-      '"+ Nomear" traz o jogo para a lista de trabalho',
-      trazido.jogos === (outros.jogosNaLista ?? 0) + 1 && trazido.restam === 0,
-      `→ ${depois}`
+      'a barra abre um popup para escolher os jogos',
+      popupAberto.aberto && popupAberto.linhas >= 1,
+      `→ ${JSON.stringify(popupAberto)}`
+    )
+    verificar(
+      'o filtro de competição começa em todas as competições',
+      popupAberto.competicao === '' && /^Todas as competições/.test(popupAberto.opcoes[0] ?? '')
+    )
+
+    const procurar = async (texto: string): Promise<{ linhas: string[]; vazio: boolean }> => {
+      await janela.webContents.executeJavaScript(
+        `(() => { ${DEFINIR} definir(document.querySelector('.escolher-outros-jogos input[type=search]'), ${JSON.stringify(texto)}); })()`
+      )
+      await esperar(300)
+      return noEcra(`
+        const m = document.querySelector('.escolher-outros-jogos');
+        return { linhas: [...m.querySelectorAll('tbody tr')].map((tr) => tr.textContent), vazio: !!m.querySelector('.vazio') };`)
+    }
+    const semResultados = await procurar('nada-corresponde-a-isto')
+    verificar('a procura esconde os jogos que não correspondem', semResultados.linhas.length === 0 && semResultados.vazio)
+    const porCompeticao = await procurar('taca de portugal de teste')
+    verificar(
+      'procura pelo nome da competição, mesmo sem acentos',
+      porCompeticao.linhas.length === popupAberto.linhas,
+      `→ ${porCompeticao.linhas.length} de ${popupAberto.linhas}`
+    )
+    await procurar('')
+    const clubeProcurado = await noEcra<string>(
+      "return (document.querySelector('.escolher-outros-jogos tbody td b')?.textContent ?? '').split(' × ')[0].trim();"
+    )
+    const porClube = await procurar(clubeProcurado)
+    verificar(
+      'procura pelo nome de um clube',
+      !!clubeProcurado && porClube.linhas.length >= 1 && porClube.linhas.every((l) => l.includes(clubeProcurado)),
+      `→ "${clubeProcurado}": ${porClube.linhas.length} jogo(s)`
+    )
+    await procurar('')
+
+    await janela.webContents.executeJavaScript(
+      `(() => { ${DEFINIR} const s = document.querySelector('.escolher-outros-jogos select'); definir(s, s.options[1]?.value ?? ''); })()`
+    )
+    await esperar(300)
+    const filtrado = await noEcra<{ nome: string; linhas: string[] }>(`
+      const s = document.querySelector('.escolher-outros-jogos select');
+      return {
+        nome: (s.options[s.selectedIndex]?.textContent ?? '').replace(/ [(][0-9]+[)]$/, ''),
+        linhas: [...document.querySelectorAll('.escolher-outros-jogos tbody tr')].map((tr) => tr.textContent)
+      };`)
+    verificar(
+      'o filtro de competição mostra só os jogos dessa competição',
+      filtrado.linhas.length >= 1 && filtrado.linhas.every((l) => l.includes(filtrado.nome)),
+      `→ ${filtrado.nome}: ${filtrado.linhas.length} jogo(s)`
+    )
+    await janela.webContents.executeJavaScript(
+      `(() => { ${DEFINIR} definir(document.querySelector('.escolher-outros-jogos select'), ''); })()`
+    )
+    await esperar(300)
+
+    // Escolher e confirmar traz o jogo para a lista de trabalho.
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.escolher-outros-jogos tbody input[type=checkbox]')?.click()"
+    )
+    await esperar(200)
+    const botaoConfirmar = await noEcra<{ texto: string; ativo: boolean }>(`
+      const b = document.querySelector('.escolher-outros-jogos footer .primario');
+      return { texto: b?.textContent ?? '', ativo: !!b && !b.disabled };`)
+    verificar(
+      'escolher um jogo ativa o botão de confirmar',
+      botaoConfirmar.ativo && botaoConfirmar.texto.includes('1 jogo'),
+      `→ ${botaoConfirmar.texto}`
+    )
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.escolher-outros-jogos footer .primario')?.click()"
+    )
+    await esperar(1200)
+    const trazido = await noEcra<{ jogos: number; popup: boolean; barra: boolean }>(`
+      return {
+        jogos: document.querySelectorAll('.item-jogo').length,
+        popup: !!document.querySelector('.escolher-outros-jogos'),
+        barra: !!document.querySelector('.outros-jogos')
+      };`)
+    verificar(
+      'confirmar traz o jogo escolhido para a lista de trabalho',
+      trazido.jogos === (outros.jogosNaLista ?? 0) + 1 && !trazido.popup && !trazido.barra,
+      `→ ${JSON.stringify(trazido)}`
     )
 
     log('\n3b. Dashboard: ordenação e altura das tabelas')
@@ -928,50 +1015,54 @@ app.whenReady().then(async () => {
 
     log('\n3d. Jogos das outras competições no histórico')
     await irPara('Histórico')
-    const estadoBloco = async (): Promise<{ existe: boolean; cabecalho: string; jogos: string[] }> =>
-      JSON.parse(
-        (await janela.webContents.executeJavaScript(
-          `JSON.stringify({
-             existe: !!document.querySelector('.outros-jogos'),
-             cabecalho: document.querySelector('.outros-jogos .cabecalho')?.textContent ?? '',
-             jogos: [...document.querySelectorAll('.outros-jogos .outro-jogo')].map((e) => e.textContent)
-           })`
-        )) as string
-      )
-    const fechado = await estadoBloco()
+    const barraHistorico = await noEcra<{ existe: boolean; texto: string }>(`
+      const b = document.querySelector('.outros-jogos .cabecalho');
+      return { existe: !!b, texto: b?.textContent ?? '' };`)
     verificar(
-      'o histórico mostra o bloco dos jogos de competições sem delegado fixo',
-      fechado.existe && /1 jogo de competições sem delegado fixo/.test(fechado.cabecalho),
-      `→ ${fechado.cabecalho || 'sem bloco'}`
+      'o histórico mostra a barra dos jogos de competições sem delegado fixo',
+      barraHistorico.existe && /1 jogo de competições sem delegado fixo/.test(barraHistorico.texto),
+      `→ ${barraHistorico.texto || 'sem barra'}`
     )
     await janela.webContents.executeJavaScript("document.querySelector('.outros-jogos .cabecalho')?.click()")
-    await new Promise((r) => setTimeout(r, 400))
-    const aberto = await estadoBloco()
+    await esperar(500)
+    const popupHistorico = await noEcra<{ aberto: boolean; linhas: string[] }>(`
+      const m = document.querySelector('.escolher-outros-jogos');
+      return { aberto: !!m, linhas: m ? [...m.querySelectorAll('tbody tr')].map((tr) => tr.textContent) : [] };`)
     verificar(
-      'só com o jogo que já passou, não com o de amanhã',
-      aberto.jogos.length === 1 && aberto.jogos[0].includes('TAÇA DE PORTUGAL DE TESTE'),
-      `→ ${JSON.stringify(aberto.jogos)}`
+      'a barra do histórico abre o popup, só com o jogo que já passou',
+      popupHistorico.aberto &&
+        popupHistorico.linhas.length === 1 &&
+        popupHistorico.linhas[0].includes('TAÇA DE PORTUGAL DE TESTE'),
+      `→ ${JSON.stringify(popupHistorico)}`
     )
     await janela.webContents.executeJavaScript(
-      "[...document.querySelectorAll('.outros-jogos button')].find((b) => b.textContent.includes('Nomear'))?.click()"
+      "document.querySelector('.escolher-outros-jogos tbody input[type=checkbox]')?.click()"
     )
-    await new Promise((r) => setTimeout(r, 1000))
+    await esperar(200)
+    await janela.webContents.executeJavaScript(
+      "document.querySelector('.escolher-outros-jogos footer .primario')?.click()"
+    )
+    await esperar(1200)
     const dialogoTaca = (await janela.webContents.executeJavaScript(
       "document.querySelector('.modal header h2')?.textContent ?? ''"
     )) as string
-    verificar('trazer o jogo abre logo a correção da nomeação', dialogoTaca.includes('Corrigir'), `→ ${dialogoTaca || 'sem diálogo'}`)
+    verificar(
+      'trazer um só jogo abre logo a correção da nomeação',
+      dialogoTaca.includes('Corrigir'),
+      `→ ${dialogoTaca || 'sem diálogo'}`
+    )
     await janela.webContents.executeJavaScript(
       "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Concluído')?.click()"
     )
-    await new Promise((r) => setTimeout(r, 500))
-    const depoisDeTrazer = await estadoBloco()
+    await esperar(500)
+    const barraDepois = await noEcra<boolean>("return !!document.querySelector('.outros-jogos');")
     const naTabela = (await janela.webContents.executeJavaScript(
       "[...document.querySelectorAll('.tabela tbody tr')].some((tr) => tr.textContent.includes('TAÇA DE PORTUGAL DE TESTE'))"
     )) as boolean
     verificar(
-      'e o jogo passa do bloco para a tabela do histórico',
-      !depoisDeTrazer.existe && naTabela,
-      `→ bloco ${depoisDeTrazer.existe ? 'ainda lá' : 'fechado'}, tabela ${naTabela ? 'com' : 'sem'} o jogo`
+      'e o jogo passa para a tabela do histórico',
+      !barraDepois && naTabela,
+      `→ barra ${barraDepois ? 'ainda lá' : 'fechada'}, tabela ${naTabela ? 'com' : 'sem'} o jogo`
     )
 
     log('\n4. Recintos por confirmar')

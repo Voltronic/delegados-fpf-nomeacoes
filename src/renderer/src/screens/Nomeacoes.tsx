@@ -9,6 +9,7 @@ import type {
 } from '@shared/tipos'
 import CartaoCandidato from '../components/CartaoCandidato'
 import ConfigurarProposta from '../components/ConfigurarProposta'
+import EscolherOutrosJogos from '../components/EscolherOutrosJogos'
 import EditarJogo from '../components/EditarJogo'
 import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa, type TrajetoMapa } from '../components/Mapa'
@@ -63,7 +64,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
   const [aConfigurarProposta, setAConfigurarProposta] = useState(false)
   const [mapaDestacado, setMapaDestacado] = useState(false)
   const [outros, setOutros] = useState<JogoDetalhado[]>([])
-  const [verOutros, setVerOutros] = useState(false)
+  const [escolherOutros, setEscolherOutros] = useState(false)
   const [trajetos, setTrajetos] = useState<TrajetoMapa[]>([])
 
   /**
@@ -88,6 +89,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
    * Os jogos das competições em que só alguns levam delegado — Taça, por
    * exemplo. Ficam fora da lista de trabalho até o coordenador os escolher,
    * senão a lista enchia-se de jogos que não são para nomear.
+   *
+   * Só a semana conta: a competição e a procura escolhem-se dentro do popup.
    */
   const carregarOutros = useCallback(async () => {
     const limite = limiteDeTrabalho()
@@ -96,12 +99,10 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
       await window.api.jogos.listar({
         levaDelegado: 'SEM',
         de: inicioIso > limite ? inicioIso : limite,
-        ate: `${paraDataIso(fim)}T23:59`,
-        competicaoId: competicaoId === '' ? undefined : competicaoId,
-        texto: texto.trim() || undefined
+        ate: `${paraDataIso(fim)}T23:59`
       })
     )
-  }, [semana, fim, competicaoId, texto])
+  }, [semana, fim])
 
   const carregarJogos = useCallback(async () => {
     // Um jogo deixa de ser trabalho quatro horas depois da hora de início; a
@@ -269,6 +270,24 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                 : 'baixo'
       }
     })
+
+  /** Traz para a lista os jogos escolhidos no popup das outras competições. */
+  async function trazerParaALista(jogoIds: number[]): Promise<void> {
+    try {
+      for (const id of jogoIds) await window.api.jogos.levaDelegado(id, true)
+      await carregarJogos()
+      await carregarOutros()
+      await carregarUrgentes()
+      setEscolherOutros(false)
+      avisar(
+        jogoIds.length === 1
+          ? '1 jogo entra na lista para nomeação.'
+          : `${jogoIds.length} jogos entram na lista para nomeação.`
+      )
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+    }
+  }
 
   /**
    * Traz um jogo para a lista de trabalho, ou devolve-o à regra da competição.
@@ -552,39 +571,17 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
               {outros.length > 0 && (
                 <div className="outros-jogos">
-                  <button className="cabecalho" onClick={() => setVerOutros((v) => !v)}>
+                  <button
+                    className="cabecalho"
+                    title="Escolher jogos destas competições para nomear"
+                    onClick={() => setEscolherOutros(true)}
+                  >
                     <span className="seta" aria-hidden>
-                      {verOutros ? '▾' : '▸'}
+                      ▸
                     </span>
                     {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado
                     fixo
                   </button>
-                  {verOutros && (
-                    <div className="lista">
-                      <div className="explicacao">
-                        Nestas competições só alguns jogos levam delegado. Escolha os que quer nomear.
-                      </div>
-                      {outros.map((j) => (
-                        <div key={j.id} className="outro-jogo">
-                          <div>
-                            <div className="topo">
-                              {formatarDataHora(j.dataHora)} · {j.competicaoNome}
-                            </div>
-                            <div className="equipas">
-                              {j.clubeCasaNome} × {j.clubeForaNome}
-                            </div>
-                          </div>
-                          <button
-                            className="botao pequeno"
-                            title="Trazer este jogo para a lista de nomeações"
-                            onClick={() => marcarLevaDelegado(j, true)}
-                          >
-                            + Nomear
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -751,6 +748,17 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           </div>
         </div>
       </div>
+
+      {escolherOutros && (
+        <EscolherOutrosJogos
+          titulo="Jogos de competições sem delegado fixo"
+          subtitulo="Nestas competições só alguns jogos levam delegado. Escolha os que quer nomear."
+          jogos={outros}
+          textoConfirmar={(n) => (n === 1 ? 'Trazer 1 jogo para a lista' : `Trazer ${n} jogos para a lista`)}
+          aFechar={() => setEscolherOutros(false)}
+          aoConfirmar={trazerParaALista}
+        />
+      )}
 
       {aEditar && (
         <EditarJogo
