@@ -1296,6 +1296,27 @@ details.grupo-bloqueados > summary {
   flex: 1 1 auto;
 }
 
+/*
+ * Popups com uma lista longa: os filtros ficam sempre à vista e só a lista
+ * rola. O contentor que rola não tem padding em cima — com padding, o cabeçalho
+ * da tabela colava-se 16px abaixo do topo e as linhas passavam por cima dele.
+ */
+.modal .modal-corpo.com-lista {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.modal .modal-corpo.com-lista .lista-rolavel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -16px;
+  padding: 0 16px 16px;
+}
+
 .modal footer {
   padding: 11px 16px;
   border-top: 1px solid var(--borda);

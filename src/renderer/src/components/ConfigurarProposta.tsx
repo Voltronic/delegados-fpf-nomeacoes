@@ -73,7 +73,7 @@ export default function ConfigurarProposta({
           <span className="silencioso">Escolha a semana e os jogos antes de gerar</span>
         </header>
 
-        <div className="modal-corpo">
+        <div className="modal-corpo com-lista">
           <div className="linha" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
             <div className="grupo-botoes">
               <button onClick={() => setSemana(new Date(semana.getTime() - 7 * 86400000))}>‹</button>
@@ -94,60 +94,62 @@ export default function ConfigurarProposta({
             </div>
           </div>
 
-          {aCarregar && <div className="vazio">A carregar…</div>}
+          <div className="lista-rolavel">
+            {aCarregar && <div className="vazio">A carregar…</div>}
 
-          {!aCarregar && jogos.length === 0 && (
-            <div className="vazio">Não há jogos nesta semana.</div>
-          )}
+            {!aCarregar && jogos.length === 0 && (
+              <div className="vazio">Não há jogos nesta semana.</div>
+            )}
 
-          {jogos.length > 0 && (
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th style={{ width: 34 }} />
-                  <th>Data</th>
-                  <th>Jogo</th>
-                  <th>Competição</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jogos.map((j) => (
-                  <tr
-                    key={j.id}
-                    className={classes(!escolhidos.has(j.id) && 'silencioso')}
-                    onClick={() => alternar(j.id)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={escolhidos.has(j.id)}
-                        onChange={() => alternar(j.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
-                    <td>{formatarDataHora(j.dataHora)}</td>
-                    <td>
-                      <b>
-                        {j.clubeCasaNome} × {j.clubeForaNome}
-                      </b>
-                    </td>
-                    <td className="silencioso">{j.competicaoNome}</td>
-                    <td>
-                      {j.nomeacoes.length === 0 ? (
-                        <span className="emblema neutro">por nomear</span>
-                      ) : (
-                        <span className="emblema ok">
-                          {j.nomeacoes.map((n) => n.delegadoNome).join(', ')}
-                        </span>
-                      )}
-                    </td>
+            {jogos.length > 0 && (
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th style={{ width: 34 }} />
+                    <th>Data</th>
+                    <th>Jogo</th>
+                    <th>Competição</th>
+                    <th>Estado</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {jogos.map((j) => (
+                    <tr
+                      key={j.id}
+                      className={classes(!escolhidos.has(j.id) && 'silencioso')}
+                      onClick={() => alternar(j.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={escolhidos.has(j.id)}
+                          onChange={() => alternar(j.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                      <td>{formatarDataHora(j.dataHora)}</td>
+                      <td>
+                        <b>
+                          {j.clubeCasaNome} × {j.clubeForaNome}
+                        </b>
+                      </td>
+                      <td className="silencioso">{j.competicaoNome}</td>
+                      <td>
+                        {j.nomeacoes.length === 0 ? (
+                          <span className="emblema neutro">por nomear</span>
+                        ) : (
+                          <span className="emblema ok">
+                            {j.nomeacoes.map((n) => n.delegadoNome).join(', ')}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
         <footer>

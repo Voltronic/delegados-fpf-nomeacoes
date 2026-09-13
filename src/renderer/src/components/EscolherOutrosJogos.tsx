@@ -16,7 +16,7 @@ interface Props {
 const semAcentos = (texto: string): string =>
   texto
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
 
 /**
@@ -108,7 +108,7 @@ export default function EscolherOutrosJogos({
           <span className="silencioso">{subtitulo}</span>
         </header>
 
-        <div className="modal-corpo">
+        <div className="modal-corpo com-lista">
           <div className="linha" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
             <select
               className="campo"
@@ -143,48 +143,50 @@ export default function EscolherOutrosJogos({
             </div>
           </div>
 
-          {visiveis.length === 0 ? (
-            <div className="vazio">
-              {jogos.length === 0 ? 'Não há jogos para escolher.' : 'Nenhum jogo corresponde à procura.'}
-            </div>
-          ) : (
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th style={{ width: 34 }} />
-                  <th>Data</th>
-                  <th>Jogo</th>
-                  <th>Competição</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiveis.map((j) => (
-                  <tr
-                    key={j.id}
-                    className={classes(!escolhidos.has(j.id) && 'silencioso')}
-                    onClick={() => alternar(j.id)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={escolhidos.has(j.id)}
-                        onChange={() => alternar(j.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{formatarDataHora(j.dataHora)}</td>
-                    <td>
-                      <b>
-                        {j.clubeCasaNome} × {j.clubeForaNome}
-                      </b>
-                    </td>
-                    <td className="silencioso">{j.competicaoNome}</td>
+          <div className="lista-rolavel">
+            {visiveis.length === 0 ? (
+              <div className="vazio">
+                {jogos.length === 0 ? 'Não há jogos para escolher.' : 'Nenhum jogo corresponde à procura.'}
+              </div>
+            ) : (
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th style={{ width: 34 }} />
+                    <th>Data</th>
+                    <th>Jogo</th>
+                    <th>Competição</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {visiveis.map((j) => (
+                    <tr
+                      key={j.id}
+                      className={classes(!escolhidos.has(j.id) && 'silencioso')}
+                      onClick={() => alternar(j.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={escolhidos.has(j.id)}
+                          onChange={() => alternar(j.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatarDataHora(j.dataHora)}</td>
+                      <td>
+                        <b>
+                          {j.clubeCasaNome} × {j.clubeForaNome}
+                        </b>
+                      </td>
+                      <td className="silencioso">{j.competicaoNome}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
         <footer>

@@ -841,6 +841,26 @@ app.whenReady().then(async () => {
       popupAberto.competicao === '' && /^Todas as competições/.test(popupAberto.opcoes[0] ?? '')
     )
 
+    // Ao rolar, o cabeçalho da tabela fica colado ao topo da lista e os filtros
+    // ficam à vista. Força-se uma lista baixa para haver o que rolar.
+    const cabecalhoColado = await noEcra<{ filtrosForaDaLista: boolean; diferenca: number | null }>(`
+      const lista = document.querySelector('.escolher-outros-jogos .lista-rolavel');
+      const filtros = document.querySelector('.escolher-outros-jogos select');
+      if (!lista) return { filtrosForaDaLista: false, diferenca: null };
+      lista.style.maxHeight = '45px';
+      lista.scrollTop = 30;
+      const th = lista.querySelector('th');
+      const diferenca = Math.round(th.getBoundingClientRect().top - lista.getBoundingClientRect().top);
+      const rolou = lista.scrollTop > 0;
+      lista.style.maxHeight = '';
+      lista.scrollTop = 0;
+      return { filtrosForaDaLista: !lista.contains(filtros), diferenca: rolou ? diferenca : null };`)
+    verificar(
+      'ao rolar, o cabeçalho da tabela fica colado ao topo e os filtros à vista',
+      cabecalhoColado.filtrosForaDaLista && cabecalhoColado.diferenca === 0,
+      `→ ${JSON.stringify(cabecalhoColado)}`
+    )
+
     const procurar = async (texto: string): Promise<{ linhas: string[]; vazio: boolean }> => {
       await janela.webContents.executeJavaScript(
         `(() => { ${DEFINIR} definir(document.querySelector('.escolher-outros-jogos input[type=search]'), ${JSON.stringify(texto)}); })()`
