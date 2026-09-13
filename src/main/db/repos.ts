@@ -752,7 +752,10 @@ export function jogosEscondidos(desde = limiteDeTrabalho()): JogoDetalhado[] {
  * não aparece aqui.
  */
 export function historicoJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
-  const ate = filtro.ate ?? limiteDeTrabalho()
+  // Só entra o que já ficou para trás: um `ate` pedido para lá da fronteira
+  // das quatro horas é cortado nela, venha de onde vier o filtro.
+  const limite = limiteDeTrabalho()
+  const ate = filtro.ate && filtro.ate < limite ? filtro.ate : limite
   // Entram os jogos que deviam ter levado delegado, tenham levado ou não: nas
   // competições em que todos levam, um jogo que passou sem ninguém nomeado é
   // precisamente o que interessa ver. Nas outras, entram só os que o

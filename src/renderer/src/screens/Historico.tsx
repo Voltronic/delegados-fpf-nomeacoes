@@ -4,13 +4,18 @@ import { classes, formatarDataHora, formatarKm } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 import CorrigirNomeacao from '../components/CorrigirNomeacao'
 import Paginacao, { usePaginacao } from '../components/Paginacao'
+import { avisar, mensagemDeErro } from '../lib/avisos'
 
 /**
- * O que já foi feito: jogos realizados que tiveram delegado nomeado.
+ * O que já foi feito: os jogos que já ficaram para trás e que levavam delegado.
  *
  * Serve para responder às perguntas do dia a dia — quem foi àquele jogo, quantos
  * jogos e quilómetros leva cada delegado, quando é que alguém esteve num clube.
- * Jogos passados sem nomeação não entram: não houve trabalho para registar.
+ *
+ * Entram todos os jogos passados das competições com delegado em todos os
+ * jogos, e das outras só os escolhidos. Os restantes jogos passados dessas
+ * competições ficam num bloco à parte, como na lista da semana, para se poder
+ * trazer um jogo que afinal teve delegado e registar quem lá foi.
  */
 export default function Historico(): JSX.Element {
   const [jogos, setJogos] = useState<JogoDetalhado[]>([])
@@ -19,6 +24,8 @@ export default function Historico(): JSX.Element {
   const [texto, setTexto] = useState('')
   const [aCarregar, setACarregar] = useState(true)
   const [aCorrigir, setACorrigir] = useState<JogoDetalhado | null>(null)
+  const [outros, setOutros] = useState<JogoDetalhado[]>([])
+  const [verOutros, setVerOutros] = useState(false)
 
   const carregar = useCallback(async () => {
     setACarregar(true)
@@ -34,9 +41,42 @@ export default function Historico(): JSX.Element {
     }
   }, [competicaoId, texto])
 
+  // Os jogos passados das competições sem delegado fixo que ninguém escolheu.
+  // Seguem os mesmos filtros de competição e de texto que a tabela.
+  const carregarOutros = useCallback(async () => {
+    setOutros(
+      await window.api.jogos.historico({
+        levaDelegado: 'SEM',
+        competicaoId: competicaoId === '' ? undefined : competicaoId,
+        texto: texto.trim() || undefined
+      })
+    )
+  }, [competicaoId, texto])
+
   useEffect(() => {
     void carregar()
-  }, [carregar])
+    void carregarOutros()
+  }, [carregar, carregarOutros])
+
+  /**
+   * Traz um jogo passado para o histórico e abre logo a correção, porque quem o
+   * traz quer registar quem lá foi. Com `null`, devolve-o à regra da competição.
+   */
+  async function marcarLevaDelegado(jogo: JogoDetalhado, leva: true | null): Promise<void> {
+    try {
+      await window.api.jogos.levaDelegado(jogo.id, leva)
+      await Promise.all([carregar(), carregarOutros()])
+      if (leva) {
+        avisar(`${jogo.clubeCasaNome} × ${jogo.clubeForaNome} passa a constar no histórico.`)
+        const atualizado = await window.api.jogos.obter(jogo.id)
+        if (atualizado) setACorrigir(atualizado)
+      } else {
+        avisar(`${jogo.clubeCasaNome} × ${jogo.clubeForaNome} sai do histórico.`)
+      }
+    } catch (erro) {
+      avisar(mensagemDeErro(erro), 'erro')
+    }
+  }
 
   useEffect(() => {
     void window.api.competicoes.listar().then(setCompeticoes)
@@ -195,6 +235,17 @@ export default function Historico(): JSX.Element {
                       {formatarKm(j.nomeacoes.reduce((s, n) => s + (n.km ?? 0), 0))}
                     </td>
                     <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                      {/* Só se retira um jogo escolhido à mão enquanto não tem
+                          ninguém: com delegado, os km dele contam na época. */}
+                      {j.levaDelegado === true && j.nomeacoes.length === 0 && (
+                        <button
+                          className="botao pequeno"
+                          title="Este jogo foi acrescentado à mão — tirar do histórico"
+                          onClick={() => void marcarLevaDelegado(j, null)}
+                        >
+                          Retirar
+                        </button>
+                      )}{' '}
                       <button
                         className="botao pequeno"
                         title="Corrigir quem foi a este jogo"
@@ -215,6 +266,44 @@ export default function Historico(): JSX.Element {
             total={ordenadas.length}
             irPara={paginacao.irPara}
           />
+
+          {outros.length > 0 && (
+            <div className="outros-jogos">
+              <button className="cabecalho" onClick={() => setVerOutros((v) => !v)}>
+                <span className="seta" aria-hidden>
+                  {verOutros ? '▾' : '▸'}
+                </span>
+                {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado fixo
+              </button>
+              {verOutros && (
+                <div className="lista">
+                  <div className="explicacao">
+                    Jogos já realizados de competições em que só alguns levam delegado. Se algum teve
+                    delegado, traga-o para o histórico e registe quem lá foi.
+                  </div>
+                  {outros.map((j) => (
+                    <div key={j.id} className="outro-jogo">
+                      <div>
+                        <div className="topo">
+                          {formatarDataHora(j.dataHora)} · {j.competicaoNome}
+                        </div>
+                        <div className="equipas">
+                          {j.clubeCasaNome} × {j.clubeForaNome}
+                        </div>
+                      </div>
+                      <button
+                        className="botao pequeno"
+                        title="Trazer este jogo para o histórico e registar quem lá foi"
+                        onClick={() => void marcarLevaDelegado(j, true)}
+                      >
+                        + Nomear
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

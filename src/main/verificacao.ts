@@ -585,7 +585,10 @@ async function principal(): Promise<void> {
     )
 
     log('\n7b. Esconder jogos, histórico e alertas de recintos')
-    const paraEsconder = repos.listarJogos()[0]
+    // Um jogo que ainda é trabalho: um escondido que já passou sai da lista de
+    // escondidos de propósito, e com o primeiro jogo da lista a verificação
+    // falhava sozinha a partir da hora desse jogo.
+    const paraEsconder = repos.listarJogos({ de: limiteDeTrabalho() })[0]
     const quantosAntes = repos.listarJogos().length
     repos.esconderJogo(paraEsconder.id, true)
     verificar(
@@ -729,11 +732,51 @@ async function principal(): Promise<void> {
       'um jogo de competição sem delegado fixo não entra no histórico',
       !repos.historicoJogos().some((j) => j.id === daTaca)
     )
+    // Mas fica à mão no bloco das outras competições, para se poder trazer.
+    // E esse bloco, como o histórico, só tem o que já ficou para trás: um jogo
+    // que começou há duas horas ainda está a decorrer.
+    const tacaADecorrer = repos.guardarJogo({
+      chaveNatural: 'teste:taca-a-decorrer',
+      competicaoId: semDelegadoFixo.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: null,
+      fpfMatchId: null,
+      dataHora: horasDaqui(-2),
+      clubeCasaId: clubes[2].id,
+      clubeForaId: clubes[3].id,
+      recintoId: null,
+      recintoTextoFpf: null,
+      estado: 'AGENDADO'
+    })
+    const outrosPassados = repos.historicoJogos({ levaDelegado: 'SEM' })
+    verificar(
+      'o histórico lista à parte os jogos passados das outras competições',
+      outrosPassados.some((j) => j.id === daTaca)
+    )
+    verificar(
+      'sem os que ainda não ficaram para trás',
+      !outrosPassados.some((j) => j.id === tacaADecorrer),
+      `→ ${outrosPassados.length} jogo(s)`
+    )
     repos.definirLevaDelegado(daTaca, true)
     verificar(
       'a não ser que tenha sido escolhido para nomeação',
       repos.historicoJogos().some((j) => j.id === daTaca)
     )
+    verificar(
+      'e, escolhido, sai do bloco das outras competições',
+      !repos.historicoJogos({ levaDelegado: 'SEM' }).some((j) => j.id === daTaca)
+    )
+    const limiteAgora = limiteDeTrabalho()
+    verificar(
+      'pedir o histórico até uma data futura não traz jogos por acontecer',
+      repos
+        .historicoJogos({ levaDelegado: 'TODOS', ate: '2999-12-31T23:59' })
+        .every((j) => j.dataHora != null && j.dataHora <= limiteAgora)
+    )
+    repos.apagarJogo(tacaADecorrer)
 
     // Contagem de deslocações de avião por delegado. É o número que diz onde
     // está o custo verdadeiro: um voo pesa muito mais do que os km mostram.
@@ -1444,6 +1487,10 @@ async function principal(): Promise<void> {
       )
     }
 
+    // A data do alerta é relativa: com uma data fixa, a verificação falhava
+    // sozinha a partir do dia em que esse jogo começasse, porque não se avisa
+    // sobre jogos que já começaram.
+    const dataDoAlerta = limiteDeTrabalho(new Date(Date.now() + 48 * 60 * 60 * 1000))
     const alertas = repos.criarAlertas([
       {
         chave: 'teste:alerta:1',
@@ -1451,7 +1498,7 @@ async function principal(): Promise<void> {
         jogoId: null,
         competicao: 'Competição de Teste',
         descricao: 'A × B',
-        dataHora: '2026-09-13T15:00',
+        dataHora: dataDoAlerta,
         detalhe: 'data passou de 13/09 para 20/09'
       }
     ])
@@ -1465,7 +1512,7 @@ async function principal(): Promise<void> {
           jogoId: null,
           competicao: 'Competição de Teste',
           descricao: 'A × B',
-          dataHora: '2026-09-13T15:00',
+          dataHora: dataDoAlerta,
           detalhe: 'data passou de 13/09 para 20/09'
         }
       ]).length === 0

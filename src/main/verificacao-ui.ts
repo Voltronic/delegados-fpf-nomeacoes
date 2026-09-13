@@ -138,6 +138,26 @@ function semear(): void {
     estado: 'AGENDADO'
   })
 
+  // E um jogo da mesma Taça já realizado, que ninguém escolheu: é o que tem de
+  // aparecer no bloco das outras competições do histórico.
+  const anteontem = new Date(hoje)
+  anteontem.setDate(hoje.getDate() - 2)
+  repos.guardarJogo({
+    chaveNatural: 'ui:taca-passada',
+    competicaoId: taca.id,
+    fase: null,
+    serie: null,
+    jornada: null,
+    fpfFixtureId: 652398,
+    fpfMatchId: null,
+    dataHora: `${anteontem.getFullYear()}-${pd(anteontem.getMonth() + 1)}-${pd(anteontem.getDate())}T11:00`,
+    clubeCasaId: clubes[1].id,
+    clubeForaId: clubes[0].id,
+    recintoId: recintos[1].id,
+    recintoTextoFpf: null,
+    estado: 'REALIZADO'
+  })
+
   // Jogos passados que cheguem para a paginação ter o que paginar: com 25 por
   // página, trinta chegam para duas.
   for (let i = 0; i < 30; i++) {
@@ -905,6 +925,54 @@ app.whenReady().then(async () => {
     } else {
       verificar('o histórico deixa corrigir quem foi ao jogo', false, '→ sem jogos no histórico para testar')
     }
+
+    log('\n3d. Jogos das outras competições no histórico')
+    await irPara('Histórico')
+    const estadoBloco = async (): Promise<{ existe: boolean; cabecalho: string; jogos: string[] }> =>
+      JSON.parse(
+        (await janela.webContents.executeJavaScript(
+          `JSON.stringify({
+             existe: !!document.querySelector('.outros-jogos'),
+             cabecalho: document.querySelector('.outros-jogos .cabecalho')?.textContent ?? '',
+             jogos: [...document.querySelectorAll('.outros-jogos .outro-jogo')].map((e) => e.textContent)
+           })`
+        )) as string
+      )
+    const fechado = await estadoBloco()
+    verificar(
+      'o histórico mostra o bloco dos jogos de competições sem delegado fixo',
+      fechado.existe && /1 jogo de competições sem delegado fixo/.test(fechado.cabecalho),
+      `→ ${fechado.cabecalho || 'sem bloco'}`
+    )
+    await janela.webContents.executeJavaScript("document.querySelector('.outros-jogos .cabecalho')?.click()")
+    await new Promise((r) => setTimeout(r, 400))
+    const aberto = await estadoBloco()
+    verificar(
+      'só com o jogo que já passou, não com o de amanhã',
+      aberto.jogos.length === 1 && aberto.jogos[0].includes('TAÇA DE PORTUGAL DE TESTE'),
+      `→ ${JSON.stringify(aberto.jogos)}`
+    )
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.outros-jogos button')].find((b) => b.textContent.includes('Nomear'))?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 1000))
+    const dialogoTaca = (await janela.webContents.executeJavaScript(
+      "document.querySelector('.modal header h2')?.textContent ?? ''"
+    )) as string
+    verificar('trazer o jogo abre logo a correção da nomeação', dialogoTaca.includes('Corrigir'), `→ ${dialogoTaca || 'sem diálogo'}`)
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Concluído')?.click()"
+    )
+    await new Promise((r) => setTimeout(r, 500))
+    const depoisDeTrazer = await estadoBloco()
+    const naTabela = (await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.tabela tbody tr')].some((tr) => tr.textContent.includes('TAÇA DE PORTUGAL DE TESTE'))"
+    )) as boolean
+    verificar(
+      'e o jogo passa do bloco para a tabela do histórico',
+      !depoisDeTrazer.existe && naTabela,
+      `→ bloco ${depoisDeTrazer.existe ? 'ainda lá' : 'fechado'}, tabela ${naTabela ? 'com' : 'sem'} o jogo`
+    )
 
     log('\n4. Recintos por confirmar')
     await janela.webContents.executeJavaScript(
