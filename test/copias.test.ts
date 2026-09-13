@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { copiasAApagar, copiasPorData, nomeDaCopia, PADRAO_COPIA, PASTA_COPIAS } from '../src/main/db/copias'
+import {
+  copiasAApagar,
+  copiasAnteriores,
+  copiasPorData,
+  nomeDaCopia,
+  PADRAO_COPIA,
+  PASTA_COPIAS
+} from '../src/main/db/copias'
 
 describe('cópias de segurança', () => {
   it('aponta para uma pasta fora da aplicação, com o caminho intacto', () => {
@@ -38,5 +45,22 @@ describe('cópias de segurança', () => {
 
   it('não apaga nada enquanto houver espaço', () => {
     expect(copiasAApagar(['delegados-20260908-090503.db'], 10)).toEqual([])
+  })
+  it('a seguir à cópia do arranque, apaga as anteriores e mais nada', () => {
+    const nomes = [
+      'delegados-20260912-090000.db',
+      'delegados-20260913-230000.db',
+      'delegados-20260913-231500.db',
+      'delegados.db',
+      'notas.txt'
+    ]
+    expect(copiasAnteriores(nomes, 'delegados-20260913-231500.db').sort()).toEqual([
+      'delegados-20260912-090000.db',
+      'delegados-20260913-230000.db'
+    ])
+  })
+
+  it('nunca apaga a cópia que acabou de ser gravada', () => {
+    expect(copiasAnteriores(['delegados-20260913-231500.db'], 'delegados-20260913-231500.db')).toEqual([])
   })
 })

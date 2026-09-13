@@ -207,8 +207,9 @@ compilação portátil. Para levar tudo para outro computador, copiar a pasta in
 
 Ficam em `C:\Temp\delegados-fpf-nomeacoes\backups`, de propósito **fora** da pasta da aplicação:
 essa pasta é substituída a cada versão nova, e uma cópia lá dentro desaparecia com ela. É gravada uma
-cópia a cada arranque, antes de qualquer migração, e guardam-se as 10 mais recentes. O ecrã de
-Definições mostra a pasta e a lista, e permite criar uma cópia a qualquer momento.
+cópia a cada arranque, antes de qualquer migração, e logo a seguir são apagadas as cópias anteriores:
+fica só a do último arranque, mais as que se criem à mão depois dele. O ecrã de Definições mostra a
+pasta e a lista, e permite criar uma cópia a qualquer momento.
 
 Para repor: fechar a aplicação e substituir `data/delegados.db` pela cópia escolhida (apagando também
 os ficheiros `-wal` e `-shm` que estejam ao lado).

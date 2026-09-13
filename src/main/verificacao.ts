@@ -6,12 +6,13 @@
  * sugestão, proposta automática e — se houver rede — os endpoints reais da FPF.
  */
 import { app } from 'electron'
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import Database from 'better-sqlite3'
 import {
   abrirBaseDados,
+  apagarCopiasAnteriores,
   escreverConfig,
   listarCopiasSeguranca,
   obterBaseDados,
@@ -104,6 +105,28 @@ async function principal(): Promise<void> {
     const naCopia = daCopia.prepare('SELECT COUNT(*) AS n FROM delegado').get() as { n: number }
     daCopia.close()
     verificar('a cópia contém os dados que existiam no momento', naCopia.n === 1, `→ ${naCopia.n} delegado(s)`)
+
+    // A seguir à cópia do arranque fica só ela: as anteriores são apagadas, e
+    // só as cópias — outros ficheiros da pasta não se tocam.
+    const antigas = ['delegados-20200101-000000.db', 'delegados-20200102-000000.db']
+    for (const nome of antigas) writeFileSync(join(pastaCopias, nome), 'cópia antiga')
+    writeFileSync(join(pastaCopias, 'notas.txt'), 'não é uma cópia')
+    abrirBaseDados(caminho, { pastaCopias, semearRecintos: false })
+    const depoisDoArranque = listarCopiasSeguranca(pastaCopias)
+    verificar(
+      'abrir a aplicação apaga as cópias anteriores e fica só a deste arranque',
+      depoisDoArranque.length === 1 && !antigas.includes(depoisDoArranque[0].ficheiro),
+      `→ ${depoisDoArranque.map((c) => c.ficheiro).join(', ') || 'nenhuma'}`
+    )
+    verificar('ficheiros que não são cópias ficam na pasta', existsSync(join(pastaCopias, 'notas.txt')))
+    // Sem uma cópia boa no lugar, não se apaga nada.
+    const copiaVazia = join(pastaCopias, 'delegados-20990101-000000.db')
+    writeFileSync(copiaVazia, '')
+    verificar(
+      'uma cópia vazia não leva a apagar as anteriores',
+      apagarCopiasAnteriores(copiaVazia) === 0 && listarCopiasSeguranca(pastaCopias).length === 2
+    )
+    rmSync(copiaVazia, { force: true })
     repos.apagarDelegado(repos.listarDelegados()[0].id)
 
     // Entregar um executável novo por cima de uma base de dados antiga tem de
@@ -1657,6 +1680,11 @@ async function principal(): Promise<void> {
       'o estado anterior à reposição fica guardado como cópia',
       listarCopiasSeguranca(pastaCopias).length > copiasAntesDeRepor,
       `→ ${listarCopiasSeguranca(pastaCopias).length} cópias`
+    )
+    // Reabrir depois de repor não é um arranque: não apaga as anteriores.
+    verificar(
+      'repor não apaga as cópias anteriores, nem a que se repôs',
+      listarCopiasSeguranca(pastaCopias).some((c) => c.ficheiro === copiaEscolhida.ficheiro)
     )
     verificar(
       'a base de dados fica utilizável a seguir a repor',

@@ -10,7 +10,11 @@
  */
 export const PASTA_COPIAS = String.raw`C:\Temp\delegados-fpf-nomeacoes\backups`
 
-/** Quantas cópias se guardam antes de começar a apagar as mais antigas. */
+/**
+ * Quantas cópias se guardam antes de começar a apagar as mais antigas, fora do
+ * arranque: nas cópias criadas à mão e na que se grava antes de repor. No
+ * arranque apagam-se logo todas as anteriores (ver `copiasAnteriores`).
+ */
 export const MAX_COPIAS = 10
 
 export const PADRAO_COPIA = /^delegados-\d{8}-\d{6}\.db$/
@@ -32,4 +36,12 @@ export function copiasPorData(nomes: string[]): string[] {
 /** O que sobra depois de guardar as `max` mais recentes. */
 export function copiasAApagar(nomes: string[], max = MAX_COPIAS): string[] {
   return copiasPorData(nomes).slice(max)
+}
+
+/**
+ * O que apagar a seguir à cópia do arranque: todas as cópias menos a que acabou
+ * de ser gravada. Ficheiros que não são cópias da aplicação nunca entram.
+ */
+export function copiasAnteriores(nomes: string[], atual: string): string[] {
+  return copiasPorData(nomes).filter((nome) => nome !== atual)
 }

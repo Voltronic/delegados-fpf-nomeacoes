@@ -24,10 +24,20 @@ export interface OpcoesBaseDados {
   pastaCopias?: string
   /** Semear os recintos já confirmados. Desligado nas verificações, que montam os seus. */
   semearRecintos?: boolean
+  /**
+   * Apagar as cópias anteriores logo a seguir à cópia do arranque (por omissão,
+   * sim). Desligado ao reabrir depois de repor uma cópia: aí as anteriores
+   * incluem a que acabou de guardar o estado de antes de repor.
+   */
+  apagarCopiasAnteriores?: boolean
 }
 
 export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): Database.Database {
-  const { pastaCopias = PASTA_COPIAS, semearRecintos: comRecintos = true } = opcoes
+  const {
+    pastaCopias = PASTA_COPIAS,
+    semearRecintos: comRecintos = true,
+    apagarCopiasAnteriores: apagarAnteriores = true
+  } = opcoes
   mkdirSync(dirname(caminho), { recursive: true })
   const existia = existsSync(caminho)
 
@@ -39,7 +49,12 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
   // é a diferença entre uma importação fluida e a interface a engasgar.
   conn.pragma('synchronous = NORMAL')
   // Antes das migrações: se alguma correr mal, a cópia é de um estado bom.
-  if (existia) copiaSeguranca(conn, pastaCopias)
+  // Logo a seguir apagam-se as anteriores, e fica só a deste arranque — mas só
+  // se ela ficou gravada: se falhou, as anteriores são tudo o que há.
+  if (existia) {
+    const copia = copiaSeguranca(conn, pastaCopias)
+    if (copia && apagarAnteriores) apagarCopiasAnteriores(copia)
+  }
   aplicarMigracoes(conn)
   semearConfiguracao(conn)
   // Recintos já confirmados: entram numa base de dados nova, e numa que já
@@ -55,10 +70,11 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
 }
 
 /**
- * Guarda uma cópia da base de dados a cada arranque e mantém as `MAX_COPIAS` mais
- * recentes. Usa `VACUUM INTO`, que produz um ficheiro coerente com o WAL
- * já incorporado — copiar o ficheiro à mão podia deixar de fora as últimas
- * transações, que vivem no `-wal`.
+ * Guarda uma cópia da base de dados e mantém as `MAX_COPIAS` mais recentes. No
+ * arranque, `abrirBaseDados` apaga depois todas as anteriores. Usa
+ * `VACUUM INTO`, que produz um ficheiro coerente com o WAL já incorporado —
+ * copiar o ficheiro à mão podia deixar de fora as últimas transações, que vivem
+ * no `-wal`.
  */
 export function copiaSeguranca(conn: Database.Database, pasta = PASTA_COPIAS): string | null {
   try {
@@ -78,6 +94,31 @@ export function copiaSeguranca(conn: Database.Database, pasta = PASTA_COPIAS): s
     console.warn('Não foi possível criar cópia de segurança da base de dados:', erro)
     return null
   }
+}
+
+/**
+ * Apaga todas as cópias da pasta menos `manter`, a cópia acabada de gravar no
+ * arranque. Só avança se essa cópia existir e não estiver vazia: apagar as
+ * anteriores sem uma cópia boa no lugar deixava o coordenador sem nenhuma.
+ * Devolve quantas apagou.
+ */
+export function apagarCopiasAnteriores(manter: string): number {
+  try {
+    if (statSync(manter).size === 0) return 0
+  } catch {
+    return 0
+  }
+  const pasta = dirname(manter)
+  let apagadas = 0
+  for (const nome of COPIAS.copiasAnteriores(readdirSync(pasta), basename(manter))) {
+    try {
+      rmSync(join(pasta, nome), { force: true })
+      apagadas++
+    } catch {
+      /* se o ficheiro estiver bloqueado, fica para o próximo arranque */
+    }
+  }
+  return apagadas
 }
 
 export interface CopiaSegurancaInfo {
@@ -213,7 +254,9 @@ export function reporCopiaSeguranca(origem: string, caminho: string, pastaCopias
       /* pode não existir */
     }
   }
-  abrirBaseDados(caminho, { pastaCopias })
+  // Reabrir aqui não é um arranque: apagar as anteriores levava a cópia que se
+  // gravou há pouco, e repor deixava de se poder desfazer.
+  abrirBaseDados(caminho, { pastaCopias, apagarCopiasAnteriores: false })
 }
 
 export function obterBaseDados(): Database.Database {

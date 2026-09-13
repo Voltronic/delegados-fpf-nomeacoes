@@ -32,7 +32,10 @@ usam sempre uma base de dados própria numa pasta temporária.
 ## Cópias de segurança
 
 Ficam em `C:\Temp\delegados-fpf-nomeacoes\backups`, deliberadamente **fora** da pasta da aplicação
-(ver `src/main/db/copias.ts`). Uma cópia por arranque, antes das migrações, as 10 mais recentes.
+(ver `src/main/db/copias.ts`). Uma cópia por arranque, antes das migrações, e logo a seguir a
+aplicação apaga as cópias anteriores — pedido do utilizador (13/09/2026). As cópias criadas à mão e a
+que se grava antes de repor não apagam as anteriores (só o limite de 10), e reabrir depois de repor
+também não: senão a cópia de antes de repor perdia-se.
 Não mudar este destino para dentro de `release/`: era exatamente esse o erro que fez perder dados.
 
 ## Migrações e versões entregues ao cliente
