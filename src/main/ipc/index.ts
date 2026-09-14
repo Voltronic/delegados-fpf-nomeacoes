@@ -50,7 +50,7 @@ import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache, obterTrajeto } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { extrairCoordenadas } from '../geo/googlemaps'
-import { atualizarJogos, estadoAtualizacao } from '../sync/agendador'
+import { atualizarJogos, cancelarNovaTentativa, depoisDeAtualizar, estadoAtualizacao } from '../sync/agendador'
 import {
   aplicarProposta,
   candidatosParaJogo,
@@ -610,11 +610,16 @@ export function registarIpc(contexto: {
   })
   registar('sync:estado', () => estadoAtualizacao())
   registar('sync:agora', async () => {
+    // Uma atualização completa torna escusada a nova tentativa que estivesse agendada.
+    cancelarNovaTentativa()
     const bloqueio = powerSaveBlocker.start('prevent-app-suspension')
     try {
-      return await atualizarJogos(cliente(), (p) => {
+      const resultado = await atualizarJogos(cliente(), (p) => {
         for (const janela of BrowserWindow.getAllWindows()) janela.webContents.send('fpf:progresso', p)
       })
+      // Se ficaram competições por ler, volta a tentar-se sozinho daqui a pouco.
+      depoisDeAtualizar(resultado, { novaSequencia: true })
+      return resultado
     } finally {
       if (powerSaveBlocker.isStarted(bloqueio)) powerSaveBlocker.stop(bloqueio)
     }

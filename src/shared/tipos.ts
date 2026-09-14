@@ -383,6 +383,11 @@ export interface ResultadoAtualizacao {
   atualizados: number
   alertas: Alerta[]
   erros: string[]
+  /**
+   * Ids das competições que não foram lidas nesta atualização. A aplicação volta
+   * a tentar só essas pouco depois. Sem valor, não se sabe quais foram.
+   */
+  competicoesComErro?: number[]
   /** Recintos novos que ficaram com ponto no mapa nesta atualização. */
   recintosLocalizados: number
   /** Recintos que continuam sem coordenadas e precisam de mão humana. */

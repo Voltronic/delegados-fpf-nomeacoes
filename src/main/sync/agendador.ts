@@ -14,6 +14,7 @@ import { chavesPendentes, sincronizar } from '../fpf/sincronizacao'
 import { obterDistancia } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { obterConfiguracaoMotor } from '../engine/servico'
+import { competicoesATentar, esperaAteNovaTentativa } from './tentativas'
 
 const INTERVALO_MS = 60 * 60 * 1000
 
@@ -157,13 +158,20 @@ function alertasDeDesaparecidos(competicoesLidas: number[], desde: string): Entr
 /**
  * Atualiza os jogos futuros das competições ativas. Jogos inalterados não são
  * tocados; o que muda gera alerta para o coordenador.
+ *
+ * Com `apenas`, só as competições com esses ids: é o que se usa para voltar a
+ * tentar as que falharam, sem repetir os pedidos das que já foram lidas.
  */
 export async function atualizarJogos(
   cliente: ClienteFpf,
-  progresso: (p: ProgressoSincronizacao) => void = () => undefined
+  progresso: (p: ProgressoSincronizacao) => void = () => undefined,
+  apenas?: number[]
 ): Promise<ResultadoAtualizacao> {
   const desde = hojeIso()
-  const competicoes = repos.listarCompeticoes().filter((c) => c.ativa && c.fpfCompetitionId != null)
+  const competicoes = repos
+    .listarCompeticoes()
+    .filter((c) => c.ativa && c.fpfCompetitionId != null && (!apenas || apenas.includes(c.id)))
+  const competicoesComErro: number[] = []
 
   const resultado: ResultadoAtualizacao = {
     quando: new Date().toISOString(),
@@ -171,6 +179,7 @@ export async function atualizarJogos(
     atualizados: 0,
     alertas: [],
     erros: [],
+    competicoesComErro,
     recintosLocalizados: 0,
     recintosPorLocalizar: 0,
     recintosPorConfirmar: 0
@@ -204,6 +213,7 @@ export async function atualizarJogos(
     resultado.criados += sincronizacao.criados
     resultado.atualizados += sincronizacao.atualizados
     resultado.erros.push(...sincronizacao.erros)
+    competicoesComErro.push(...sincronizacao.competicoes.filter((c) => !c.lida).map((c) => c.id))
 
     entradas.push(...alertasDeConflito(sincronizacao.sensiveis))
     entradas.push(...alertasDeAlteracao(sincronizacao.sensiveis))
@@ -292,36 +302,87 @@ function emitir(canal: string, dados: unknown): void {
   }
 }
 
-/**
- * Arranca a atualização periódica: uma vez ao arrancar e depois de hora a hora.
- * Nunca corre duas ao mesmo tempo, e uma falha não mata o ciclo.
- */
-export function iniciarAgendador(cliente: () => ClienteFpf): void {
-  const correr = async (): Promise<void> => {
-    if (aCorrer) return
-    if (lerConfig('sync.automatico') === 'false') return
-    aCorrer = true
-    try {
-      const resultado = await atualizarJogos(cliente(), (p) => emitir('fpf:progresso', p))
-      emitir('sync:concluida', resultado)
-      if (resultado.alertas.length) emitir('alertas:novos', resultado.alertas)
-    } catch (erro) {
-      console.error('Atualização automática falhou:', erro)
-      emitir('sync:concluida', {
-        quando: new Date().toISOString(),
-        criados: 0,
-        atualizados: 0,
-        alertas: [],
-        erros: [(erro as Error).message],
-        recintosLocalizados: 0,
-        recintosPorLocalizar: 0,
-        recintosPorConfirmar: 0
-      } satisfies ResultadoAtualizacao)
-    } finally {
-      aCorrer = false
-    }
-  }
+let obterCliente: (() => ClienteFpf) | null = null
+let novaTentativa: NodeJS.Timeout | null = null
+let tentativasFeitas = 0
 
+/**
+ * Uma atualização automática: todas as competições, ou só as de `apenas` quando
+ * se volta a tentar as que falharam. Nunca corre duas ao mesmo tempo, e uma
+ * falha não mata o ciclo.
+ *
+ * `eNovaTentativa` distingue as tentativas rápidas das atualizações do arranque
+ * e de hora a hora: só estas recomeçam as esperas. Sem isto, uma tentativa de
+ * "todas" (sem rede, por exemplo) recomeçava sempre nos 5 minutos e nunca
+ * parava de tentar.
+ */
+async function correr(apenas?: number[], eNovaTentativa = false): Promise<void> {
+  if (aCorrer || !obterCliente) return
+  if (lerConfig('sync.automatico') === 'false') return
+  aCorrer = true
+  let resultado: ResultadoAtualizacao
+  try {
+    resultado = await atualizarJogos(obterCliente(), (p) => emitir('fpf:progresso', p), apenas)
+    emitir('sync:concluida', resultado)
+    if (resultado.alertas.length) emitir('alertas:novos', resultado.alertas)
+  } catch (erro) {
+    console.error('Atualização automática falhou:', erro)
+    resultado = {
+      quando: new Date().toISOString(),
+      criados: 0,
+      atualizados: 0,
+      alertas: [],
+      erros: [(erro as Error).message],
+      // Sem saber quais falharam, volta-se a tentar as mesmas desta vez.
+      competicoesComErro: apenas,
+      recintosLocalizados: 0,
+      recintosPorLocalizar: 0,
+      recintosPorConfirmar: 0
+    }
+    emitir('sync:concluida', resultado)
+  } finally {
+    aCorrer = false
+  }
+  depoisDeAtualizar(resultado, { novaSequencia: !eNovaTentativa })
+}
+
+/**
+ * Depois de cada atualização, automática ou pedida no ecrã: se ficaram
+ * competições por ler, volta a tentar só essas daqui a pouco, em vez de deixar
+ * o aviso de erro no ecrã até à hora seguinte. Quando uma tentativa as lê, o
+ * resultado dela já não traz erros e o aviso desaparece.
+ *
+ * `novaSequencia` recomeça as esperas — é o caso de uma atualização completa.
+ */
+export function depoisDeAtualizar(
+  resultado: ResultadoAtualizacao,
+  { novaSequencia }: { novaSequencia: boolean }
+): void {
+  cancelarNovaTentativa()
+  if (novaSequencia) tentativasFeitas = 0
+  const quais = competicoesATentar(resultado)
+  const espera = quais ? esperaAteNovaTentativa(tentativasFeitas) : null
+  if (!quais || espera == null) {
+    // Tudo lido, ou acabaram as tentativas rápidas: fica para a hora seguinte.
+    tentativasFeitas = 0
+    return
+  }
+  tentativasFeitas++
+  novaTentativa = setTimeout(() => {
+    novaTentativa = null
+    void correr(quais === 'todas' ? undefined : quais, true)
+  }, espera)
+}
+
+/** Cancela a tentativa agendada: uma atualização completa torna-a escusada. */
+export function cancelarNovaTentativa(): void {
+  if (novaTentativa) clearTimeout(novaTentativa)
+  novaTentativa = null
+}
+
+/** Arranca a atualização periódica: uma vez ao arrancar e depois de hora a hora. */
+export function iniciarAgendador(cliente: () => ClienteFpf): void {
+  obterCliente = cliente
   // Um pequeno atraso no arranque para não competir com o desenho da janela.
   setTimeout(() => void correr(), 8000)
   temporizador = setInterval(() => void correr(), INTERVALO_MS)
@@ -330,6 +391,7 @@ export function iniciarAgendador(cliente: () => ClienteFpf): void {
 export function pararAgendador(): void {
   if (temporizador) clearInterval(temporizador)
   temporizador = null
+  cancelarNovaTentativa()
 }
 
 export function estadoAtualizacao(): {

@@ -32,6 +32,9 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
     const largarSync = window.api.sync.aoConcluir((r) => {
       setEstado({ aCorrer: false, ultima: r })
       setProgresso(null)
+      // A mensagem do último "Atualizar agora" deixa de valer quando outra
+      // atualização termina — por exemplo a nova tentativa que resolveu os erros.
+      setMensagem(null)
     })
     const largarProgresso = window.api.fpf.aoProgredir(setProgresso)
     return () => {
@@ -54,10 +57,22 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
       ]
       if (r.recintosLocalizados > 0) partes.push(`${r.recintosLocalizados} recintos localizados`)
       if (r.recintosPorLocalizar > 0) partes.push(`${r.recintosPorLocalizar} recintos por localizar à mão`)
+      const semNovidades = r.alertas.length === 0 && r.criados === 0 && r.recintosLocalizados === 0
+      const porLer = r.competicoesComErro?.length ?? 0
+      const quantasPorLer =
+        porLer === 1
+          ? '1 competição não foi lida'
+          : porLer > 1
+            ? `${porLer} competições não foram lidas`
+            : 'houve problemas'
       setMensagem(
-        r.alertas.length === 0 && r.criados === 0 && r.recintosLocalizados === 0
-          ? 'Já estava tudo em dia — nada foi alterado.'
-          : `${partes.join(', ')}.`
+        // Com erros, "tudo em dia" era falso: há competições que nem se leram.
+        r.erros.length
+          ? `${semNovidades ? 'Nada foi alterado' : partes.join(', ')}, mas ${quantasPorLer} — ` +
+              'a aplicação volta a tentar sozinha dentro de alguns minutos.'
+          : semNovidades
+            ? 'Já estava tudo em dia — nada foi alterado.'
+            : `${partes.join(', ')}.`
       )
     } catch (e) {
       const texto = `A atualização falhou: ${mensagemDeErro(e)}`
@@ -124,6 +139,11 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
         {estado.ultima && estado.ultima.erros.length > 0 && (
           <div className="aviso-caixa erro">
             A última atualização teve problemas: {estado.ultima.erros.slice(0, 3).join(' · ')}
+            {estado.ultima.erros.length > 3 && ` · e mais ${estado.ultima.erros.length - 3}`}
+            <div style={{ marginTop: 4 }}>
+              A aplicação volta a tentar sozinha; este aviso desaparece assim que essas competições forem
+              lidas.
+            </div>
           </div>
         )}
 
