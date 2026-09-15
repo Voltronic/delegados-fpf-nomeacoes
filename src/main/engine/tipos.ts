@@ -35,8 +35,11 @@ export interface EstadoDelegado {
   jogosPorCompeticao: Record<number, number>
   indisponibilidades: { dataInicio: string; dataFim: string; motivo: string | null }[]
   clubesVetados: number[]
-  /** Jogos já nomeados, para deteção de conflito de horário. */
-  agenda: { jogoId: number; dataHora: string | null }[]
+  /**
+   * Jogos já nomeados, para o bloqueio por folga e o aviso de jogo no mesmo dia.
+   * `descricao` é "Casa × Fora".
+   */
+  agenda: { jogoId: number; dataHora: string | null; descricao?: string }[]
   ultimaNomeacaoEm: string | null
 }
 

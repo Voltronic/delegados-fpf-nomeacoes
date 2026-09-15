@@ -3,6 +3,12 @@ import type { Competicao, ConfiguracaoMotor, NivelDelegado } from '@shared/tipos
 import type { CopiaSegurancaApi, InfoAplicacao } from '@shared/api'
 import { avisar, guardarCom, mensagemDeErro } from '../lib/avisos'
 
+/** Minutos desde a meia-noite em "HH:MM", dando a volta ao dia. */
+function horaDoDia(minutos: number): string {
+  const m = ((Math.round(minutos) % 1440) + 1440) % 1440
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
+
 export default function Definicoes(): JSX.Element {
   const [config, setConfig] = useState<ConfiguracaoMotor | null>(null)
   const [competicoes, setCompeticoes] = useState<Competicao[]>([])
@@ -163,18 +169,34 @@ export default function Definicoes(): JSX.Element {
               />
             </label>
             <label className="campo">
-              Folga mínima entre dois jogos do mesmo delegado (minutos)
+              Folga antes do jogo (minutos)
               <input
                 type="number"
                 min={0}
                 step={30}
-                value={config?.margemEntreJogosMinutos ?? 180}
-                onChange={(e) =>
-                  config && setConfig({ ...config, margemEntreJogosMinutos: Number(e.target.value) })
-                }
+                value={config?.folgaAntesMinutos ?? 270}
+                onChange={(e) => config && setConfig({ ...config, folgaAntesMinutos: Number(e.target.value) })}
+              />
+            </label>
+            <label className="campo">
+              Folga depois do jogo (minutos)
+              <input
+                type="number"
+                min={0}
+                step={30}
+                value={config?.folgaDepoisMinutos ?? 180}
+                onChange={(e) => config && setConfig({ ...config, folgaDepoisMinutos: Number(e.target.value) })}
               />
             </label>
           </div>
+          {config && (
+            <p className="silencioso" style={{ margin: '8px 0 0' }}>
+              Exemplo: para nomear um delegado para um jogo às 15:00, ele não pode ter outro jogo a começar
+              depois das {horaDoDia(15 * 60 - config.folgaAntesMinutos)} nem antes das{' '}
+              {horaDoDia(15 * 60 + config.folgaDepoisMinutos)}. Um jogo no mesmo dia fora desse intervalo não
+              impede a nomeação, mas aparece como aviso no cartão do delegado.
+            </p>
+          )}
         </div>
 
         <div className="cartao">

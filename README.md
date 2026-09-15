@@ -69,7 +69,7 @@ região: um delegado do Sul com poucos km continua a poder subir ao topo para um
 mapa mostra exatamente isso.
 
 **Bloqueios rígidos** (o delegado sai da lista principal, com o motivo à vista): indisponibilidade na
-data, veto ao clube, outro jogo em horário próximo, nível abaixo do exigido pela competição,
+data, veto ao clube, outro jogo dentro da folga (por omissão, a começar nas 4h30 antes ou nas 3h depois do jogo a nomear), nível abaixo do exigido pela competição,
 distância acima do limite configurado, ou já estar nomeado para o mesmo jogo.
 
 Os quilómetros contam **ida e volta por estrada** e são congelados no momento da nomeação, para o

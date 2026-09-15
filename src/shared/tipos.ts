@@ -270,8 +270,13 @@ export interface ConfiguracaoMotor {
   pesos: PesoComponente[]
   /** Km (só ida) acima dos quais o delegado é bloqueado. 0 = sem limite. */
   distanciaMaximaKm: number
-  /** Minutos de folga a exigir entre dois jogos do mesmo delegado. */
-  margemEntreJogosMinutos: number
+  /**
+   * Folga à volta do jogo a nomear, em minutos: o delegado não pode ter outro
+   * jogo a começar nos `folgaAntesMinutos` antes nem nos `folgaDepoisMinutos`
+   * depois. Por omissão, 4h30 antes e 3h depois.
+   */
+  folgaAntesMinutos: number
+  folgaDepoisMinutos: number
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import type { Bloqueio, Candidato, ContributoComponente, PesoComponente } from '@shared/tipos'
 import { COMPONENTES_POR_ID } from './componentes'
+import { dentroDaFolga, descreverQuando, folgaDe, formatarFolga, mesmoDia } from '../sync/conflitos'
 import type { Agregados, ContextoAvaliacao, EntradaMotor, EstadoDelegado } from './tipos'
 
 const DIA_MS = 86_400_000
@@ -54,14 +55,20 @@ export function calcularBloqueios(entrada: EntradaMotor, estado: EstadoDelegado)
       })
     }
 
-    const instanteJogo = new Date(jogo.dataHora).getTime()
-    const margemMs = config.margemEntreJogosMinutos * 60_000
-    const conflito = estado.agenda.find((a) => {
-      if (a.jogoId === jogo.jogoId || !a.dataHora) return false
-      return Math.abs(new Date(a.dataHora).getTime() - instanteJogo) < margemMs
-    })
-    if (conflito) {
-      bloqueios.push({ codigo: 'CONFLITO_HORARIO', descricao: 'Já tem outro jogo em horário próximo' })
+    // A folga conta a partir do jogo que se está a nomear: por omissão, nenhum
+    // outro jogo do delegado pode começar nas 4h30 antes nem nas 3h depois.
+    const inicio = jogo.dataHora
+    const folga = folgaDe(config)
+    const conflito = estado.agenda.find(
+      (a) => a.jogoId !== jogo.jogoId && a.dataHora != null && dentroDaFolga(inicio, a.dataHora, folga)
+    )
+    if (conflito?.dataHora) {
+      bloqueios.push({
+        codigo: 'CONFLITO_HORARIO',
+        descricao:
+          `Já tem ${conflito.descricao ?? 'outro jogo'} ${descreverQuando(conflito.dataHora, inicio)} — ` +
+          `sem a folga de ${formatarFolga(folga.antesMinutos)} antes e ${formatarFolga(folga.depoisMinutos)} depois deste jogo`
+      })
     }
   }
 
@@ -88,6 +95,25 @@ function calcularAvisos(entrada: EntradaMotor, estado: EstadoDelegado): string[]
   }
   if (distancia?.fonte === 'AVIAO') {
     avisos.push('Viagem de avião — só contam os km de casa ao aeroporto, ida e volta')
+  }
+
+  // Um jogo no mesmo dia fora da folga não impede a nomeação, mas o coordenador
+  // tem de o ver, com a hora. Os que caem dentro da folga já são um bloqueio.
+  const inicio = entrada.jogo.dataHora
+  if (inicio) {
+    const folga = folgaDe(entrada.config)
+    const noMesmoDia = estado.agenda
+      .filter(
+        (a): a is { jogoId: number; dataHora: string; descricao?: string } =>
+          a.jogoId !== entrada.jogo.jogoId &&
+          a.dataHora != null &&
+          mesmoDia(a.dataHora, inicio) &&
+          !dentroDaFolga(inicio, a.dataHora, folga)
+      )
+      .sort((a, b) => a.dataHora.localeCompare(b.dataHora))
+    for (const a of noMesmoDia) {
+      avisos.push(`Já tem jogo neste dia: ${a.descricao ?? 'outro jogo'} ${descreverQuando(a.dataHora, inicio)}`)
+    }
   }
   return avisos
 }

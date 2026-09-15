@@ -138,11 +138,11 @@ function contarElegiveis(entrada: EntradaMotor, estados: Map<number, EstadoDeleg
 function aplicarAtribuicao(estado: EstadoDelegado, entrada: EntradaMotor, candidato: Candidato): void {
   estado.kmEpoca += candidato.kmViagem ?? 0
   estado.jogosEpoca += 1
-  const { clubeCasaId, clubeForaId, competicaoId, jogoId, dataHora } = entrada.jogo
+  const { clubeCasaId, clubeForaId, clubeCasaNome, clubeForaNome, competicaoId, jogoId, dataHora } = entrada.jogo
   estado.clubesFeitos[clubeCasaId] = (estado.clubesFeitos[clubeCasaId] ?? 0) + 1
   estado.clubesFeitos[clubeForaId] = (estado.clubesFeitos[clubeForaId] ?? 0) + 1
   estado.jogosPorCompeticao[competicaoId] = (estado.jogosPorCompeticao[competicaoId] ?? 0) + 1
-  estado.agenda.push({ jogoId, dataHora })
+  estado.agenda.push({ jogoId, dataHora, descricao: `${clubeCasaNome} × ${clubeForaNome}` })
   if (dataHora && (!estado.ultimaNomeacaoEm || dataHora > estado.ultimaNomeacaoEm)) {
     estado.ultimaNomeacaoEm = dataHora
   }

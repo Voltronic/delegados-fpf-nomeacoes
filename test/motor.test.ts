@@ -8,7 +8,8 @@ import type { ContextoJogo, Distancia, EntradaMotor, EstadoDelegado } from '../s
 const CONFIG: ConfiguracaoMotor = {
   pesos: PESOS_POR_OMISSAO,
   distanciaMaximaKm: 0,
-  margemEntreJogosMinutos: 180
+  folgaAntesMinutos: 270,
+  folgaDepoisMinutos: 180
 }
 
 function delegado(id: number, nome: string, extra: Partial<Delegado> = {}): Delegado {
@@ -220,6 +221,52 @@ describe('bloqueios rígidos', () => {
       agenda: [{ jogoId: 99, dataHora: '2026-09-13T21:00' }]
     })
     expect(avaliarCandidatos(entrada([a], { 1: 50 }))[0].elegivel).toBe(true)
+  })
+
+  it('a folga é de 4h30 antes e 3h depois do jogo a nomear, com os limites livres', () => {
+    const as15 = { jogo: { ...JOGO, dataHora: '2026-09-13T15:00' } }
+    const elegivelCom = (dataHora: string): boolean =>
+      avaliarCandidatos(
+        entrada([estado(delegado(1, 'Ana'), { agenda: [{ jogoId: 99, dataHora }] })], { 1: 50 }, as15)
+      )[0].elegivel
+    expect(elegivelCom('2026-09-13T10:30')).toBe(true)
+    expect(elegivelCom('2026-09-13T10:31')).toBe(false)
+    expect(elegivelCom('2026-09-13T17:59')).toBe(false)
+    expect(elegivelCom('2026-09-13T18:00')).toBe(true)
+  })
+
+  it('o bloqueio diz que jogo é e a que horas', () => {
+    const a = estado(delegado(1, 'Ana'), {
+      agenda: [{ jogoId: 99, dataHora: '2026-09-13T13:00', descricao: 'Fc Porto × Sl Benfica' }]
+    })
+    const [ana] = avaliarCandidatos(entrada([a], { 1: 50 }, { jogo: { ...JOGO, dataHora: '2026-09-13T15:00' } }))
+    expect(ana.bloqueios[0].descricao).toContain('Fc Porto × Sl Benfica às 13:00')
+  })
+
+  it('avisa quando o delegado já tem jogo nesse dia, com a hora', () => {
+    const a = estado(delegado(1, 'Ana'), {
+      agenda: [{ jogoId: 99, dataHora: '2026-09-13T10:00', descricao: 'Fc Porto × Sl Benfica' }]
+    })
+    const [ana] = avaliarCandidatos(entrada([a], { 1: 50 }, { jogo: { ...JOGO, dataHora: '2026-09-13T15:00' } }))
+    expect(ana.elegivel).toBe(true)
+    expect(ana.avisos).toContain('Já tem jogo neste dia: Fc Porto × Sl Benfica às 10:00')
+  })
+
+  it('não avisa por jogos noutros dias', () => {
+    const a = estado(delegado(1, 'Ana'), {
+      agenda: [{ jogoId: 99, dataHora: '2026-09-14T10:00', descricao: 'X × Y' }]
+    })
+    const [ana] = avaliarCandidatos(entrada([a], { 1: 50 }, { jogo: { ...JOGO, dataHora: '2026-09-13T15:00' } }))
+    expect(ana.avisos.some((t) => t.startsWith('Já tem jogo neste dia'))).toBe(false)
+  })
+
+  it('um jogo sem hora conhecida não bloqueia, mas avisa', () => {
+    const a = estado(delegado(1, 'Ana'), {
+      agenda: [{ jogoId: 99, dataHora: '2026-09-13T00:00', descricao: 'X × Y' }]
+    })
+    const [ana] = avaliarCandidatos(entrada([a], { 1: 50 }, { jogo: { ...JOGO, dataHora: '2026-09-13T01:00' } }))
+    expect(ana.elegivel).toBe(true)
+    expect(ana.avisos).toContain('Já tem jogo neste dia: X × Y (hora por confirmar)')
   })
 
   it('bloqueia delegado principal em competição de elite', () => {

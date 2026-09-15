@@ -38,14 +38,16 @@ export function obterConfiguracaoMotor(): ConfiguracaoMotor {
   return {
     pesos,
     distanciaMaximaKm: Number(lerConfig('motor.distanciaMaximaKm') ?? '0'),
-    margemEntreJogosMinutos: Number(lerConfig('motor.margemEntreJogosMinutos') ?? '180')
+    folgaAntesMinutos: Number(lerConfig('motor.folgaAntesMinutos') ?? '270'),
+    folgaDepoisMinutos: Number(lerConfig('motor.folgaDepoisMinutos') ?? '180')
   }
 }
 
 export function guardarConfiguracaoMotor(config: ConfiguracaoMotor): ConfiguracaoMotor {
   escreverConfig('motor.pesos', JSON.stringify(config.pesos))
   escreverConfig('motor.distanciaMaximaKm', String(config.distanciaMaximaKm))
-  escreverConfig('motor.margemEntreJogosMinutos', String(config.margemEntreJogosMinutos))
+  escreverConfig('motor.folgaAntesMinutos', String(config.folgaAntesMinutos))
+  escreverConfig('motor.folgaDepoisMinutos', String(config.folgaDepoisMinutos))
   return obterConfiguracaoMotor()
 }
 

@@ -21,7 +21,7 @@ import { obterBaseDados, registarAuditoria } from './index'
 import { dataHoraAGuardar, limiteDeTrabalho, vaiAcontecer } from '../../shared/datas'
 import { normalizarNome } from '../fpf/html'
 import { eRecintoPorIndicar } from '../fpf/recintoPorIndicar'
-import { jogosQueColidem } from '../sync/conflitos'
+import { jogosQueColidem, type Folga } from '../sync/conflitos'
 
 const agora = (): string => new Date().toISOString()
 const bool = (v: unknown): boolean => v === 1 || v === true
@@ -1066,7 +1066,7 @@ export interface EstatisticasDelegado {
   clubes: Record<number, number>
   competicoes: Record<number, number>
   ultimaNomeacaoEm: string | null
-  agenda: { jogoId: number; dataHora: string | null }[]
+  agenda: { jogoId: number; dataHora: string | null; descricao: string }[]
 }
 
 /** Agrega, por delegado, tudo o que o motor precisa de saber sobre a época. */
@@ -1075,10 +1075,13 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
   const linhas = obterBaseDados()
     .prepare(
       `SELECT n.delegado_id, n.km, n.minutos, n.fonte_distancia, j.id AS jogo_id, j.data_hora,
-              j.clube_casa_id, j.clube_fora_id, j.competicao_id
+              j.clube_casa_id, j.clube_fora_id, j.competicao_id,
+              cc.nome AS casa_nome, cf.nome AS fora_nome
        FROM nomeacao n
        JOIN jogo j ON j.id = n.jogo_id
        JOIN competicao comp ON comp.id = j.competicao_id
+       JOIN clube cc ON cc.id = j.clube_casa_id
+       JOIN clube cf ON cf.id = j.clube_fora_id
        WHERE n.estado = 'CONFIRMADA' ${filtroEpoca}`
     )
     .all(seasonId != null ? { seasonId } : {}) as {
@@ -1091,6 +1094,8 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
     clube_casa_id: number
     clube_fora_id: number
     competicao_id: number
+    casa_nome: string
+    fora_nome: string
   }[]
 
   const mapa = new Map<number, EstatisticasDelegado>()
@@ -1117,7 +1122,7 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
     e.clubes[l.clube_casa_id] = (e.clubes[l.clube_casa_id] ?? 0) + 1
     e.clubes[l.clube_fora_id] = (e.clubes[l.clube_fora_id] ?? 0) + 1
     e.competicoes[l.competicao_id] = (e.competicoes[l.competicao_id] ?? 0) + 1
-    e.agenda.push({ jogoId: l.jogo_id, dataHora: l.data_hora })
+    e.agenda.push({ jogoId: l.jogo_id, dataHora: l.data_hora, descricao: `${l.casa_nome} × ${l.fora_nome}` })
     if (l.data_hora && (!e.ultimaNomeacaoEm || l.data_hora > e.ultimaNomeacaoEm)) {
       e.ultimaNomeacaoEm = l.data_hora
     }
@@ -1397,13 +1402,13 @@ export function jogosFuturosDaCompeticao(competicaoId: number, desde: string): J
 }
 
 /**
- * Outros jogos do delegado que colidem com um instante, dentro de uma margem.
+ * Outros jogos do delegado que caem na folga à volta de um jogo.
  * É o que responde a "este jogo foi adiado — o delegado já tem outro nessa data?".
  */
 export function jogosDoDelegadoPerto(
   delegadoId: number,
   dataHora: string,
-  margemMinutos: number,
+  folga: Folga,
   excluirJogoId: number
 ): JogoDetalhado[] {
   const agenda = obterBaseDados()
@@ -1416,7 +1421,7 @@ export function jogosDoDelegadoPerto(
   return jogosQueColidem(
     agenda.map((l) => ({ id: l.id, dataHora: l.data_hora, descricao: '' })),
     dataHora,
-    margemMinutos,
+    folga,
     excluirJogoId
   )
     .map((j) => obterJogoDetalhado(j.id))

@@ -1473,7 +1473,7 @@ async function principal(): Promise<void> {
     }
 
     log('\n10. Alertas de alteração e conflito')
-    const margem = 180
+    const folga = { antesMinutos: 270, depoisMinutos: 180 }
     const jogoBase = repos.listarJogos().find((j) => j.nomeacoes.length > 0)
     verificar('há um jogo nomeado para testar colisões', !!jogoBase)
     if (jogoBase) {
@@ -1498,7 +1498,7 @@ async function principal(): Promise<void> {
       })
       await nomear({ jogoId: outroId, delegadoId: delegadoNomeado, papel: 'PRINCIPAL' })
 
-      const colisoes = repos.jogosDoDelegadoPerto(delegadoNomeado, '2026-09-13T16:00', margem, jogoBase.id)
+      const colisoes = repos.jogosDoDelegadoPerto(delegadoNomeado, '2026-09-13T16:00', folga, jogoBase.id)
       verificar(
         'deteta que o delegado já tem outro jogo na nova data',
         colisoes.some((c) => c.id === outroId),
@@ -1506,7 +1506,7 @@ async function principal(): Promise<void> {
       )
       verificar(
         'não acusa colisão fora da margem',
-        repos.jogosDoDelegadoPerto(delegadoNomeado, '2026-09-13T23:00', margem, jogoBase.id).length === 0
+        repos.jogosDoDelegadoPerto(delegadoNomeado, '2026-09-13T23:00', folga, jogoBase.id).length === 0
       )
     }
 

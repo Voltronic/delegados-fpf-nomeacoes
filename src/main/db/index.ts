@@ -198,7 +198,8 @@ function aplicarMigracoes(conn: Database.Database): void {
 export const CONFIG_POR_OMISSAO: Record<string, string> = {
   'motor.pesos': JSON.stringify(PESOS_POR_OMISSAO),
   'motor.distanciaMaximaKm': '0',
-  'motor.margemEntreJogosMinutos': '180',
+  'motor.folgaAntesMinutos': '270',
+  'motor.folgaDepoisMinutos': '180',
   'geo.nominatimUrl': 'https://nominatim.openstreetmap.org',
   'geo.osrmUrl': 'https://router.project-osrm.org',
   'geo.fatorHaversine': '1.25',

@@ -15,6 +15,7 @@ import { obterDistancia } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { obterConfiguracaoMotor } from '../engine/servico'
 import { competicoesATentar, esperaAteNovaTentativa } from './tentativas'
+import { folgaDe } from './conflitos'
 
 const INTERVALO_MS = 60 * 60 * 1000
 
@@ -92,7 +93,7 @@ export function alertasDeAlteracao(diffs: DiffJogo[]): EntradaAlerta[] {
  * já tem outro jogo nessa altura. Ninguém está em dois sítios ao mesmo tempo.
  */
 function alertasDeConflito(diffs: DiffJogo[]): EntradaAlerta[] {
-  const margem = obterConfiguracaoMotor().margemEntreJogosMinutos
+  const folga = folgaDe(obterConfiguracaoMotor())
   const entradas: EntradaAlerta[] = []
 
   for (const d of diffs) {
@@ -102,7 +103,7 @@ function alertasDeConflito(diffs: DiffJogo[]): EntradaAlerta[] {
     if (!jogo) continue
 
     for (const nomeacao of jogo.nomeacoes) {
-      const colisoes = repos.jogosDoDelegadoPerto(nomeacao.delegadoId, d.dataHora, margem, d.jogoId)
+      const colisoes = repos.jogosDoDelegadoPerto(nomeacao.delegadoId, d.dataHora, folga, d.jogoId)
       for (const outro of colisoes) {
         entradas.push({
           chave: `conflito:${d.chaveNatural}:${nomeacao.delegadoId}:${outro.id}:${d.dataHora}`,

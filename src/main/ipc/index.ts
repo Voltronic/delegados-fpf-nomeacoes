@@ -51,6 +51,7 @@ import { geocodificar, invalidarCache, obterTrajeto } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { extrairCoordenadas } from '../geo/googlemaps'
 import { atualizarJogos, cancelarNovaTentativa, depoisDeAtualizar, estadoAtualizacao } from '../sync/agendador'
+import { descreverQuando, folgaDe } from '../sync/conflitos'
 import {
   aplicarProposta,
   candidatosParaJogo,
@@ -482,11 +483,11 @@ export function registarIpc(contexto: {
     const jogo = repos.editarJogo(id, dados)
     if (!jogo) return null
 
-    const margem = Number(lerConfig('motor.margemEntreJogosMinutos') ?? '180')
+    const folga = folgaDe(obterConfiguracaoMotor())
     const alertas: repos.EntradaAlerta[] = []
     // Sem data não há colisão possível: o jogo ainda não está marcado.
     for (const nomeacao of jogo.dataHora ? jogo.nomeacoes : []) {
-      const agenda = repos.jogosDoDelegadoPerto(nomeacao.delegadoId, jogo.dataHora!, margem, jogo.id)
+      const agenda = repos.jogosDoDelegadoPerto(nomeacao.delegadoId, jogo.dataHora!, folga, jogo.id)
       for (const colisao of agenda) {
         alertas.push({
           // A chave inclui os dois jogos: mexer outra vez gera alerta novo.
@@ -497,8 +498,9 @@ export function registarIpc(contexto: {
           descricao: `${jogo.clubeCasaNome} × ${jogo.clubeForaNome}`,
           dataHora: jogo.dataHora,
           detalhe:
-            `Depois da alteração, ${nomeacao.delegadoNome} fica com dois jogos à mesma hora: ` +
-            `este e ${colisao.clubeCasaNome} × ${colisao.clubeForaNome}. Um dos dois tem de mudar de delegado.`
+            `Depois da alteração, ${nomeacao.delegadoNome} fica com outro jogo demasiado perto deste: ` +
+            `${colisao.clubeCasaNome} × ${colisao.clubeForaNome} ${descreverQuando(colisao.dataHora!, jogo.dataHora!)}. ` +
+            'Um dos dois tem de mudar de delegado.'
         })
       }
     }
