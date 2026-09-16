@@ -420,5 +420,38 @@ export const MIGRACOES: Migracao[] = [
         ON nomeacao(jogo_id, papel) WHERE estado <> 'CANCELADA' AND papel <> 'SOMBRA';
       CREATE INDEX ix_nomeacao_delegado ON nomeacao(delegado_id);
     `
+  },
+  {
+    versao: 15,
+    descricao: 'Alerta dos recintos por confirmar',
+    sql: `
+      -- Um ponto obtido pela pesquisa automática pode cair no sítio errado, e
+      -- daí em diante todos os km desse recinto saem errados sem ninguém dar
+      -- por isso. O ecrã de recintos já os contava, mas quem não lá vai nunca
+      -- sabia: passa a haver alerta. O CHECK do tipo não se altera em SQLite.
+      CREATE TABLE alerta_novo (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        chave         TEXT NOT NULL UNIQUE,
+        tipo          TEXT NOT NULL CHECK (tipo IN ('ALTERADO','DESAPARECIDO','CONFLITO',
+                                                    'RECINTO_SEM_COORDENADAS','RECINTO_POR_CONFIRMAR')),
+        jogo_id       INTEGER REFERENCES jogo(id) ON DELETE CASCADE,
+        recinto_id    INTEGER REFERENCES recinto(id) ON DELETE CASCADE,
+        competicao    TEXT,
+        descricao     TEXT NOT NULL,
+        data_hora     TEXT,
+        detalhe       TEXT NOT NULL,
+        lido          INTEGER NOT NULL DEFAULT 0,
+        criado_em     TEXT NOT NULL
+      );
+
+      INSERT INTO alerta_novo (id, chave, tipo, jogo_id, recinto_id, competicao, descricao,
+                               data_hora, detalhe, lido, criado_em)
+        SELECT id, chave, tipo, jogo_id, recinto_id, competicao, descricao,
+               data_hora, detalhe, lido, criado_em FROM alerta;
+
+      DROP TABLE alerta;
+      ALTER TABLE alerta_novo RENAME TO alerta;
+      CREATE INDEX ix_alerta_lido ON alerta(lido, criado_em);
+    `
   }
 ]

@@ -414,7 +414,12 @@ export interface ResultadoSincronizacao {
 // Alertas
 // ---------------------------------------------------------------------------
 
-export type TipoAlerta = 'ALTERADO' | 'DESAPARECIDO' | 'CONFLITO' | 'RECINTO_SEM_COORDENADAS'
+export type TipoAlerta =
+  | 'ALTERADO'
+  | 'DESAPARECIDO'
+  | 'CONFLITO'
+  | 'RECINTO_SEM_COORDENADAS'
+  | 'RECINTO_POR_CONFIRMAR'
 
 export interface Alerta {
   id: number

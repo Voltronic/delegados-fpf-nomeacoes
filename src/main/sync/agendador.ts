@@ -261,7 +261,11 @@ export async function atualizarJogos(
   await recalcularKm(recintosCorrigidos.filter((c) => c.temNomeacoes).map((c) => c.jogoId))
 
   repos.apagarAlertasDeRecintosLocalizados()
+  repos.apagarAlertasDeRecintosConfirmados()
   resultado.alertas.push(...repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas()))
+  // Um recinto novo entra quase sempre com coordenadas da pesquisa automática:
+  // sem este aviso, ficava por confirmar sem ninguém saber que existia.
+  resultado.alertas.push(...repos.criarAlertas(repos.alertasDeRecintosPorConfirmar()))
 
   ultimaAtualizacao = resultado
   // Guardado em base de dados, e não só em memória: ao abrir a aplicação o

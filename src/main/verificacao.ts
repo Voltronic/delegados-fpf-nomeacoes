@@ -1479,6 +1479,55 @@ async function principal(): Promise<void> {
       coordsManuais: true
     })
     const fechados = repos.apagarAlertasDeRecintosLocalizados()
+
+    // Um recinto localizado pela pesquisa automática fica por confirmar, e isso
+    // também tem de avisar: um ponto errado estraga os km em silêncio.
+    const porConfirmar = repos.encontrarOuCriarRecinto('Campo Localizado Pela Pesquisa')
+    repos.guardarCoordenadasAutomaticas(porConfirmar.id, {
+      lat: 41.2,
+      lng: -8.5,
+      origem: 'NOME',
+      moradaResolvida: 'Campo Localizado Pela Pesquisa',
+      confianca: 'MEDIA'
+    })
+    const jogoNoPorConfirmar = repos.guardarJogo({
+      chaveNatural: 'teste:recinto-por-confirmar',
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: null,
+      fpfFixtureId: 990004,
+      fpfMatchId: null,
+      dataHora: horasDaqui(150),
+      clubeCasaId: clubes[1].id,
+      clubeForaId: clubes[2].id,
+      recintoId: porConfirmar.id,
+      recintoTextoFpf: 'Campo Localizado Pela Pesquisa',
+      estado: 'AGENDADO'
+    })
+    const avisosPorConfirmar = repos.criarAlertas(repos.alertasDeRecintosPorConfirmar())
+    verificar(
+      'um recinto localizado automaticamente avisa que falta confirmar',
+      avisosPorConfirmar.some(
+        (a) => a.tipo === 'RECINTO_POR_CONFIRMAR' && a.recintoId === porConfirmar.id && a.jogoId === jogoNoPorConfirmar
+      ),
+      `→ ${avisosPorConfirmar.find((a) => a.recintoId === porConfirmar.id)?.detalhe ?? 'sem alerta'}`
+    )
+    verificar(
+      'e um recinto sem coordenadas não entra neste alerta',
+      !avisosPorConfirmar.some((a) => a.recintoId === orfao.id)
+    )
+    repos.confirmarRecinto(porConfirmar.id, true)
+    const fechadosPorConfirmar = repos.apagarAlertasDeRecintosConfirmados()
+    verificar(
+      'confirmar o ponto fecha o alerta',
+      fechadosPorConfirmar === 1 &&
+        !repos.listarAlertas().some((a) => a.tipo === 'RECINTO_POR_CONFIRMAR' && a.recintoId === porConfirmar.id)
+    )
+    verificar(
+      'e um recinto já confirmado não volta a avisar',
+      !repos.alertasDeRecintosPorConfirmar().some((a) => a.recintoId === porConfirmar.id)
+    )
     verificar(
       'o alerta fecha-se quando o recinto passa a ter coordenadas',
       fechados === 1 &&

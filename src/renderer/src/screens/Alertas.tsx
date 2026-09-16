@@ -7,7 +7,8 @@ const ETIQUETAS: Record<Alerta['tipo'], { texto: string; classe: string }> = {
   CONFLITO: { texto: 'Conflito de agenda', classe: 'erro' },
   ALTERADO: { texto: 'Jogo alterado', classe: 'alerta' },
   DESAPARECIDO: { texto: 'Jogo desapareceu', classe: 'alerta' },
-  RECINTO_SEM_COORDENADAS: { texto: 'Recinto sem coordenadas', classe: 'alerta' }
+  RECINTO_SEM_COORDENADAS: { texto: 'Recinto sem coordenadas', classe: 'alerta' },
+  RECINTO_POR_CONFIRMAR: { texto: 'Recinto por confirmar', classe: 'alerta' }
 }
 
 interface Props {

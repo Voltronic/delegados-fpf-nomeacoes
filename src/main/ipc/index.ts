@@ -99,9 +99,13 @@ let ultimoEstadoDoMapa: unknown = null
  * corrigi-lo à mão —, avisa logo se esse recinto não tem coordenadas, em vez de
  * esperar pela atualização seguinte.
  */
-function avisarRecintosSemCoordenadas(): void {
+function avisarSobreRecintos(): void {
   repos.apagarAlertasDeRecintosLocalizados()
-  const novos = repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas())
+  repos.apagarAlertasDeRecintosConfirmados()
+  const novos = [
+    ...repos.criarAlertas(repos.alertasDeRecintosSemCoordenadas()),
+    ...repos.criarAlertas(repos.alertasDeRecintosPorConfirmar())
+  ]
   if (novos.length) emitirAlertas(novos)
 }
 
@@ -429,10 +433,13 @@ export function registarIpc(contexto: {
   })
   registar('recintos:confirmar', (id: number, confirmado: boolean) => {
     repos.confirmarRecinto(id, confirmado)
+    // Confirmar fecha o alerta; marcar outra vez por confirmar volta a abri-lo.
+    avisarSobreRecintos()
     return repos.listarRecintos()
   })
   registar('recintos:confirmarTodos', () => {
     repos.confirmarTodosRecintos()
+    repos.apagarAlertasDeRecintosConfirmados()
     return repos.listarRecintos()
   })
 
@@ -508,7 +515,7 @@ export function registarIpc(contexto: {
     const criados = repos.criarAlertas(alertas)
     if (criados.length) emitirAlertas(criados)
     // A correção pode ter posto o jogo num recinto ainda por localizar.
-    avisarRecintosSemCoordenadas()
+    avisarSobreRecintos()
     return jogo
   })
   /** Devolve o jogo ao controlo da FPF, voltando a ser atualizado. */
@@ -519,7 +526,7 @@ export function registarIpc(contexto: {
     repos.definirLevaDelegado(id, leva)
     // Um jogo trazido para a lista passa a precisar de km: se o recinto não
     // tiver coordenadas, é agora que o coordenador tem de saber.
-    if (leva) avisarRecintosSemCoordenadas()
+    if (leva) avisarSobreRecintos()
     return repos.obterJogoDetalhado(id)
   })
 

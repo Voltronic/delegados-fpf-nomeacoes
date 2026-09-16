@@ -1338,21 +1338,26 @@ export function criarAlertas(entradas: EntradaAlerta[]): Alerta[] {
 }
 
 /**
- * Alertas dos recintos sem coordenadas que têm um jogo marcado.
- *
- * Os recintos só interessam por causa dos km: sem coordenadas, os jogos que lá
- * se realizam ficam sem distâncias e os candidatos não podem ser ordenados.
- * Por isso o alerta nasce do jogo, não do recinto — um recinto sem coordenadas
- * onde ninguém vai jogar não é trabalho para ninguém.
- *
- * Contam os jogos por realizar que levam delegado. A chave inclui o próximo
- * desses jogos: se o coordenador apagar o alerta sem pôr coordenadas, o
- * próximo jogo marcado para lá volta a avisar.
+ * Os recintos em certo estado que têm jogos marcados, com o próximo desses
+ * jogos. É a parte comum aos dois alertas de recinto: o que interessa não é o
+ * recinto em si, é haver trabalho marcado para lá.
  */
-export function alertasDeRecintosSemCoordenadas(desde = limiteDeTrabalho()): EntradaAlerta[] {
+function recintosComJogoMarcado(
+  condicao: string,
+  desde: string
+): {
+  recinto_id: number
+  recinto_nome: string
+  jogo_id: number
+  data_hora: string | null
+  casa: string
+  fora: string
+  competicao: string
+  jogos: number
+}[] {
   const RELEVANTE = `j.recinto_id = r.id AND j.data_hora >= @desde AND j.escondido = 0
     AND COALESCE(j.leva_delegado, c.todos_com_delegado) = 1`
-  const linhas = obterBaseDados()
+  return obterBaseDados()
     .prepare(
       `SELECT r.id AS recinto_id, r.nome AS recinto_nome,
               pj.id AS jogo_id, pj.data_hora, cc.nome AS casa, cf.nome AS fora, pc.nome AS competicao,
@@ -1366,21 +1371,30 @@ export function alertasDeRecintosSemCoordenadas(desde = limiteDeTrabalho()): Ent
          JOIN clube cc ON cc.id = pj.clube_casa_id
          JOIN clube cf ON cf.id = pj.clube_fora_id
          JOIN competicao pc ON pc.id = pj.competicao_id
-        WHERE r.lat IS NULL OR r.lng IS NULL
+        WHERE ${condicao}
         ORDER BY pj.data_hora`
     )
-    .all({ desde }) as {
-    recinto_id: number
-    recinto_nome: string
-    jogo_id: number
-    data_hora: string | null
-    casa: string
-    fora: string
-    competicao: string
-    jogos: number
-  }[]
+    .all({ desde }) as ReturnType<typeof recintosComJogoMarcado>
+}
 
-  return linhas.map((l) => ({
+/** "e mais N jogos", quando o recinto tem mais do que um jogo marcado. */
+const maisJogos = (jogos: number): string =>
+  jogos > 1 ? ` (tal como mais ${jogos - 1} ${jogos - 1 === 1 ? 'jogo' : 'jogos'})` : ''
+
+/**
+ * Alertas dos recintos sem coordenadas que têm um jogo marcado.
+ *
+ * Os recintos só interessam por causa dos km: sem coordenadas, os jogos que lá
+ * se realizam ficam sem distâncias e os candidatos não podem ser ordenados.
+ * Por isso o alerta nasce do jogo, não do recinto — um recinto sem coordenadas
+ * onde ninguém vai jogar não é trabalho para ninguém.
+ *
+ * Contam os jogos por realizar que levam delegado. A chave inclui o próximo
+ * desses jogos: se o coordenador apagar o alerta sem pôr coordenadas, o
+ * próximo jogo marcado para lá volta a avisar.
+ */
+export function alertasDeRecintosSemCoordenadas(desde = limiteDeTrabalho()): EntradaAlerta[] {
+  return recintosComJogoMarcado('r.lat IS NULL OR r.lng IS NULL', desde).map((l) => ({
     chave: `recinto-sem-coords:${l.recinto_id}:${l.jogo_id}`,
     tipo: 'RECINTO_SEM_COORDENADAS' as const,
     jogoId: l.jogo_id,
@@ -1390,9 +1404,37 @@ export function alertasDeRecintosSemCoordenadas(desde = limiteDeTrabalho()): Ent
     dataHora: l.data_hora,
     detalhe:
       `${l.casa} × ${l.fora} está marcado para este recinto, que não tem coordenadas` +
-      (l.jogos > 1 ? ` (tal como mais ${l.jogos - 1} ${l.jogos - 1 === 1 ? 'jogo' : 'jogos'})` : '') +
+      maisJogos(l.jogos) +
       '. Sem elas não há km nem distâncias para ordenar os candidatos. Abra "Clubes e recintos" ' +
       'e defina a localização — pode colar um link do Google Maps.'
+  }))
+}
+
+/**
+ * Alertas dos recintos que a pesquisa localizou sozinha e ninguém confirmou.
+ *
+ * Um ponto automático pode cair a dezenas de quilómetros do sítio certo — outra
+ * terra com o mesmo nome, um campo que o mapa não conhece — e a partir daí as
+ * distâncias desse recinto ficam erradas em silêncio, que é pior do que não as
+ * ter. O ecrã de recintos já os contava, mas só dava por isso quem lá fosse.
+ */
+export function alertasDeRecintosPorConfirmar(desde = limiteDeTrabalho()): EntradaAlerta[] {
+  return recintosComJogoMarcado(
+    'r.lat IS NOT NULL AND r.lng IS NOT NULL AND r.confirmado = 0',
+    desde
+  ).map((l) => ({
+    chave: `recinto-por-confirmar:${l.recinto_id}:${l.jogo_id}`,
+    tipo: 'RECINTO_POR_CONFIRMAR' as const,
+    jogoId: l.jogo_id,
+    recintoId: l.recinto_id,
+    competicao: l.competicao,
+    descricao: l.recinto_nome,
+    dataHora: l.data_hora,
+    detalhe:
+      `${l.casa} × ${l.fora} está marcado para este recinto` +
+      maisJogos(l.jogos) +
+      ', e a localização dele foi obtida por pesquisa automática. Confirme o ponto no mapa em ' +
+      '"Clubes e recintos": se estiver no sítio errado, os km deste recinto saem todos errados.'
   }))
 }
 
@@ -1403,6 +1445,19 @@ export function apagarAlertasDeRecintosLocalizados(): number {
       `DELETE FROM alerta
         WHERE tipo = 'RECINTO_SEM_COORDENADAS'
           AND recinto_id IN (SELECT id FROM recinto WHERE lat IS NOT NULL AND lng IS NOT NULL)`
+    )
+    .run()
+  return info.changes
+}
+
+/** Fecha os alertas dos recintos cujo ponto já foi confirmado. */
+export function apagarAlertasDeRecintosConfirmados(): number {
+  const info = obterBaseDados()
+    .prepare(
+      `DELETE FROM alerta
+        WHERE tipo = 'RECINTO_POR_CONFIRMAR'
+          AND recinto_id IN (
+            SELECT id FROM recinto WHERE confirmado = 1 OR lat IS NULL OR lng IS NULL)`
     )
     .run()
   return info.changes
