@@ -961,9 +961,16 @@ table.tabela th.ordenada .seta {
   font-weight: 600;
 }
 
-.chip-delegado.campo {
+.chip-delegado.assistente {
   background: #eef1f6;
   color: var(--texto-suave);
+}
+
+/* A sombra vai a aprender: fica visível, mas nunca como quem faz o jogo. */
+.chip-delegado.sombra {
+  background: transparent;
+  color: var(--texto-suave);
+  border: 1px dashed var(--borda-forte);
 }
 
 /* ------------------------------------------------------ cartão candidato */

@@ -331,7 +331,7 @@ describe('modo automático', () => {
       entrada(delegados, distancias, { jogo: jogoEm(3, '2026-09-27T15:00', 500, 600) }),
       entrada(delegados, distancias, { jogo: jogoEm(4, '2026-10-04T15:00', 700, 800) })
     ]
-    const { atribuicoes: proposta } = gerarProposta({ jogos, usaDelegadoCampo: () => false })
+    const { atribuicoes: proposta } = gerarProposta({ jogos, usaDelegadoAssistente: () => false })
     expect(proposta).toHaveLength(4)
     expect(new Set(proposta.map((p) => p.delegadoId)).size).toBe(4)
   })
@@ -339,9 +339,9 @@ describe('modo automático', () => {
   it('atribui os dois papéis a delegados diferentes', () => {
     const delegados = [1, 2, 3].map((i) => estado(delegado(i, `D${i}`)))
     const jogos = [entrada(delegados, { 1: 50, 2: 60, 3: 70 })]
-    const { atribuicoes: proposta } = gerarProposta({ jogos, usaDelegadoCampo: () => true })
+    const { atribuicoes: proposta } = gerarProposta({ jogos, usaDelegadoAssistente: () => true })
     expect(proposta).toHaveLength(2)
-    expect(proposta.map((p) => p.papel).sort()).toEqual(['CAMPO', 'PRINCIPAL'])
+    expect(proposta.map((p) => p.papel).sort()).toEqual(['ASSISTENTE', 'PRINCIPAL'])
     expect(proposta[0].delegadoId).not.toBe(proposta[1].delegadoId)
   })
 
@@ -352,7 +352,7 @@ describe('modo automático', () => {
         jogo: jogoEm(i + 1, `2026-09-${String(13 + i).padStart(2, '0')}T15:00`, 100 + i * 10, 200 + i * 10)
       })
     )
-    const { atribuicoes: proposta } = gerarProposta({ jogos, usaDelegadoCampo: () => false })
+    const { atribuicoes: proposta } = gerarProposta({ jogos, usaDelegadoAssistente: () => false })
 
     const kmPorDelegado = new Map<number, number>()
     for (const p of proposta) kmPorDelegado.set(p.delegadoId, (kmPorDelegado.get(p.delegadoId) ?? 0) + (p.km ?? 0))
@@ -367,7 +367,7 @@ describe('modo automático', () => {
   it('salta os jogos sem candidatos elegíveis em vez de rebentar', () => {
     const bloqueado = estado(delegado(1, 'Ana'), { clubesVetados: [100, 200] })
     const jogos = [entrada([bloqueado], { 1: 50 })]
-    const r = gerarProposta({ jogos, usaDelegadoCampo: () => false })
+    const r = gerarProposta({ jogos, usaDelegadoAssistente: () => false })
     expect(r.atribuicoes).toEqual([])
     expect(r.semSugestao).toHaveLength(1)
     expect(r.semSugestao[0].motivos.join(' ')).toContain('veto')
@@ -377,7 +377,7 @@ describe('modo automático', () => {
     const delegados = [1, 2].map((i) => estado(delegado(i, `D${i}`)))
     const { atribuicoes: proposta } = gerarProposta({
       jogos: [entrada(delegados, { 1: 50, 2: 300 })],
-      usaDelegadoCampo: () => false
+      usaDelegadoAssistente: () => false
     })
     expect(proposta[0].motivo).toMatch(/km|clubes/)
   })

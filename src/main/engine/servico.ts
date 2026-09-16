@@ -6,6 +6,7 @@ import type {
   PropostaAutomatica,
   ResultadoPropostaAutomatica
 } from '@shared/tipos'
+import { etiquetaDoPapel, nomeacoesQueContam } from '@shared/tipos'
 import { escreverConfig, lerConfig } from '../db'
 import {
   estatisticasPorDelegado,
@@ -147,8 +148,8 @@ export async function nomear(pedido: PedidoNomeacao): Promise<JogoDetalhado | nu
   )
   if (noutroPapel) {
     throw new Error(
-      `${noutroPapel.delegadoNome} já está nomeado para este jogo como delegado ` +
-        `${noutroPapel.papel === 'PRINCIPAL' ? 'principal' : 'de campo'}. Remova essa nomeação primeiro.`
+      `${noutroPapel.delegadoNome} já está nomeado para este jogo como ` +
+        `${etiquetaDoPapel(noutroPapel.papel).toLowerCase()}. Remova essa nomeação primeiro.`
     )
   }
 
@@ -201,9 +202,10 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPr
   const entradas: EntradaMotor[] = []
   let jaCompletos = 0
   for (const jogo of jogos) {
-    // Salta os jogos já totalmente nomeados.
-    const usaCampo = competicoes.find((c) => c.id === jogo.competicaoId)?.usaDelegadoCampo ?? false
-    if (jogo.nomeacoes.length >= (usaCampo ? 2 : 1)) {
+    // Salta os jogos já totalmente nomeados. As sombras não contam: um jogo só
+    // com sombras continua por nomear.
+    const usaAssistente = competicoes.find((c) => c.id === jogo.competicaoId)?.usaDelegadoAssistente ?? false
+    if (nomeacoesQueContam(jogo.nomeacoes).length >= (usaAssistente ? 2 : 1)) {
       jaCompletos++
       continue
     }
@@ -220,9 +222,9 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPr
   const { atribuicoes, semSugestao } = gerarProposta({
     jogos: entradas,
     // A proposta automática sugere só o delegado principal. Na prática é esse o
-    // que vai a quase todos os jogos; o delegado de campo é a exceção e quem
+    // que vai a quase todos os jogos; o delegado assistente é a exceção e quem
     // decide é o coordenador, jogo a jogo, no ecrã de nomeação.
-    usaDelegadoCampo: () => false
+    usaDelegadoAssistente: () => false
   })
 
   const nomes = new Map(listarDelegados(true).map((d) => [d.id, `${d.numero} — ${d.nome}`]))
@@ -236,14 +238,14 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPr
         descricaoJogo: `${jogo.competicaoNome}: ${jogo.clubeCasaNome} × ${jogo.clubeForaNome}`,
         dataHora: jogo.dataHora,
         principal: null,
-        campo: null,
+        assistente: null,
         motivo: a.motivo
       }
       propostas.set(a.jogoId, proposta)
     }
     const entrada = { delegadoId: a.delegadoId, nome: nomes.get(a.delegadoId) ?? '?', km: a.km }
     if (a.papel === 'PRINCIPAL') proposta.principal = entrada
-    else proposta.campo = entrada
+    else proposta.assistente = entrada
   }
 
   // Agrupar os papéis em falta do mesmo jogo numa só linha de explicação.
@@ -281,8 +283,8 @@ export async function aplicarProposta(propostas: PropostaAutomatica[]): Promise<
       await nomear({ jogoId: proposta.jogoId, delegadoId: proposta.principal.delegadoId, papel: 'PRINCIPAL' })
       aplicadas++
     }
-    if (proposta.campo) {
-      await nomear({ jogoId: proposta.jogoId, delegadoId: proposta.campo.delegadoId, papel: 'CAMPO' })
+    if (proposta.assistente) {
+      await nomear({ jogoId: proposta.jogoId, delegadoId: proposta.assistente.delegadoId, papel: 'ASSISTENTE' })
       aplicadas++
     }
   }

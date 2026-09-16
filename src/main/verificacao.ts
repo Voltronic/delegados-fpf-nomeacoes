@@ -309,6 +309,73 @@ async function principal(): Promise<void> {
     )
     verificar('um jogo sem recinto não cria associação', !associacoes.has('3:1'))
 
+    // A conversão dos delegados de campo em assistentes, e o papel de sombra.
+    const migracao14 = new Database(join(pasta, 'data', 'papeis.db'))
+    migracao14.exec(`
+      CREATE TABLE competicao (id INTEGER PRIMARY KEY, usa_delegado_campo INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE jogo (id INTEGER PRIMARY KEY);
+      CREATE TABLE delegado (id INTEGER PRIMARY KEY);
+      CREATE TABLE nomeacao (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        jogo_id INTEGER NOT NULL REFERENCES jogo(id) ON DELETE CASCADE,
+        delegado_id INTEGER NOT NULL REFERENCES delegado(id) ON DELETE CASCADE,
+        papel TEXT NOT NULL CHECK (papel IN ('PRINCIPAL','CAMPO')),
+        km REAL, minutos REAL, fonte_distancia TEXT,
+        estado TEXT NOT NULL DEFAULT 'CONFIRMADA'
+          CHECK (estado IN ('SUGERIDA','CONFIRMADA','CANCELADA')),
+        motivo_override TEXT, criado_em TEXT NOT NULL);
+      CREATE UNIQUE INDEX ux_nomeacao_papel ON nomeacao(jogo_id, papel) WHERE estado <> 'CANCELADA';
+      CREATE INDEX ix_nomeacao_delegado ON nomeacao(delegado_id);
+      INSERT INTO competicao (id) VALUES (1);
+      INSERT INTO jogo (id) VALUES (1);
+      INSERT INTO delegado (id) VALUES (1), (2), (3), (4);
+      INSERT INTO nomeacao (jogo_id, delegado_id, papel, km, estado, criado_em) VALUES
+        (1, 1, 'PRINCIPAL', 100, 'CONFIRMADA', '2026-09-01T10:00'),
+        (1, 2, 'CAMPO', 80, 'CONFIRMADA', '2026-09-01T10:00');
+    `)
+    migracao14.exec(MIGRACOES.find((m) => m.versao === 14)!.sql)
+    const papeisConvertidos = migracao14
+      .prepare('SELECT delegado_id, papel, km FROM nomeacao ORDER BY delegado_id')
+      .all() as { delegado_id: number; papel: string; km: number | null }[]
+    const temColunaAssistente = (
+      migracao14
+        .prepare("SELECT COUNT(*) AS n FROM pragma_table_info('competicao') WHERE name = 'usa_delegado_assistente'")
+        .get() as { n: number }
+    ).n
+    const sombra = migracao14.prepare(
+      `INSERT INTO nomeacao (jogo_id, delegado_id, papel, estado, criado_em)
+       VALUES (1, ?, 'SOMBRA', 'CONFIRMADA', '2026-09-01T10:00')`
+    )
+    sombra.run(3)
+    sombra.run(4)
+    let recusouOutroPrincipal = ''
+    try {
+      migracao14
+        .prepare(
+          `INSERT INTO nomeacao (jogo_id, delegado_id, papel, estado, criado_em)
+           VALUES (1, 4, 'PRINCIPAL', 'CONFIRMADA', '2026-09-01T10:00')`
+        )
+        .run()
+    } catch (erro) {
+      recusouOutroPrincipal = (erro as Error).message
+    }
+    const sombrasGravadas = (
+      migracao14.prepare("SELECT COUNT(*) AS n FROM nomeacao WHERE papel = 'SOMBRA'").get() as { n: number }
+    ).n
+    migracao14.close()
+    verificar(
+      'a migração converte os delegados de campo em assistentes, com os km',
+      papeisConvertidos.map((p) => p.papel).join(',') === 'PRINCIPAL,ASSISTENTE' &&
+        papeisConvertidos[1].km === 80,
+      `→ ${papeisConvertidos.map((p) => `${p.papel} ${p.km}`).join(' | ')}`
+    )
+    verificar('e a competição passa a ter a coluna do assistente', temColunaAssistente === 1)
+    verificar(
+      'o mesmo jogo aceita várias sombras, mas continua com um só principal',
+      sombrasGravadas === 2 && recusouOutroPrincipal.includes('UNIQUE'),
+      `→ ${sombrasGravadas} sombra(s), segundo principal ${recusouOutroPrincipal ? 'recusado' : 'aceite'}`
+    )
+
     log('\n2. Delegados, clubes e recintos')
     const delegados = [
       { numero: '101', nome: 'Delegado Norte', lat: 41.35, lng: -8.62, nivel: 'ELITE' as const },
@@ -366,7 +433,7 @@ async function principal(): Promise<void> {
       organizacao: 'Competições FPF',
       ativa: true,
       nivelMinimo: null,
-      usaDelegadoCampo: true,
+      usaDelegadoAssistente: true,
       todosComDelegado: true
     })
 
@@ -410,7 +477,7 @@ async function principal(): Promise<void> {
       organizacao: 'Competições FPF',
       ativa: true,
       nivelMinimo: null,
-      usaDelegadoCampo: false,
+      usaDelegadoAssistente: false,
       todosComDelegado: false
     })
     const jogoDaTaca = repos.guardarJogo({
@@ -462,7 +529,7 @@ async function principal(): Promise<void> {
       organizacao: taca.organizacao,
       ativa: true,
       nivelMinimo: null,
-      usaDelegadoCampo: false,
+      usaDelegadoAssistente: false,
       todosComDelegado: false
     })
     verificar(
@@ -517,7 +584,7 @@ async function principal(): Promise<void> {
 
     log('\n5. Nomeação e efeito nos km')
     await nomear({ jogoId: primeiroJogo.id, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
-    await nomear({ jogoId: primeiroJogo.id, delegadoId: delegados[1].id, papel: 'CAMPO' })
+    await nomear({ jogoId: primeiroJogo.id, delegadoId: delegados[1].id, papel: 'ASSISTENTE' })
     const comNomeacoes = repos.obterJogoDetalhado(primeiroJogo.id)!
     verificar('dois papéis nomeados no mesmo jogo', comNomeacoes.nomeacoes.length === 2)
     verificar(
@@ -530,6 +597,71 @@ async function principal(): Promise<void> {
     verificar('dashboard reflete os km', tabela.filter((l) => l.km > 0).length === 2)
 
     const segundoJogoEmBraga = repos.listarJogos().find((j) => j.id !== primeiroJogo.id && j.recintoId === recintos[0].id)
+
+    // Delegado sombra: vai a aprender, fica registado e não conta para nada.
+    const kmAntesDaSombra = repos.tabelaKm(106).find((l) => l.delegadoId === delegados[2].id)!
+    await nomear({ jogoId: primeiroJogo.id, delegadoId: delegados[2].id, papel: 'SOMBRA' })
+    const comSombra = repos.obterJogoDetalhado(primeiroJogo.id)!
+    const kmDepoisDaSombra = repos.tabelaKm(106).find((l) => l.delegadoId === delegados[2].id)!
+    verificar(
+      'a sombra fica registada na nomeação do jogo',
+      comSombra.nomeacoes.some((n) => n.papel === 'SOMBRA' && n.delegadoId === delegados[2].id)
+    )
+    verificar(
+      'mas não soma km, jogos nem voos na época',
+      kmDepoisDaSombra.km === kmAntesDaSombra.km &&
+        kmDepoisDaSombra.jogos === kmAntesDaSombra.jogos &&
+        kmDepoisDaSombra.voos === kmAntesDaSombra.voos,
+      `→ ${kmDepoisDaSombra.km} km, ${kmDepoisDaSombra.jogos} jogo(s), ${kmDepoisDaSombra.voos} voo(s)`
+    )
+    verificar(
+      'nem entra nas contagens por competição',
+      (repos.estatisticasPorDelegado(106).get(delegados[2].id)?.jogos ?? 0) === 0
+    )
+    if (segundoJogoEmBraga) {
+      await nomear({ jogoId: segundoJogoEmBraga.id, delegadoId: delegados[2].id, papel: 'SOMBRA' })
+      const repeticoesDaSombra = repos.repeticoesPorDelegado(106).find((l) => l.delegadoId === delegados[2].id)!
+      verificar(
+        'acompanhar o mesmo clube duas vezes não conta como repetição',
+        repeticoesDaSombra.repeticoes.length === 0,
+        `→ ${repeticoesDaSombra.repeticoes.map((r) => `${r.clubeNome} ${r.vezes}x`).join(', ') || 'nenhuma'}`
+      )
+      repos.removerNomeacao(segundoJogoEmBraga.id, 'SOMBRA', delegados[2].id)
+    }
+
+    // Três sombras por jogo, no máximo, e cada uma sai sozinha.
+    const jogoDasSombras = repos.listarJogos().find((j) => j.nomeacoes.length === 0)!
+    for (const d of delegados.slice(0, 3)) {
+      await nomear({ jogoId: jogoDasSombras.id, delegadoId: d.id, papel: 'SOMBRA' })
+    }
+    let quartaSombra = ''
+    try {
+      await nomear({ jogoId: jogoDasSombras.id, delegadoId: delegados[3].id, papel: 'SOMBRA' })
+    } catch (erro) {
+      quartaSombra = (erro as Error).message
+    }
+    const comTresSombras = repos.obterJogoDetalhado(jogoDasSombras.id)!
+    verificar(
+      'um jogo aceita três sombras e recusa a quarta',
+      comTresSombras.nomeacoes.filter((n) => n.papel === 'SOMBRA').length === 3 &&
+        quartaSombra.includes('máximo'),
+      `→ ${quartaSombra || 'aceitou a quarta'}`
+    )
+    verificar(
+      'e um jogo só com sombras continua por nomear',
+      !comTresSombras.nomeacoes.some((n) => n.papel === 'PRINCIPAL')
+    )
+    repos.removerNomeacao(jogoDasSombras.id, 'SOMBRA', delegados[1].id)
+    const sombrasRestantes = repos
+      .obterJogoDetalhado(jogoDasSombras.id)!
+      .nomeacoes.filter((n) => n.papel === 'SOMBRA')
+    verificar(
+      'remover uma sombra não leva as outras',
+      sombrasRestantes.length === 2 && !sombrasRestantes.some((n) => n.delegadoId === delegados[1].id),
+      `→ ${sombrasRestantes.length} sombra(s)`
+    )
+    for (const n of sombrasRestantes) repos.removerNomeacao(jogoDasSombras.id, 'SOMBRA', n.delegadoId)
+    repos.removerNomeacao(primeiroJogo.id, 'SOMBRA', delegados[2].id)
     if (segundoJogoEmBraga) {
       const seguintes = await candidatosParaJogo(segundoJogoEmBraga.id, 'PRINCIPAL')
       verificar(
@@ -586,19 +718,19 @@ async function principal(): Promise<void> {
 
     log('\n7. Proposta automática')
     const { propostas: proposta, semSugestao } = await propostaAutomatica(jogoIds)
-    const usados = new Set(proposta.flatMap((p) => [p.principal?.delegadoId, p.campo?.delegadoId]).filter(Boolean))
+    const usados = new Set(proposta.flatMap((p) => [p.principal?.delegadoId, p.assistente?.delegadoId]).filter(Boolean))
     verificar('propõe para os jogos ainda por nomear', proposta.length === 7, `→ ${proposta.length} jogos`)
     verificar('distribui por mais do que um delegado', usados.size >= 2, `→ ${usados.size} delegados usados`)
     verificar(
       'nunca repete delegado no mesmo jogo',
-      proposta.every((p) => !p.principal || !p.campo || p.principal.delegadoId !== p.campo.delegadoId)
+      proposta.every((p) => !p.principal || !p.assistente || p.principal.delegadoId !== p.assistente.delegadoId)
     )
-    // Na prática só o principal vai a quase todos os jogos; o delegado de campo
+    // Na prática só o principal vai a quase todos os jogos; o delegado assistente
     // é a exceção e é o coordenador que decide, jogo a jogo.
     verificar(
       'a proposta automática sugere só o delegado principal',
-      proposta.every((p) => p.principal && !p.campo),
-      `→ ${proposta.filter((p) => p.campo).length} com delegado de campo`
+      proposta.every((p) => p.principal && !p.assistente),
+      `→ ${proposta.filter((p) => p.assistente).length} com delegado assistente`
     )
     verificar('explica cada sugestão', proposta.every((p) => p.motivo.length > 0))
     verificar(
@@ -733,7 +865,7 @@ async function principal(): Promise<void> {
       organizacao: 'Competições FPF',
       ativa: true,
       nivelMinimo: null,
-      usaDelegadoCampo: false,
+      usaDelegadoAssistente: false,
       todosComDelegado: false
     })
     const daTaca = repos.guardarJogo({
@@ -1007,7 +1139,7 @@ async function principal(): Promise<void> {
       organizacao: 'Competições FPF',
       ativa: false,
       nivelMinimo: null,
-      usaDelegadoCampo: true,
+      usaDelegadoAssistente: true,
       todosComDelegado: true
     })
     const delegadoRepetidor = delegados[0]
@@ -1433,7 +1565,7 @@ async function principal(): Promise<void> {
           competicoes: [29523, 29442]
             .map((id) => fpf?.competicoes.find((c) => c.competitionId === id))
             .filter((c): c is NonNullable<typeof c> => !!c)
-            .map((c) => ({ competitionId: c.competitionId, nome: c.nome, nivelMinimo: null, usaDelegadoCampo: true }))
+            .map((c) => ({ competitionId: c.competitionId, nome: c.nome, nivelMinimo: null, usaDelegadoAssistente: true }))
         },
         () => undefined
       )

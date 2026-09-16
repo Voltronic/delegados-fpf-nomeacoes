@@ -19,6 +19,7 @@ import type {
   ProgressoSincronizacao,
   PropostaAutomatica
 } from '@shared/tipos'
+import { etiquetaDoPapel } from '@shared/tipos'
 import {
   copiaSeguranca,
   emTransacao,
@@ -544,23 +545,26 @@ export function registarIpc(contexto: {
       registarAlteracao(
         dados.jogoId,
         dados.papel,
-        `nomeação de ${delegado?.nome ?? 'delegado'} como ${
-          dados.papel === 'PRINCIPAL' ? 'principal' : 'delegado de campo'
-        }`
+        `nomeação de ${delegado?.nome ?? 'delegado'} como ${etiquetaDoPapel(dados.papel).toLowerCase()}`,
+        dados.delegadoId
       )
       return nomear(dados)
     }
   )
-  registar('nomeacoes:remover', (jogoId: number, papel: PapelNomeacao) => {
-    const removida = repos.listarNomeacoesDoJogo(jogoId).find((n) => n.papel === papel)
+  // `delegadoId` só é preciso nas sombras, que são várias por jogo.
+  registar('nomeacoes:remover', (jogoId: number, papel: PapelNomeacao, delegadoId?: number) => {
+    const removida = repos
+      .listarNomeacoesDoJogo(jogoId)
+      .find((n) => n.papel === papel && (delegadoId == null || n.delegadoId === delegadoId))
     registarAlteracao(
       jogoId,
       papel,
       removida
-        ? `remoção de ${removida.delegadoNome} (${papel === 'PRINCIPAL' ? 'principal' : 'campo'})`
-        : 'remoção'
+        ? `remoção de ${removida.delegadoNome} (${etiquetaDoPapel(papel).toLowerCase()})`
+        : 'remoção',
+      removida?.delegadoId ?? delegadoId ?? null
     )
-    repos.removerNomeacao(jogoId, papel)
+    repos.removerNomeacao(jogoId, papel, delegadoId)
     return repos.obterJogoDetalhado(jogoId)
   })
   registar('nomeacoes:ultimaAccao', () => ultimaAccao())

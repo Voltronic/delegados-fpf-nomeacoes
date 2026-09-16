@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { JogoDetalhado } from '@shared/tipos'
+import { classeDoPapel, etiquetaDoPapel, letraDoPapel } from '@shared/tipos'
 import { classes, formatarDataHora } from '../lib/formato'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
@@ -123,10 +124,10 @@ export default function Escondidos(): JSX.Element {
                           {j.nomeacoes.map((n) => (
                             <span
                               key={n.id}
-                              className={classes('chip-delegado', n.papel === 'CAMPO' && 'campo')}
-                              title={n.papel === 'PRINCIPAL' ? 'Delegado principal' : 'Delegado de campo'}
+                              className={classes('chip-delegado', classeDoPapel(n.papel))}
+                              title={etiquetaDoPapel(n.papel)}
                             >
-                              {n.papel === 'PRINCIPAL' ? 'P' : 'C'} {n.delegadoNome}
+                              {letraDoPapel(n.papel)} {n.delegadoNome}
                             </span>
                           ))}
                         </div>

@@ -64,7 +64,7 @@ function semear(): void {
     organizacao: 'Competições FPF',
     ativa: true,
     nivelMinimo: null,
-    usaDelegadoCampo: true,
+    usaDelegadoAssistente: true,
     todosComDelegado: true
   })
 
@@ -116,7 +116,7 @@ function semear(): void {
     organizacao: 'Competições FPF',
     ativa: true,
     nivelMinimo: null,
-    usaDelegadoCampo: false,
+    usaDelegadoAssistente: false,
     todosComDelegado: false
   })
   const amanha = new Date(hoje)
@@ -719,14 +719,21 @@ app.whenReady().then(async () => {
     )
 
     if (janelaMapa) {
-      await new Promise((r) => setTimeout(r, 1200))
-      const naJanela = (await janelaMapa.webContents.executeJavaScript(
-        `JSON.stringify({
-           mapa: document.querySelectorAll('.leaflet-container').length,
-           pinos: document.querySelectorAll('.leaflet-container .pino').length,
-           voltar: !!document.querySelector('.janela-mapa button')
-         })`
-      )) as string
+      // Esperar até o mapa estar desenhado, em vez de um tempo fixo: a janela
+      // carrega a página, pede o estado e só então monta o Leaflet, e com 1,2 s
+      // à sorte esta verificação falhava de vez em quando sem nada estar mal.
+      let naJanela = ''
+      for (let tentativa = 0; tentativa < 20; tentativa++) {
+        await new Promise((r) => setTimeout(r, 300))
+        naJanela = (await janelaMapa.webContents.executeJavaScript(
+          `JSON.stringify({
+             mapa: document.querySelectorAll('.leaflet-container').length,
+             pinos: document.querySelectorAll('.leaflet-container .pino').length,
+             voltar: !!document.querySelector('.janela-mapa button')
+           })`
+        )) as string
+        if ((JSON.parse(naJanela) as { pinos: number }).pinos > 0) break
+      }
       const conteudo = JSON.parse(naJanela) as { mapa: number; pinos: number; voltar: boolean }
       verificar(
         'a janela do mapa desenha o mesmo que o ecrã principal',
@@ -1029,18 +1036,32 @@ app.whenReady().then(async () => {
         "[...document.querySelectorAll('.tabela button')].find((b) => b.textContent.trim() === 'Corrigir')?.click()"
       )
       await new Promise((r) => setTimeout(r, 800))
+      // Três escolhas: principal, assistente e acrescentar sombra.
       const dialogo = (await janela.webContents.executeJavaScript(
         `JSON.stringify({
            titulo: document.querySelector('.modal header h2')?.textContent ?? '',
            selects: document.querySelectorAll('.modal select').length,
-           opcoes: document.querySelector('.modal select')?.options.length ?? 0
+           opcoes: document.querySelector('.modal select')?.options.length ?? 0,
+           etiquetas: [...document.querySelectorAll('.modal .campo')].map((c) => c.textContent.split('—')[0].trim())
          })`
       )) as string
-      const conteudo = JSON.parse(dialogo) as { titulo: string; selects: number; opcoes: number }
+      const conteudo = JSON.parse(dialogo) as {
+        titulo: string
+        selects: number
+        opcoes: number
+        etiquetas: string[]
+      }
       verificar(
         'o histórico deixa corrigir quem foi ao jogo',
-        conteudo.titulo.includes('Corrigir') && conteudo.selects === 2 && conteudo.opcoes > 1,
+        conteudo.titulo.includes('Corrigir') && conteudo.selects === 3 && conteudo.opcoes > 1,
         `→ ${dialogo}`
+      )
+      verificar(
+        'com principal, assistente e sombras, com o limite à vista',
+        conteudo.etiquetas.some((e) => e.includes('principal')) &&
+          conteudo.etiquetas.some((e) => e.includes('assistente')) &&
+          conteudo.etiquetas.some((e) => /sombra \(0 de 3\)/i.test(e)),
+        `→ ${conteudo.etiquetas.join(' | ')}`
       )
       await janela.webContents.executeJavaScript(
         "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Concluído')?.click()"

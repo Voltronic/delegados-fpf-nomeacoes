@@ -109,7 +109,7 @@ export interface PedidoSincronizacao {
   descricaoEpoca: string
   organizacao: string
   /** fpfCompetitionId das competições a sincronizar. */
-  competicoes: { competitionId: number; nome: string; nivelMinimo: string | null; usaDelegadoCampo: boolean }[]
+  competicoes: { competitionId: number; nome: string; nivelMinimo: string | null; usaDelegadoAssistente: boolean }[]
   /** Só importa jogos a partir desta data (ISO). Vazio = todos. */
   desde?: string
 }
@@ -138,7 +138,7 @@ export async function sincronizar(
       organizacao: pedido.organizacao,
       ativa: true,
       nivelMinimo: c.nivelMinimo as never,
-      usaDelegadoCampo: c.usaDelegadoCampo,
+      usaDelegadoAssistente: c.usaDelegadoAssistente,
       // Só conta quando a competição é criada: numa que já exista, o valor
       // guardado é o do coordenador e não se mexe.
       todosComDelegado: COMPETICOES_COM_DELEGADO_SEMPRE.some(
@@ -492,7 +492,7 @@ function importarLinhasCsv(
           (n) => normalizarNome(n) === normalizarNome(linha.competicao)
         ),
         nivelMinimo: null,
-        usaDelegadoCampo: true
+        usaDelegadoAssistente: true
       })
     }
 

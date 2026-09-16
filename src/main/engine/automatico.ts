@@ -16,8 +16,8 @@ export interface AtribuicaoAutomatica {
 export interface EntradaAutomatica {
   /** Uma entrada de motor por jogo a nomear, já com o estado atual dos delegados. */
   jogos: EntradaMotor[]
-  /** Quais os jogos que levam também delegado de campo. */
-  usaDelegadoCampo: (jogoId: number) => boolean
+  /** Quais os jogos que levam também delegado assistente. */
+  usaDelegadoAssistente: (jogoId: number) => boolean
 }
 
 export interface JogoSemSugestao {
@@ -65,8 +65,8 @@ export function gerarProposta(entrada: EntradaAutomatica): ResultadoProposta {
 
   for (const jogoEntrada of porDificuldade) {
     const jaNomeados = [...jogoEntrada.jaNomeados]
-    const papeis: PapelNomeacao[] = entrada.usaDelegadoCampo(jogoEntrada.jogo.jogoId)
-      ? ['PRINCIPAL', 'CAMPO']
+    const papeis: PapelNomeacao[] = entrada.usaDelegadoAssistente(jogoEntrada.jogo.jogoId)
+      ? ['PRINCIPAL', 'ASSISTENTE']
       : ['PRINCIPAL']
 
     for (const papel of papeis) {

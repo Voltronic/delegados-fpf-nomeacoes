@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Competicao, JogoDetalhado } from '@shared/tipos'
+import { classeDoPapel, etiquetaDoPapel, letraDoPapel, temPrincipal } from '@shared/tipos'
 import { classes, formatarDataHora, formatarKm, paraDataIso } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 import CorrigirNomeacao from '../components/CorrigirNomeacao'
@@ -132,7 +133,7 @@ export default function Historico(): JSX.Element {
   const nomeacoes = visiveis.reduce((soma, j) => soma + j.nomeacoes.length, 0)
   // Jogos que deviam ter levado delegado e passaram sem ninguém: é a falha
   // que o histórico agora deixa ver.
-  const semDelegado = visiveis.filter((j) => j.nomeacoes.length === 0).length
+  const semDelegado = visiveis.filter((j) => !temPrincipal(j.nomeacoes)).length
 
   return (
     <>
@@ -229,17 +230,17 @@ export default function Historico(): JSX.Element {
                     </td>
                     <td className="silencioso">{j.recintoNome ?? '—'}</td>
                     <td>
-                      {j.nomeacoes.length === 0 && (
+                      {!temPrincipal(j.nomeacoes) && (
                         <span className="emblema alerta">sem delegado</span>
                       )}
                       <div className="chips">
                         {j.nomeacoes.map((n) => (
                           <span
                             key={n.id}
-                            className={classes('chip-delegado', n.papel === 'CAMPO' && 'campo')}
-                            title={n.papel === 'PRINCIPAL' ? 'Delegado principal' : 'Delegado de campo'}
+                            className={classes('chip-delegado', classeDoPapel(n.papel))}
+                            title={etiquetaDoPapel(n.papel)}
                           >
-                            {n.papel === 'PRINCIPAL' ? 'P' : 'C'} {n.delegadoNome}
+                            {letraDoPapel(n.papel)} {n.delegadoNome}
                           </span>
                         ))}
                       </div>

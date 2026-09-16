@@ -17,6 +17,7 @@ import type {
   RepeticaoClube,
   VetoClube
 } from '@shared/tipos'
+import { MAX_SOMBRAS } from '@shared/tipos'
 import { obterBaseDados, registarAuditoria } from './index'
 import { dataHoraAGuardar, limiteDeTrabalho, vaiAcontecer } from '../../shared/datas'
 import { normalizarNome } from '../fpf/html'
@@ -486,7 +487,7 @@ const paraCompeticao = (l: {
   organizacao: string | null
   ativa: number
   nivel_minimo: string | null
-  usa_delegado_campo: number
+  usa_delegado_assistente: number
   todos_com_delegado: number
 }): Competicao => ({
   id: l.id,
@@ -497,7 +498,7 @@ const paraCompeticao = (l: {
   organizacao: l.organizacao,
   ativa: bool(l.ativa),
   nivelMinimo: l.nivel_minimo as Competicao['nivelMinimo'],
-  usaDelegadoCampo: bool(l.usa_delegado_campo),
+  usaDelegadoAssistente: bool(l.usa_delegado_assistente),
   todosComDelegado: bool(l.todos_com_delegado)
 })
 
@@ -521,14 +522,14 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
     organizacao: dados.organizacao,
     ativa: dados.ativa ? 1 : 0,
     nivelMinimo: dados.nivelMinimo,
-    usaDelegadoCampo: dados.usaDelegadoCampo ? 1 : 0,
+    usaDelegadoAssistente: dados.usaDelegadoAssistente ? 1 : 0,
     todosComDelegado: dados.todosComDelegado ? 1 : 0
   }
   if (dados.id) {
     db.prepare(
       `UPDATE competicao SET fpf_competition_id=@fpfCompetitionId, season_id=@seasonId,
         season_descricao=@seasonDescricao, nome=@nome, organizacao=@organizacao, ativa=@ativa,
-        nivel_minimo=@nivelMinimo, usa_delegado_campo=@usaDelegadoCampo,
+        nivel_minimo=@nivelMinimo, usa_delegado_assistente=@usaDelegadoAssistente,
         todos_com_delegado=@todosComDelegado WHERE id=@id`
     ).run({ ...params, id: dados.id })
     return listarCompeticoes().find((c) => c.id === dados.id)!
@@ -540,9 +541,9 @@ export function guardarCompeticao(dados: Omit<Competicao, 'id'> & { id?: number 
   const linha = db
     .prepare(
       `INSERT INTO competicao (fpf_competition_id, season_id, season_descricao, nome, organizacao,
-         ativa, nivel_minimo, usa_delegado_campo, todos_com_delegado)
+         ativa, nivel_minimo, usa_delegado_assistente, todos_com_delegado)
        VALUES (@fpfCompetitionId, @seasonId, @seasonDescricao, @nome, @organizacao, @ativa,
-         @nivelMinimo, @usaDelegadoCampo, @todosComDelegado)
+         @nivelMinimo, @usaDelegadoAssistente, @todosComDelegado)
        ON CONFLICT(fpf_competition_id, season_id) DO UPDATE SET
          nome = excluded.nome, organizacao = excluded.organizacao, ativa = excluded.ativa,
          season_descricao = COALESCE(excluded.season_descricao, competicao.season_descricao)
@@ -637,7 +638,7 @@ export interface FiltroJogos {
 }
 
 const SQL_JOGO_DETALHADO = `
-  SELECT j.*, comp.nome AS competicao_nome, comp.usa_delegado_campo,
+  SELECT j.*, comp.nome AS competicao_nome, comp.usa_delegado_assistente,
          cc.nome AS clube_casa_nome, cf.nome AS clube_fora_nome,
          r.nome AS recinto_nome, r.lat AS recinto_lat, r.lng AS recinto_lng
   FROM jogo j
@@ -680,7 +681,7 @@ export function listarJogos(filtro: FiltroJogos = {}): JogoDetalhado[] {
     .prepare(`${SQL_JOGO_DETALHADO} ${where} ORDER BY j.data_hora, comp.nome`)
     .all(params) as (LinhaJogo & {
     competicao_nome: string
-    usa_delegado_campo: number
+    usa_delegado_assistente: number
     clube_casa_nome: string
     clube_fora_nome: string
     recinto_nome: string | null
@@ -950,7 +951,7 @@ function agruparNomeacoes(jogoIds: number[]): Map<number, NomeacaoDetalhada[]> {
       `SELECT n.*, d.numero, d.nome, d.nivel FROM nomeacao n
        JOIN delegado d ON d.id = n.delegado_id
        WHERE n.estado <> 'CANCELADA' AND n.jogo_id IN (${marcadores})
-       ORDER BY n.papel DESC`
+       ORDER BY CASE n.papel WHEN 'PRINCIPAL' THEN 0 WHEN 'ASSISTENTE' THEN 1 ELSE 2 END, n.id`
     )
     .all(...jogoIds) as LinhaNomeacao[]
   for (const linha of linhas) {
@@ -967,7 +968,7 @@ export function listarNomeacoesDoJogo(jogoId: number): NomeacaoDetalhada[] {
       .prepare(
         `SELECT n.*, d.numero, d.nome, d.nivel FROM nomeacao n
          JOIN delegado d ON d.id = n.delegado_id
-         WHERE n.jogo_id = ? AND n.estado <> 'CANCELADA' ORDER BY n.papel DESC`
+         WHERE n.jogo_id = ? AND n.estado <> 'CANCELADA' ORDER BY CASE n.papel WHEN 'PRINCIPAL' THEN 0 WHEN 'ASSISTENTE' THEN 1 ELSE 2 END, n.id`
       )
       .all(jogoId) as LinhaNomeacao[]
   ).map(paraNomeacao)
@@ -987,11 +988,26 @@ export interface EntradaNomeacao {
 export function guardarNomeacao(dados: EntradaNomeacao): number {
   const db = obterBaseDados()
   const transacao = db.transaction(() => {
-    // Substitui a nomeação existente para o mesmo papel.
-    db.prepare(`DELETE FROM nomeacao WHERE jogo_id = ? AND papel = ? AND estado <> 'CANCELADA'`).run(
-      dados.jogoId,
-      dados.papel
-    )
+    if (dados.papel === 'SOMBRA') {
+      // As sombras são várias: só se evita repetir a mesma pessoa no mesmo jogo.
+      db.prepare(
+        `DELETE FROM nomeacao WHERE jogo_id = ? AND papel = 'SOMBRA' AND delegado_id = ? AND estado <> 'CANCELADA'`
+      ).run(dados.jogoId, dados.delegadoId)
+      const { n } = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM nomeacao WHERE jogo_id = ? AND papel = 'SOMBRA' AND estado <> 'CANCELADA'`
+        )
+        .get(dados.jogoId) as { n: number }
+      if (n >= MAX_SOMBRAS) {
+        throw new Error(`Um jogo pode ter no máximo ${MAX_SOMBRAS} delegados sombra.`)
+      }
+    } else {
+      // Principal e assistente são um por jogo: o novo substitui o que lá estava.
+      db.prepare(`DELETE FROM nomeacao WHERE jogo_id = ? AND papel = ? AND estado <> 'CANCELADA'`).run(
+        dados.jogoId,
+        dados.papel
+      )
+    }
     const info = db
       .prepare(
         `INSERT INTO nomeacao (jogo_id, delegado_id, papel, km, minutos, fonte_distancia, estado, motivo_override, criado_em)
@@ -1045,11 +1061,22 @@ export function apagarTodasNomeacoes(): number {
   return antes
 }
 
-export function removerNomeacao(jogoId: number, papel: Nomeacao['papel']): void {
-  obterBaseDados()
-    .prepare(`DELETE FROM nomeacao WHERE jogo_id = ? AND papel = ?`)
-    .run(jogoId, papel)
-  registarAuditoria('nomeacao', jogoId, 'remover', { papel })
+/**
+ * Remove a nomeação de um papel num jogo. Nas sombras, que podem ser várias, é
+ * preciso dizer qual: sem `delegadoId` saíam todas de uma vez.
+ */
+export function removerNomeacao(jogoId: number, papel: Nomeacao['papel'], delegadoId?: number): void {
+  const db = obterBaseDados()
+  if (delegadoId != null) {
+    db.prepare(`DELETE FROM nomeacao WHERE jogo_id = ? AND papel = ? AND delegado_id = ?`).run(
+      jogoId,
+      papel,
+      delegadoId
+    )
+  } else {
+    db.prepare(`DELETE FROM nomeacao WHERE jogo_id = ? AND papel = ?`).run(jogoId, papel)
+  }
+  registarAuditoria('nomeacao', jogoId, 'remover', { papel, delegadoId: delegadoId ?? null })
 }
 
 // ---------------------------------------------------------------------------
@@ -1082,7 +1109,8 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
        JOIN competicao comp ON comp.id = j.competicao_id
        JOIN clube cc ON cc.id = j.clube_casa_id
        JOIN clube cf ON cf.id = j.clube_fora_id
-       WHERE n.estado = 'CONFIRMADA' ${filtroEpoca}`
+       -- As sombras vão ao jogo a aprender: não somam km, jogos, voos nem clubes.
+       WHERE n.estado = 'CONFIRMADA' AND n.papel <> 'SOMBRA' ${filtroEpoca}`
     )
     .all(seasonId != null ? { seasonId } : {}) as {
     delegado_id: number
@@ -1191,7 +1219,8 @@ export function repeticoesPorDelegado(seasonId?: number): LinhaRepeticoes[] {
          JOIN competicao comp ON comp.id = j.competicao_id
          -- Cada jogo conta para os dois clubes: o delegado esteve com ambos.
          JOIN clube c ON c.id IN (j.clube_casa_id, j.clube_fora_id)
-        WHERE n.estado = 'CONFIRMADA' ${filtroEpoca}
+        -- Uma sombra não fez o clube: acompanhou quem o fez.
+        WHERE n.estado = 'CONFIRMADA' AND n.papel <> 'SOMBRA' ${filtroEpoca}
         GROUP BY n.delegado_id, j.competicao_id, c.id
        HAVING COUNT(*) > 1
         ORDER BY vezes DESC, c.nome`

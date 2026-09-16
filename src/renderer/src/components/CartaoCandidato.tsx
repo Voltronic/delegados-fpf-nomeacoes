@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Candidato, PapelNomeacao } from '@shared/tipos'
+import { etiquetaDoPapel, MAX_SOMBRAS } from '@shared/tipos'
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
 
 interface Props {
@@ -7,7 +8,9 @@ interface Props {
   posicao: number
   realcado: boolean
   kmMaximo: number
-  usaDelegadoCampo: boolean
+  usaDelegadoAssistente: boolean
+  /** O jogo já tem o máximo de sombras: não se pode acrescentar outra. */
+  sombrasCheias: boolean
   papelAtribuido: PapelNomeacao | null
   aoNomear: (delegadoId: number, papel: PapelNomeacao) => void
   aoRealcar: (id: number | null) => void
@@ -23,7 +26,8 @@ export default function CartaoCandidato({
   posicao,
   realcado,
   kmMaximo,
-  usaDelegadoCampo,
+  usaDelegadoAssistente,
+  sombrasCheias,
   papelAtribuido,
   aoNomear,
   aoRealcar
@@ -65,7 +69,7 @@ export default function CartaoCandidato({
           </span>
           {papelAtribuido && (
             <span className="emblema ok">
-              {papelAtribuido === 'PRINCIPAL' ? 'Nomeado · Principal' : 'Nomeado · Campo'}
+              Nomeado · {etiquetaDoPapel(papelAtribuido).replace('Delegado ', '')}
             </span>
           )}
         </div>
@@ -147,17 +151,31 @@ export default function CartaoCandidato({
         >
           Principal
         </button>
-        {usaDelegadoCampo && (
+        {usaDelegadoAssistente && (
           <button
             type="button"
             className="botao pequeno"
-            onClick={() => aoNomear(candidato.delegadoId, 'CAMPO')}
+            onClick={() => aoNomear(candidato.delegadoId, 'ASSISTENTE')}
             disabled={papelAtribuido != null}
             title={jaNomeado}
           >
-            Campo
+            Assistente
           </button>
         )}
+        {/* A sombra vai a aprender; não conta km nem jogos, e são no máximo três. */}
+        <button
+          type="button"
+          className="botao pequeno"
+          onClick={() => aoNomear(candidato.delegadoId, 'SOMBRA')}
+          disabled={papelAtribuido != null || sombrasCheias}
+          title={
+            sombrasCheias
+              ? `Este jogo já tem ${MAX_SOMBRAS} delegados sombra`
+              : jaNomeado || 'Vai a aprender: não conta km nem jogos'
+          }
+        >
+          Sombra
+        </button>
       </div>
     </div>
   )

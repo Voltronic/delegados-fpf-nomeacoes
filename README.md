@@ -88,7 +88,7 @@ histórico não mudar se o recinto for corrigido mais tarde.
    Sincronizar e aplicar. Clubes e recintos são criados automaticamente a partir dos dados da FPF.
 3. **Clubes e recintos** — carregar em *Localizar os N em falta*, olhar para o mapa e confirmar (ver
    acima). Ajustar também onde um clube joga noutro recinto numa competição específica.
-4. **Definições** — indicar que competições exigem delegado de elite e quais levam delegado de campo.
+4. **Definições** — indicar que competições exigem delegado de elite e quais levam delegado assistente.
 
 ### No dia a dia
 

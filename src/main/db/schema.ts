@@ -379,5 +379,46 @@ export const MIGRACOES: Migracao[] = [
         )
         WHERE ordem = 1;
     `
+  },
+  {
+    versao: 14,
+    descricao: 'Delegado assistente em vez de campo, e delegados sombra',
+    sql: `
+      -- O antigo "delegado de campo" passa a "assistente": é um delegado que
+      -- pode ser nomeado como principal ou como assistente, não os dois papéis
+      -- ao mesmo tempo.
+      ALTER TABLE competicao RENAME COLUMN usa_delegado_campo TO usa_delegado_assistente;
+
+      -- E aparece um terceiro papel: sombra, para quem está a aprender. Um
+      -- CHECK não se altera, por isso a tabela é reconstruída. O índice único
+      -- deixa de valer para as sombras: um jogo pode ter mais do que uma.
+      CREATE TABLE nomeacao_nova (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        jogo_id          INTEGER NOT NULL REFERENCES jogo(id) ON DELETE CASCADE,
+        delegado_id      INTEGER NOT NULL REFERENCES delegado(id) ON DELETE CASCADE,
+        papel            TEXT NOT NULL CHECK (papel IN ('PRINCIPAL','ASSISTENTE','SOMBRA')),
+        km               REAL,
+        minutos          REAL,
+        fonte_distancia  TEXT,
+        estado           TEXT NOT NULL DEFAULT 'CONFIRMADA'
+                         CHECK (estado IN ('SUGERIDA','CONFIRMADA','CANCELADA')),
+        motivo_override  TEXT,
+        criado_em        TEXT NOT NULL
+      );
+
+      INSERT INTO nomeacao_nova (id, jogo_id, delegado_id, papel, km, minutos, fonte_distancia,
+                                 estado, motivo_override, criado_em)
+        SELECT id, jogo_id, delegado_id,
+               CASE papel WHEN 'CAMPO' THEN 'ASSISTENTE' ELSE papel END,
+               km, minutos, fonte_distancia, estado, motivo_override, criado_em
+          FROM nomeacao;
+
+      DROP TABLE nomeacao;
+      ALTER TABLE nomeacao_nova RENAME TO nomeacao;
+
+      CREATE UNIQUE INDEX ux_nomeacao_papel
+        ON nomeacao(jogo_id, papel) WHERE estado <> 'CANCELADA' AND papel <> 'SOMBRA';
+      CREATE INDEX ix_nomeacao_delegado ON nomeacao(delegado_id);
+    `
   }
 ]

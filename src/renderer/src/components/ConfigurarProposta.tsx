@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { JogoDetalhado } from '@shared/tipos'
 import { diasAte } from '@shared/datas'
+import { temPrincipal } from '@shared/tipos'
 import { classes, formatarDataHora, inicioDaSemana, paraDataIso } from '../lib/formato'
 
 interface Props {
@@ -45,7 +46,7 @@ export default function ConfigurarProposta({
       setJogos(lista)
       // Por omissão entram os que ainda não têm ninguém: propor para um jogo já
       // nomeado é trabalho perdido, mas continua a poder marcar-se à mão.
-      setEscolhidos(new Set(lista.filter((j) => j.nomeacoes.length === 0).map((j) => j.id)))
+      setEscolhidos(new Set(lista.filter((j) => !temPrincipal(j.nomeacoes)).map((j) => j.id)))
     } finally {
       setACarregar(false)
     }
@@ -85,7 +86,7 @@ export default function ConfigurarProposta({
             </b>
             <div className="espacador" style={{ marginLeft: 'auto' }} />
             <div className="grupo-botoes">
-              <button onClick={() => marcar(jogos.filter((j) => j.nomeacoes.length === 0))}>
+              <button onClick={() => marcar(jogos.filter((j) => !temPrincipal(j.nomeacoes)))}>
                 Por nomear
               </button>
               <button onClick={() => marcar(jogos.filter((j) => diasAte(j.dataHora) === 0))}>Só hoje</button>
@@ -136,7 +137,7 @@ export default function ConfigurarProposta({
                       </td>
                       <td className="silencioso">{j.competicaoNome}</td>
                       <td>
-                        {j.nomeacoes.length === 0 ? (
+                        {!temPrincipal(j.nomeacoes) ? (
                           <span className="emblema neutro">por nomear</span>
                         ) : (
                           <span className="emblema ok">

@@ -226,7 +226,7 @@ export default function Definicoes(): JSX.Element {
           <h2>Competições</h2>
           <p className="silencioso" style={{ marginTop: 0 }}>
             Defina se todos os jogos da competição levam delegado, se exige delegado de elite e se leva
-            delegado de campo além do principal. Nas competições sem delegado em todos os jogos — a Taça,
+            delegado assistente além do principal. Nas competições sem delegado em todos os jogos — a Taça,
             por exemplo — os jogos ficam fora da lista de nomeações até serem escolhidos um a um.
           </p>
           <table className="tabela">
@@ -236,7 +236,7 @@ export default function Definicoes(): JSX.Element {
                 <th style={{ width: 90 }}>Época</th>
                 <th style={{ width: 150 }}>Delegado em todos os jogos</th>
                 <th style={{ width: 170 }}>Nível mínimo</th>
-                <th style={{ width: 140 }}>Delegado de campo</th>
+                <th style={{ width: 140 }}>Delegado assistente</th>
                 <th style={{ width: 90 }}>Ativa</th>
               </tr>
             </thead>
@@ -286,12 +286,12 @@ export default function Definicoes(): JSX.Element {
                     <input
                       type="checkbox"
                       style={{ width: 'auto' }}
-                      checked={c.usaDelegadoCampo}
+                      checked={c.usaDelegadoAssistente}
                       onChange={async (e) =>
                         {
                           const lista = await guardarCom(
-                            () => window.api.competicoes.guardar({ ...c, usaDelegadoCampo: e.target.checked }),
-                            `${c.nome}: delegado de campo guardado.`
+                            () => window.api.competicoes.guardar({ ...c, usaDelegadoAssistente: e.target.checked }),
+                            `${c.nome}: delegado assistente guardado.`
                           )
                           if (lista) setCompeticoes(lista)
                         }

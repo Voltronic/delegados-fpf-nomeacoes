@@ -1,10 +1,63 @@
 /** Tipos de domínio partilhados entre o processo main e o renderer. */
 
 export type NivelDelegado = 'ELITE' | 'PRINCIPAL'
-export type PapelNomeacao = 'PRINCIPAL' | 'CAMPO'
+export type PapelNomeacao = 'PRINCIPAL' | 'ASSISTENTE' | 'SOMBRA'
 export type EstadoNomeacao = 'SUGERIDA' | 'CONFIRMADA' | 'CANCELADA'
 export type FonteDistancia = 'OSRM' | 'HAVERSINE' | 'MANUAL' | 'AVIAO'
 export type EstadoJogo = 'AGENDADO' | 'REALIZADO' | 'ADIADO' | 'CANCELADO'
+
+/**
+ * Os papéis de uma nomeação.
+ *
+ * O delegado sombra vai ao jogo a aprender, acompanhando quem lá está a
+ * trabalhar. Fica registado, mas não entra em conta nenhuma da época — nem km,
+ * nem jogos por competição, nem voos, nem repetições de clube. Contá-lo
+ * estragava o equilíbrio entre os delegados que fazem mesmo os jogos.
+ */
+export const PAPEIS: { papel: PapelNomeacao; etiqueta: string; letra: string }[] = [
+  { papel: 'PRINCIPAL', etiqueta: 'Delegado principal', letra: 'P' },
+  { papel: 'ASSISTENTE', etiqueta: 'Delegado assistente', letra: 'A' },
+  { papel: 'SOMBRA', etiqueta: 'Delegado sombra', letra: 'S' }
+]
+
+/** Principal e assistente são um por jogo; sombras podem ser várias. */
+export const PAPEIS_UNICOS: PapelNomeacao[] = ['PRINCIPAL', 'ASSISTENTE']
+
+/** Quantas sombras um jogo pode ter. Mais do que isto deixa de ser formação. */
+export const MAX_SOMBRAS = 3
+
+export function etiquetaDoPapel(papel: PapelNomeacao): string {
+  return PAPEIS.find((p) => p.papel === papel)?.etiqueta ?? papel
+}
+
+export function letraDoPapel(papel: PapelNomeacao): string {
+  return PAPEIS.find((p) => p.papel === papel)?.letra ?? '?'
+}
+
+/** Classe CSS do chip de cada papel; o principal fica com a cor por omissão. */
+export function classeDoPapel(papel: PapelNomeacao): string {
+  return papel === 'PRINCIPAL' ? '' : papel.toLowerCase()
+}
+
+/** Um delegado sombra está a aprender: a nomeação não conta para as contas. */
+export function contaParaEstatisticas(papel: PapelNomeacao): boolean {
+  return papel !== 'SOMBRA'
+}
+
+/** As nomeações que contam para a época — tudo menos as sombras. */
+export function nomeacoesQueContam<T extends { papel: PapelNomeacao }>(nomeacoes: T[]): T[] {
+  return nomeacoes.filter((n) => contaParaEstatisticas(n.papel))
+}
+
+/** Um jogo só está nomeado quando tem delegado principal. */
+export function temPrincipal(nomeacoes: { papel: PapelNomeacao }[]): boolean {
+  return nomeacoes.some((n) => n.papel === 'PRINCIPAL')
+}
+
+/** As sombras de um jogo, pela ordem em que foram nomeadas. */
+export function sombras<T extends { papel: PapelNomeacao }>(nomeacoes: T[]): T[] {
+  return nomeacoes.filter((n) => n.papel === 'SOMBRA')
+}
 
 export interface Delegado {
   id: number
@@ -121,7 +174,7 @@ export interface Competicao {
   organizacao: string | null
   ativa: boolean
   nivelMinimo: NivelDelegado | null
-  usaDelegadoCampo: boolean
+  usaDelegadoAssistente: boolean
   /** Todos os jogos levam delegado, ou só os que o coordenador marcar. */
   todosComDelegado: boolean
 }
@@ -475,6 +528,6 @@ export interface PropostaAutomatica {
   descricaoJogo: string
   dataHora: string | null
   principal: { delegadoId: number; nome: string; km: number | null } | null
-  campo: { delegadoId: number; nome: string; km: number | null } | null
+  assistente: { delegadoId: number; nome: string; km: number | null } | null
   motivo: string
 }

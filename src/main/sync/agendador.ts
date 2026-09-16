@@ -205,7 +205,7 @@ export async function atualizarJogos(
           competitionId: c.fpfCompetitionId!,
           nome: c.nome,
           nivelMinimo: c.nivelMinimo,
-          usaDelegadoCampo: c.usaDelegadoCampo
+          usaDelegadoAssistente: c.usaDelegadoAssistente
         }))
       },
       progresso

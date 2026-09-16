@@ -89,7 +89,7 @@ export default function Importacao(): JSX.Element {
             competitionId: c.competitionId,
             nome: c.nome,
             nivelMinimo: null,
-            usaDelegadoCampo: true
+            usaDelegadoAssistente: true
           }))
       })
       setResultado(r)

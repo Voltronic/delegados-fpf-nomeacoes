@@ -16,23 +16,37 @@ export interface AccaoReversivel {
   descricao: string
   jogoId: number
   papel: PapelNomeacao
+  /** Nas sombras, qual delas: são várias por jogo. */
+  delegadoId: number | null
   /** Nomeação que existia antes; `null` quando o papel estava livre. */
   anterior: Nomeacao | null
 }
 
 let ultima: AccaoReversivel | null = null
 
-/** O estado de um papel num jogo, tal como está agora. */
-function estadoAtual(jogoId: number, papel: PapelNomeacao): Nomeacao | null {
-  return listarNomeacoesDoJogo(jogoId).find((n) => n.papel === papel) ?? null
+/**
+ * O estado de um papel num jogo, tal como está agora. Nas sombras é o da pessoa
+ * em causa: as outras sombras do jogo não são afetadas pela alteração.
+ */
+function estadoAtual(jogoId: number, papel: PapelNomeacao, delegadoId: number | null): Nomeacao | null {
+  return (
+    listarNomeacoesDoJogo(jogoId).find(
+      (n) => n.papel === papel && (papel !== 'SOMBRA' || n.delegadoId === delegadoId)
+    ) ?? null
+  )
 }
 
 /**
  * Regista o que estava antes de uma alteração. Chama-se **antes** de mexer,
  * porque depois já não há maneira de saber o que lá estava.
  */
-export function registarAlteracao(jogoId: number, papel: PapelNomeacao, descricao: string): void {
-  ultima = { descricao, jogoId, papel, anterior: estadoAtual(jogoId, papel) }
+export function registarAlteracao(
+  jogoId: number,
+  papel: PapelNomeacao,
+  descricao: string,
+  delegadoId: number | null = null
+): void {
+  ultima = { descricao, jogoId, papel, delegadoId, anterior: estadoAtual(jogoId, papel, delegadoId) }
 }
 
 export function ultimaAccao(): { descricao: string } | null {
@@ -49,7 +63,7 @@ export function esquecerUltimaAccao(): void {
  */
 export function desfazerUltimaAccao(): ReturnType<typeof obterJogoDetalhado> {
   if (!ultima) return null
-  const { jogoId, papel, anterior } = ultima
+  const { jogoId, papel, delegadoId, anterior } = ultima
   // Uma só vez: desfazer duas vezes seguidas repetiria a mesma reposição.
   ultima = null
 
@@ -65,7 +79,7 @@ export function desfazerUltimaAccao(): ReturnType<typeof obterJogoDetalhado> {
       motivoOverride: anterior.motivoOverride
     })
   } else {
-    removerNomeacao(jogoId, papel)
+    removerNomeacao(jogoId, papel, delegadoId ?? undefined)
   }
 
   return obterJogoDetalhado(jogoId)

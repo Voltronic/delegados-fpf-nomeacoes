@@ -57,7 +57,7 @@ export interface PedidoSincronizacaoApi {
   seasonId: number
   descricaoEpoca: string
   organizacao: string
-  competicoes: { competitionId: number; nome: string; nivelMinimo: string | null; usaDelegadoCampo: boolean }[]
+  competicoes: { competitionId: number; nome: string; nivelMinimo: string | null; usaDelegadoAssistente: boolean }[]
   desde?: string
 }
 
@@ -259,7 +259,7 @@ export interface Api {
       papel: PapelNomeacao
       motivoOverride?: string | null
     }): Promise<JogoDetalhado | null>
-    remover(jogoId: number, papel: PapelNomeacao): Promise<JogoDetalhado | null>
+    remover(jogoId: number, papel: PapelNomeacao, delegadoId?: number): Promise<JogoDetalhado | null>
     proposta(jogoIds: number[]): Promise<ResultadoPropostaAutomatica>
     aplicarProposta(propostas: PropostaAutomatica[]): Promise<number>
   }

@@ -7,6 +7,7 @@ import type {
   PapelNomeacao,
   ResultadoPropostaAutomatica
 } from '@shared/tipos'
+import { classeDoPapel, etiquetaDoPapel, letraDoPapel, MAX_SOMBRAS, sombras, temPrincipal } from '@shared/tipos'
 import CartaoCandidato from '../components/CartaoCandidato'
 import ConfigurarProposta from '../components/ConfigurarProposta'
 import EscolherOutrosJogos from '../components/EscolherOutrosJogos'
@@ -128,7 +129,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
 
   const jogo = jogos.find((j) => j.id === selecionado) ?? null
   const competicaoDoJogo = competicoes.find((c) => c.id === jogo?.competicaoId)
-  const usaDelegadoCampo = competicaoDoJogo?.usaDelegadoCampo ?? true
+  const usaDelegadoAssistente = competicaoDoJogo?.usaDelegadoAssistente ?? true
 
   const carregarCandidatos = useCallback(async (jogoId: number) => {
     setACarregarCandidatos(true)
@@ -175,7 +176,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
       await window.api.nomeacoes.nomear({ jogoId: selecionado, delegadoId, papel })
       setErro(null)
       avisar(
-        `${nome} nomeado como ${papel === 'PRINCIPAL' ? 'principal' : 'delegado de campo'}.`,
+        `${nome} nomeado como ${etiquetaDoPapel(papel).toLowerCase()}.`,
         'sucesso',
         anular
       )
@@ -190,10 +191,10 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     await carregarCandidatos(selecionado)
   }
 
-  async function remover(papel: PapelNomeacao): Promise<void> {
+  async function remover(papel: PapelNomeacao, delegadoId?: number): Promise<void> {
     if (selecionado == null) return
     try {
-      await window.api.nomeacoes.remover(selecionado, papel)
+      await window.api.nomeacoes.remover(selecionado, papel, delegadoId)
       avisar('Nomeação removida.', 'sucesso', anular)
     } catch (e) {
       avisar(mensagemDeErro(e), 'erro')
@@ -325,7 +326,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     }
   }
 
-  const nomeados = jogos.filter((j) => j.nomeacoes.length > 0).length
+  // Um jogo só está nomeado quando tem principal: sombras não chegam.
+  const nomeados = jogos.filter((j) => temPrincipal(j.nomeacoes)).length
 
   /**
    * Desenha a viagem de quem já está nomeado. Só se pede o traçado depois de
@@ -495,8 +497,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   key={j.id}
                   className={classes(
                     'item-jogo',
-                    j.nomeacoes.length >= 2 && 'nomeado',
-                    j.nomeacoes.length === 1 && 'parcial',
+                    temPrincipal(j.nomeacoes) && 'nomeado',
+                    !temPrincipal(j.nomeacoes) && j.nomeacoes.length > 0 && 'parcial',
                     j.id === selecionado && 'selecionado'
                   )}
                   onClick={() => setSelecionado(j.id)}
@@ -558,10 +560,10 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                       {j.nomeacoes.map((n) => (
                         <span
                           key={n.id}
-                          className={classes('chip-delegado', n.papel === 'CAMPO' && 'campo')}
-                          title={n.papel === 'PRINCIPAL' ? 'Delegado principal' : 'Delegado de campo'}
+                          className={classes('chip-delegado', classeDoPapel(n.papel))}
+                          title={etiquetaDoPapel(n.papel)}
                         >
-                          {n.papel === 'PRINCIPAL' ? 'P' : 'C'} {n.delegadoNome}
+                          {letraDoPapel(n.papel)} {n.delegadoNome}
                         </span>
                       ))}
                     </div>
@@ -635,15 +637,18 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   <div className="pilha">
                     {jogo.nomeacoes.map((n) => (
                       <div className="linha" key={n.id}>
-                        <span className="emblema ok">
-                          {n.papel === 'PRINCIPAL' ? 'Principal' : 'Campo'}
+                        <span className={classes('emblema', n.papel === 'SOMBRA' ? 'neutro' : 'ok')}>
+                          {etiquetaDoPapel(n.papel).replace('Delegado ', '')}
                         </span>
                         <b>
                           {n.delegadoNumero} — {n.delegadoNome}
                         </b>
                         <span className="silencioso">{formatarKm(n.km)}</span>
                         <div className="espacador" style={{ marginLeft: 'auto' }} />
-                        <button className="botao pequeno perigo" onClick={() => remover(n.papel)}>
+                        <button
+                          className="botao pequeno perigo"
+                          onClick={() => remover(n.papel, n.delegadoId)}
+                        >
                           Remover
                         </button>
                       </div>
@@ -671,7 +676,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                     posicao={i + 1}
                     realcado={realcado === c.delegadoId}
                     kmMaximo={kmMaximo}
-                    usaDelegadoCampo={usaDelegadoCampo}
+                    usaDelegadoAssistente={usaDelegadoAssistente}
+                    sombrasCheias={sombras(jogo.nomeacoes).length >= MAX_SOMBRAS}
                     papelAtribuido={jogo.nomeacoes.find((n) => n.delegadoId === c.delegadoId)?.papel ?? null}
                     aoNomear={nomear}
                     aoRealcar={setRealcado}
@@ -696,7 +702,8 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                       posicao={0}
                       realcado={realcado === c.delegadoId}
                       kmMaximo={kmMaximo}
-                      usaDelegadoCampo={usaDelegadoCampo}
+                      usaDelegadoAssistente={usaDelegadoAssistente}
+                      sombrasCheias={sombras(jogo?.nomeacoes ?? []).length >= MAX_SOMBRAS}
                       papelAtribuido={jogo?.nomeacoes.find((n) => n.delegadoId === c.delegadoId)?.papel ?? null}
                       aoNomear={nomear}
                       aoRealcar={setRealcado}
@@ -844,7 +851,7 @@ function RevisaoProposta({
                   <th>Jogo</th>
                   <th>Data</th>
                   <th>Principal</th>
-                  <th>Campo</th>
+                  <th>Assistente</th>
                   <th>Porquê</th>
                   <th />
                 </tr>
@@ -865,10 +872,10 @@ function RevisaoProposta({
                       )}
                     </td>
                     <td>
-                      {p.campo ? (
+                      {p.assistente ? (
                         <>
-                          {p.campo.nome}
-                          <div className="silencioso">{formatarKm(p.campo.km)}</div>
+                          {p.assistente.nome}
+                          <div className="silencioso">{formatarKm(p.assistente.km)}</div>
                         </>
                       ) : (
                         <span className="silencioso">—</span>
