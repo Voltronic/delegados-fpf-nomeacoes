@@ -453,5 +453,33 @@ export const MIGRACOES: Migracao[] = [
       ALTER TABLE alerta_novo RENAME TO alerta;
       CREATE INDEX ix_alerta_lido ON alerta(lido, criado_em);
     `
+  },
+  {
+    versao: 16,
+    descricao: 'Épocas desportivas e delegados arquivados',
+    sql: `
+      -- A época passa a existir por si, e não só como um número nas
+      -- competições: é preciso saber quando entrou na base de dados, porque é
+      -- daí que arranca a importação de jogos de uma época nova.
+      CREATE TABLE epoca (
+        season_id  INTEGER PRIMARY KEY,
+        descricao  TEXT,
+        criada_em  TEXT NOT NULL
+      );
+
+      -- As épocas que já cá estão datam do primeiro jogo importado.
+      INSERT OR IGNORE INTO epoca (season_id, descricao, criada_em)
+        SELECT c.season_id,
+               MAX(c.season_descricao),
+               COALESCE(MIN(j.importado_em), strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+          FROM competicao c
+          LEFT JOIN jogo j ON j.competicao_id = c.id
+         GROUP BY c.season_id;
+
+      -- Um delegado nunca se apaga: ficaria sem as nomeações das épocas
+      -- passadas, e com elas os km e o histórico de quem já lá esteve. Sai das
+      -- listas de trabalho, mas continua a contar no que já fez.
+      ALTER TABLE delegado ADD COLUMN apagado_em TEXT;
+    `
   }
 ]

@@ -1,28 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Competicao, LinhaKmDelegado, LinhaRepeticoes, MatrizDashboard } from '@shared/tipos'
+import type { Epoca, LinhaKmDelegado, LinhaRepeticoes, MatrizDashboard } from '@shared/tipos'
+import JogosDoDelegado from '../components/JogosDoDelegado'
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 
 export default function Dashboard(): JSX.Element {
-  const [epocas, setEpocas] = useState<{ seasonId: number; etiqueta: string }[]>([])
+  const [epocas, setEpocas] = useState<Epoca[]>([])
+  const [detalhe, setDetalhe] = useState<LinhaKmDelegado | null>(null)
   const [seasonId, setSeasonId] = useState<number | ''>('')
   const [km, setKm] = useState<LinhaKmDelegado[]>([])
   const [porCompeticao, setPorCompeticao] = useState<MatrizDashboard | null>(null)
   const [repeticoes, setRepeticoes] = useState<LinhaRepeticoes[]>([])
 
+  // As contas são sempre de uma época: abre-se na mais recente, que é onde se
+  // trabalha. Numa época nova os contadores começam a zero, porque só somam as
+  // nomeações dessa época.
   useEffect(() => {
-    void window.api.competicoes.listar().then((cs: Competicao[]) => {
-      const porEpoca = new Map<number, string>()
-      for (const c of cs) {
-        if (!porEpoca.has(c.seasonId) || c.seasonDescricao) {
-          porEpoca.set(c.seasonId, c.seasonDescricao ?? `Época ${c.seasonId}`)
-        }
-      }
-      const distintas = [...porEpoca.entries()]
-        .map(([seasonId, etiqueta]) => ({ seasonId, etiqueta }))
-        .sort((a, b) => b.seasonId - a.seasonId)
-      setEpocas(distintas)
-      setSeasonId((atual) => (atual === '' ? (distintas[0]?.seasonId ?? '') : atual))
+    void window.api.epocas.listar().then((lista) => {
+      setEpocas(lista)
+      setSeasonId((atual) => (atual === '' ? (lista[0]?.seasonId ?? '') : atual))
     })
   }, [])
 
@@ -87,7 +83,7 @@ export default function Dashboard(): JSX.Element {
             <option value="">Todas as épocas</option>
             {epocas.map((e) => (
               <option key={e.seasonId} value={e.seasonId}>
-                {e.etiqueta}
+                {e.descricao ?? `Época ${e.seasonId}`}
               </option>
             ))}
           </select>
@@ -176,7 +172,12 @@ export default function Dashboard(): JSX.Element {
               </thead>
               <tbody>
                 {kmOrdenado.map((l) => (
-                  <tr key={l.delegadoId}>
+                  <tr
+                    key={l.delegadoId}
+                    className="clicavel"
+                    title="Ver os jogos e as viagens deste delegado"
+                    onClick={() => setDetalhe(l)}
+                  >
                     <td className="mono silencioso">{l.numero}</td>
                     <td>{l.nome}</td>
                     <td>
@@ -212,6 +213,19 @@ export default function Dashboard(): JSX.Element {
         <Matriz titulo="Jogos por competição" matriz={porCompeticao} />
         <Repeticoes linhas={repeticoes} />
       </div>
+
+      {detalhe && (
+        <JogosDoDelegado
+          delegado={detalhe}
+          seasonId={seasonId === '' ? undefined : seasonId}
+          etiquetaEpoca={
+            seasonId === ''
+              ? 'Todas as épocas'
+              : (epocas.find((e) => e.seasonId === seasonId)?.descricao ?? `Época ${seasonId}`)
+          }
+          aoFechar={() => setDetalhe(null)}
+        />
+      )}
     </>
   )
 }

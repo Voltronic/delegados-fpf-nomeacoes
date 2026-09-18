@@ -706,14 +706,20 @@ async function principal(): Promise<void> {
       repos.listarIndisponibilidades(delegados[2].id).length === 1 &&
         repos.listarVetos(delegados[3].id).length === 1
     )
-    // Um delegado apagado por engano volta do ficheiro, com tudo o que tinha.
+    // Um delegado arquivado por engano volta do ficheiro, com tudo o que tinha.
+    // Não se cria outro: o número continua a ser dele, e criar um segundo com o
+    // mesmo número era recusado pela base de dados.
     repos.apagarDelegado(delegados[3].id)
     const reposto = importarDelegados(ficheiro)
     const voltou = repos.listarDelegados(true).find((d) => d.nome === 'Delegado Lisboa')
     verificar(
-      'um delegado apagado volta do ficheiro',
-      reposto.criados === 1 && !!voltou && repos.listarVetos(voltou.id).length === 1,
-      `→ ${reposto.criados} criado(s), ${voltou ? repos.listarVetos(voltou.id).length : 0} veto(s)`
+      'um delegado arquivado volta do ficheiro, sem ser duplicado',
+      reposto.criados === 0 &&
+        !!voltou &&
+        !voltou.apagadoEm &&
+        repos.listarVetos(voltou.id).length === 1,
+      `→ ${reposto.criados} criado(s), ${reposto.atualizados} atualizado(s), ` +
+        `${voltou ? repos.listarVetos(voltou.id).length : 0} veto(s)`
     )
 
     log('\n7. Proposta automática')
@@ -1776,6 +1782,98 @@ async function principal(): Promise<void> {
       `→ ${corrigido?.lat}, ${corrigido?.lng} (${corrigido?.morada})`
     )
     verificar('fica marcado como confirmado', corrigido?.confirmado === true)
+
+    log('\n12b. Épocas desportivas e delegados arquivados')
+    // A época nasce quando se importam jogos dela, e a data fica registada: é
+    // dela que a importação seguinte parte.
+    const EPOCA_NOVA = 107
+    const epocasAntes = repos.listarEpocas().length
+    const primeiraVez = repos.garantirEpoca(EPOCA_NOVA, '2027-2028')
+    const segundaVez = repos.garantirEpoca(EPOCA_NOVA, '2027-2028')
+    verificar(
+      'uma época que ainda não existe é criada, e só uma vez',
+      primeiraVez.nova && !segundaVez.nova && repos.listarEpocas().length === epocasAntes + 1,
+      `→ ${repos.listarEpocas().map((e) => e.descricao ?? e.seasonId).join(', ')}`
+    )
+    verificar(
+      'e fica com o dia em que entrou na base de dados',
+      primeiraVez.epoca.criadaEm.slice(0, 10) === new Date().toISOString().slice(0, 10),
+      `→ ${primeiraVez.epoca.criadaEm}`
+    )
+
+    // Uma competição que se repete traz o que o coordenador já tinha definido.
+    repos.guardarCompeticao({ ...competicao, nivelMinimo: 'ELITE', todosComDelegado: true })
+    const herdado = repos.configuracaoDaEpocaAnterior(
+      competicao.fpfCompetitionId,
+      competicao.nome,
+      EPOCA_NOVA
+    )
+    verificar(
+      'uma competição repetida herda a configuração da época anterior',
+      herdado?.nivelMinimo === 'ELITE' && herdado?.todosComDelegado === true,
+      `→ ${JSON.stringify(herdado)}`
+    )
+    repos.guardarCompeticao({ ...competicao, nivelMinimo: null, todosComDelegado: true })
+
+    // As contas são por época: o que se fez numa não conta na outra.
+    repos.guardarCompeticao({
+      fpfCompetitionId: 98765,
+      seasonId: EPOCA_NOVA,
+      seasonDescricao: '2027-2028',
+      nome: competicao.nome,
+      organizacao: competicao.organizacao,
+      ativa: true,
+      nivelMinimo: null,
+      usaDelegadoAssistente: false,
+      todosComDelegado: true
+    })
+    const kmNaEpocaNova = repos.tabelaKm(EPOCA_NOVA)
+    verificar(
+      'uma época nova começa com os contadores a zero',
+      kmNaEpocaNova.every((l) => l.km === 0 && l.jogos === 0),
+      `→ ${kmNaEpocaNova.reduce((n, l) => n + l.jogos, 0)} jogos contados`
+    )
+    verificar(
+      'e a época anterior continua com as contas dela',
+      repos.tabelaKm(106).some((l) => l.jogos > 0)
+    )
+
+    // O detalhe de um delegado: os jogos que fez, com a viagem de cada um.
+    const comJogos = repos.tabelaKm(106).find((l) => l.jogos > 0)!
+    const detalhe = repos.jogosDoDelegado(comJogos.delegadoId, 106)
+    verificar(
+      'o detalhe do delegado traz os jogos com competição, papel e km',
+      detalhe.length > 0 &&
+        detalhe.every((j) => !!j.competicaoNome && !!j.clubeCasaNome && !!j.papel) &&
+        detalhe.some((j) => (j.km ?? 0) > 0),
+      `→ ${detalhe.length} jogo(s), ex.: ${detalhe[0]?.clubeCasaNome} × ${detalhe[0]?.clubeForaNome}, ${detalhe[0]?.km} km`
+    )
+    verificar(
+      'e não traz os de outra época',
+      repos.jogosDoDelegado(comJogos.delegadoId, EPOCA_NOVA).length === 0
+    )
+
+    // Arquivar um delegado não pode levar com ele o histórico.
+    const paraArquivar = repos.obterDelegado(comJogos.delegadoId)!
+    const jogosAntesDeArquivar = repos.jogosDoDelegado(paraArquivar.id, 106).length
+    repos.apagarDelegado(paraArquivar.id)
+    verificar(
+      'arquivar tira o delegado das listas, mas não da base de dados',
+      !repos.listarDelegados(true).some((d) => d.id === paraArquivar.id) &&
+        repos.listarDelegados(true, true).some((d) => d.id === paraArquivar.id) &&
+        !!repos.obterDelegado(paraArquivar.id)?.apagadoEm
+    )
+    verificar(
+      'e os jogos e os km dele continuam na época que fez',
+      repos.jogosDoDelegado(paraArquivar.id, 106).length === jogosAntesDeArquivar &&
+        repos.tabelaKm(106).some((l) => l.delegadoId === paraArquivar.id && l.jogos > 0),
+      `→ ${repos.jogosDoDelegado(paraArquivar.id, 106).length} jogo(s) no detalhe`
+    )
+    repos.restaurarDelegado(paraArquivar.id)
+    verificar(
+      'restaurar devolve-o às listas',
+      repos.listarDelegados(true).some((d) => d.id === paraArquivar.id)
+    )
 
     log('\n13. Limpar as nomeações (dados de teste)')
     // Apagar as nomeações (limpeza dos dados de teste) só pode levar as

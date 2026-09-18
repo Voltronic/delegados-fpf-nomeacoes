@@ -39,6 +39,10 @@ export default function Importacao(): JSX.Element {
         setOrganizacao(c.organizacoes[0]?.nome ?? '')
       }
       if (atual != null) {
+        // Se a época já existe na base de dados, a importação parte do dia em
+        // que ela lá entrou.
+        const epocaGuardada = (await window.api.epocas.listar()).find((e) => e.seasonId === atual)
+        if (epocaGuardada) setDesde(epocaGuardada.criadaEm.slice(0, 10))
         const guardadas = (await window.api.competicoes.listar(atual))
           .filter((x) => x.ativa && x.fpfCompetitionId != null)
           .map((x) => x.fpfCompetitionId!)
@@ -93,6 +97,14 @@ export default function Importacao(): JSX.Element {
           }))
       })
       setResultado(r)
+      // Uma época que ainda não existia passa a existir agora, e a importação
+      // seguinte arranca no dia em que ela foi criada: o que é de antes
+      // pertence à época que acabou.
+      if (r.epoca.nova) {
+        setDesde(r.epoca.criadaEm.slice(0, 10))
+        setUsarDesde(true)
+        avisar(`Época ${r.epoca.descricao ?? r.epoca.seasonId} criada. A importação passa a partir de hoje.`)
+      }
       avisar(`${r.criados} jogos novos, ${r.atualizados} atualizados.`)
     } catch (e) {
       const texto = `A sincronização falhou: ${mensagemDeErro(e)}`

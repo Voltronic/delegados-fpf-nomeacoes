@@ -71,6 +71,8 @@ export interface Delegado {
   email: string | null
   ativo: boolean
   notas: string | null
+  /** Data em que saiu do quadro; `null` enquanto estiver ativo no plantel. */
+  apagadoEm?: string | null
   coordsManuais: boolean
 }
 
@@ -163,6 +165,34 @@ export const COMPETICOES_COM_DELEGADO_SEMPRE = [
   'LIGA PLACARD',
   'LIGA FEMININA PLACARD'
 ]
+
+/**
+ * Uma época desportiva, tal como a aplicação a conhece.
+ *
+ * `criadaEm` é o dia em que a época entrou na base de dados. A importação de
+ * jogos de uma época nova arranca nesse dia: antes disso os jogos pertencem à
+ * época anterior e não têm nada que ver com as contas que começam agora.
+ */
+export interface Epoca {
+  seasonId: number
+  descricao: string | null
+  criadaEm: string
+}
+
+/** Uma linha do detalhe de um delegado: um jogo que fez, com a viagem. */
+export interface JogoDoDelegado {
+  jogoId: number
+  dataHora: string | null
+  seasonId: number
+  competicaoNome: string
+  clubeCasaNome: string
+  clubeForaNome: string
+  recintoNome: string | null
+  papel: PapelNomeacao
+  km: number | null
+  minutos: number | null
+  fonteDistancia: FonteDistancia | null
+}
 
 export interface Competicao {
   id: number
@@ -408,6 +438,8 @@ export interface ResultadoSincronizacao {
    */
   sensiveis: DiffJogo[]
   erros: string[]
+  /** A época destes jogos, e se foi criada agora por não existir ainda. */
+  epoca: Epoca & { nova: boolean }
 }
 
 // ---------------------------------------------------------------------------

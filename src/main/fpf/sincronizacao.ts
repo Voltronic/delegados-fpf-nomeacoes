@@ -25,7 +25,9 @@ import { emTransacao } from '../db'
 import { normalizarNome } from './html'
 import { lerCsv } from './csv'
 import {
+  configuracaoDaEpocaAnterior,
   encontrarOuCriarClube,
+  garantirEpoca,
   guardarCompeticao,
   guardarJogo,
   listarClubes,
@@ -129,23 +131,34 @@ export async function sincronizar(
   //    trabalho e estragava o contador de progresso.
   const distintas = new Map<number, (typeof pedido.competicoes)[number]>()
   for (const c of pedido.competicoes) distintas.set(c.competitionId, c)
-  const competicoes = [...distintas.values()].map((c) =>
-    guardarCompeticao({
+  // A época passa a existir na base de dados no momento em que se importam
+  // jogos dela. A data de criação conta: é dali que a importação arranca.
+  const { nova: epocaNova, epoca: epocaGuardada } = garantirEpoca(
+    pedido.seasonId,
+    pedido.descricaoEpoca || null
+  )
+
+  const competicoes = [...distintas.values()].map((c) => {
+    // Uma competição que se repete de época para época traz o que o
+    // coordenador já tinha definido: nível exigido, assistente e se leva
+    // delegado em todos os jogos. Sem isto, cada época começava do zero.
+    const herdado = configuracaoDaEpocaAnterior(c.competitionId, c.nome, pedido.seasonId)
+    return guardarCompeticao({
       fpfCompetitionId: c.competitionId,
       seasonId: pedido.seasonId,
       seasonDescricao: pedido.descricaoEpoca || null,
       nome: c.nome,
       organizacao: pedido.organizacao,
       ativa: true,
-      nivelMinimo: c.nivelMinimo as never,
-      usaDelegadoAssistente: c.usaDelegadoAssistente,
+      nivelMinimo: (herdado?.nivelMinimo ?? c.nivelMinimo) as never,
+      usaDelegadoAssistente: herdado?.usaDelegadoAssistente ?? c.usaDelegadoAssistente,
       // Só conta quando a competição é criada: numa que já exista, o valor
       // guardado é o do coordenador e não se mexe.
-      todosComDelegado: COMPETICOES_COM_DELEGADO_SEMPRE.some(
-        (n) => normalizarNome(n) === normalizarNome(c.nome)
-      )
+      todosComDelegado:
+        herdado?.todosComDelegado ??
+        COMPETICOES_COM_DELEGADO_SEMPRE.some((n) => normalizarNome(n) === normalizarNome(c.nome))
     })
-  ).filter((c, i, todas) => todas.findIndex((o) => o.id === c.id) === i)
+  }).filter((c, i, todas) => todas.findIndex((o) => o.id === c.id) === i)
 
   // 2) Ler a estrutura de cada competição. As competições por pontos têm
   //    jornadas a ir buscar à parte; as de eliminatórias já trazem os jogos
@@ -319,7 +332,15 @@ export async function sincronizar(
 
   progresso({ etapa: 'Concluído', atual: tarefas.length, total: tarefas.length, concluido: true })
 
-  return { competicoes: resumo, criados, atualizados, clubesCriados, sensiveis, erros }
+  return {
+    competicoes: resumo,
+    criados,
+    atualizados,
+    clubesCriados,
+    sensiveis,
+    erros,
+    epoca: { ...epocaGuardada, nova: epocaNova }
+  }
 }
 
 function calcularDiffs(chaves: string[]): DiffJogo[] {

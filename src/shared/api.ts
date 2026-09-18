@@ -1,4 +1,6 @@
 import type {
+  JogoDoDelegado,
+  Epoca,
   Alerta,
   EdicaoJogo,
   Candidato,
@@ -155,9 +157,12 @@ export interface Api {
   }
 
   delegados: {
-    listar(incluirInativos?: boolean): Promise<Delegado[]>
+    /** Os arquivados só vêm quando se pedem: saíram do quadro, ficam no histórico. */
+    listar(incluirInativos?: boolean, incluirArquivados?: boolean): Promise<Delegado[]>
     guardar(delegado: Omit<Delegado, 'id'> & { id?: number }): Promise<Delegado>
+    /** Arquiva o delegado: sai das listas, mas as épocas que fez ficam. */
     apagar(id: number): Promise<void>
+    restaurar(id: number): Promise<Delegado | null>
     geocodificar(id: number): Promise<Delegado | null>
     indisponibilidades(delegadoId: number): Promise<Indisponibilidade[]>
     criarIndisponibilidade(dados: Omit<Indisponibilidade, 'id'>): Promise<Indisponibilidade[]>
@@ -204,6 +209,11 @@ export interface Api {
     confirmar(id: number, confirmado: boolean): Promise<Recinto[]>
     confirmarTodos(): Promise<Recinto[]>
     aoProgredir(ouvinte: (p: ProgressoGeocodificacao) => void): () => void
+  }
+
+  epocas: {
+    /** As épocas que existem na base de dados, da mais recente para a mais antiga. */
+    listar(): Promise<Epoca[]>
   }
 
   competicoes: {
@@ -269,6 +279,8 @@ export interface Api {
     porCompeticao(seasonId?: number): Promise<MatrizDashboard>
     /** Pares clube/competição que cada delegado repetiu (2 ou mais vezes). */
     repeticoesClube(seasonId?: number): Promise<LinhaRepeticoes[]>
+    /** Os jogos de um delegado numa época, com a viagem de cada um. */
+    jogosDoDelegado(delegadoId: number, seasonId?: number): Promise<JogoDoDelegado[]>
   }
 
   fpf: {

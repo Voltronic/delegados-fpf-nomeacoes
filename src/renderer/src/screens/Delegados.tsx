@@ -86,13 +86,24 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
     setMensagem(null)
   }
 
+  /**
+   * Arquiva o delegado. Não se apaga ninguém: as nomeações que fez são os km e
+   * os jogos das épocas passadas, e apagá-lo levava esse histórico com ele.
+   */
   async function apagar(): Promise<void> {
     if (typeof selecionado !== 'number') return
-    if (!confirm('Apagar este delegado e todas as suas nomeações?')) return
+    if (
+      !confirm(
+        'Arquivar este delegado? Deixa de aparecer nas listas e de ser candidato, ' +
+          'mas os jogos que já fez continuam no histórico e nas contas dessas épocas.'
+      )
+    ) {
+      return
+    }
     const nome = formulario.nome
     const ok = await guardarCom(
       () => window.api.delegados.apagar(selecionado),
-      `${nome} apagado.`
+      `${nome} arquivado.`
     )
     if (ok === null) return
     setSelecionado(null)
@@ -429,7 +440,7 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
                   <div style={{ marginLeft: 'auto' }} />
                   {typeof selecionado === 'number' && (
                     <button className="botao perigo" onClick={apagar}>
-                      Apagar delegado
+                      Arquivar delegado
                     </button>
                   )}
                 </div>

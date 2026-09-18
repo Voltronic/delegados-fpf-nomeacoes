@@ -54,6 +54,7 @@ const api = {
     importar: invocar('delegados:importar'),
     gravarFicheiro: invocar('delegados:gravarFicheiro'),
     apagar: invocar('delegados:apagar'),
+    restaurar: invocar('delegados:restaurar'),
     geocodificar: invocar('delegados:geocodificar'),
     indisponibilidades: invocar('delegados:indisponibilidades'),
     criarIndisponibilidade: invocar('delegados:criarIndisponibilidade'),
@@ -83,6 +84,9 @@ const api = {
       ipcRenderer.on('geo:progresso', wrapper)
       return () => ipcRenderer.removeListener('geo:progresso', wrapper)
     }
+  },
+  epocas: {
+    listar: invocar('epocas:listar')
   },
   competicoes: {
     listar: invocar('competicoes:listar'),
@@ -116,7 +120,8 @@ const api = {
   dashboard: {
     km: invocar('dashboard:km'),
     porCompeticao: invocar('dashboard:porCompeticao'),
-    repeticoesClube: invocar('dashboard:repeticoesClube')
+    repeticoesClube: invocar('dashboard:repeticoesClube'),
+    jogosDoDelegado: invocar('dashboard:jogosDoDelegado')
   },
   fpf: {
     catalogo: invocar('fpf:catalogo'),

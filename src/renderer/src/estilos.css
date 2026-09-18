@@ -949,6 +949,15 @@ table.tabela th.ordenada .seta {
   margin-top: 2px;
 }
 
+/* Linhas que abrem detalhe: o cursor e o realce dizem que há mais para ver. */
+.tabela tbody tr.clicavel {
+  cursor: pointer;
+}
+
+.tabela tbody tr.clicavel:hover {
+  background: var(--superficie-2);
+}
+
 .chip-delegado {
   display: inline-flex;
   align-items: center;

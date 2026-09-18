@@ -29,7 +29,9 @@ export function importarDelegados(conteudo: string): ResultadoImportacaoDelegado
   const resultado: ResultadoImportacaoDelegados = { criados: 0, atualizados: 0, vetosSemClube: [] }
 
   emTransacao(() => {
-    const porNumero = new Map(repos.listarDelegados(true).map((d) => [d.numero, d]))
+    // Também os arquivados: o número continua a ser deles, e criar outro com o
+    // mesmo número era impossível. Se vierem no ficheiro, voltam ao quadro.
+    const porNumero = new Map(repos.listarDelegados(true, true).map((d) => [d.numero, d]))
     const clubes = new Map(repos.listarClubes().map((c) => [normalizarNome(c.nome), c.id]))
 
     for (const entrada of entradas) {
@@ -47,6 +49,7 @@ export function importarDelegados(conteudo: string): ResultadoImportacaoDelegado
         notas: entrada.notas,
         coordsManuais: entrada.coordsManuais
       }
+      if (existente?.apagadoEm) repos.restaurarDelegado(existente.id)
       const delegado = existente ? repos.atualizarDelegado(existente.id, dados) : repos.criarDelegado(dados)
       if (existente) resultado.atualizados++
       else resultado.criados++

@@ -3,11 +3,13 @@ import type {
   Clube,
   Competicao,
   Delegado,
+  Epoca,
   EdicaoJogo,
   EstadoJogo,
   Indisponibilidade,
   Jogo,
   JogoDetalhado,
+  JogoDoDelegado,
   LinhaKmDelegado,
   MatrizDashboard,
   LinhaRepeticoes,
@@ -44,6 +46,7 @@ type LinhaDelegado = {
   ativo: number
   notas: string | null
   coords_manuais: number
+  apagado_em: string | null
 }
 
 const paraDelegado = (l: LinhaDelegado): Delegado => ({
@@ -58,15 +61,24 @@ const paraDelegado = (l: LinhaDelegado): Delegado => ({
   email: l.email,
   ativo: bool(l.ativo),
   notas: l.notas,
-  coordsManuais: bool(l.coords_manuais)
+  coordsManuais: bool(l.coords_manuais),
+  apagadoEm: l.apagado_em
 })
 
-export function listarDelegados(incluirInativos = true): Delegado[] {
-  // Por número, e numericamente: com ordenação de texto o 1084 vinha antes do
-  // 109. O `CAST` dá 0 a números não numéricos, que ficam no início ordenados
-  // pelo próprio texto.
+/**
+ * Os delegados, por número e numericamente: com ordenação de texto o 1084 vinha
+ * antes do 109. O `CAST` dá 0 a números não numéricos, que ficam no início
+ * ordenados pelo próprio texto.
+ *
+ * Os arquivados ficam de fora por omissão: saíram do quadro, mas continuam na
+ * base de dados por causa das épocas que já fizeram.
+ */
+export function listarDelegados(incluirInativos = true, incluirArquivados = false): Delegado[] {
+  const condicoes = [incluirInativos ? '' : 'ativo = 1', incluirArquivados ? '' : 'apagado_em IS NULL']
+    .filter(Boolean)
+    .join(' AND ')
   const sql = `
-    SELECT * FROM delegado ${incluirInativos ? '' : 'WHERE ativo = 1'}
+    SELECT * FROM delegado ${condicoes ? 'WHERE ' + condicoes : ''}
     ORDER BY CAST(numero AS INTEGER), numero, nome
   `
   return (obterBaseDados().prepare(sql).all() as LinhaDelegado[]).map(paraDelegado)
@@ -81,13 +93,34 @@ export function obterDelegado(id: number): Delegado | null {
 
 export type EntradaDelegado = Omit<Delegado, 'id'>
 
+/**
+ * Os campos que vão para a tabela, e só esses: o SQLite recusa parâmetros que a
+ * consulta não use, e o `apagadoEm` do tipo não é um deles — quem arquiva é
+ * `apagarDelegado`, não quem grava o formulário.
+ */
+function camposDoDelegado(dados: EntradaDelegado): Record<string, unknown> {
+  return {
+    numero: dados.numero,
+    nome: dados.nome,
+    morada: dados.morada,
+    lat: dados.lat,
+    lng: dados.lng,
+    nivel: dados.nivel,
+    telefone: dados.telefone,
+    email: dados.email,
+    ativo: dados.ativo ? 1 : 0,
+    notas: dados.notas,
+    coordsManuais: dados.coordsManuais ? 1 : 0
+  }
+}
+
 export function criarDelegado(dados: EntradaDelegado): Delegado {
   const info = obterBaseDados()
     .prepare(
       `INSERT INTO delegado (numero, nome, morada, lat, lng, nivel, telefone, email, ativo, notas, coords_manuais)
        VALUES (@numero, @nome, @morada, @lat, @lng, @nivel, @telefone, @email, @ativo, @notas, @coordsManuais)`
     )
-    .run({ ...dados, ativo: dados.ativo ? 1 : 0, coordsManuais: dados.coordsManuais ? 1 : 0 })
+    .run(camposDoDelegado(dados))
   registarAuditoria('delegado', Number(info.lastInsertRowid), 'criar', dados)
   return obterDelegado(Number(info.lastInsertRowid))!
 }
@@ -99,14 +132,31 @@ export function atualizarDelegado(id: number, dados: EntradaDelegado): Delegado 
         nivel=@nivel, telefone=@telefone, email=@email, ativo=@ativo, notas=@notas,
         coords_manuais=@coordsManuais WHERE id=@id`
     )
-    .run({ ...dados, id, ativo: dados.ativo ? 1 : 0, coordsManuais: dados.coordsManuais ? 1 : 0 })
+    .run({ ...camposDoDelegado(dados), id })
   registarAuditoria('delegado', id, 'atualizar', dados)
   return obterDelegado(id)!
 }
 
+/**
+ * Arquiva um delegado: sai das listas de trabalho e deixa de ser candidato,
+ * mas fica na base de dados.
+ *
+ * Apagar a sério levava com ele todas as nomeações — a tabela tem
+ * `ON DELETE CASCADE` — e com elas os km e os jogos das épocas passadas, que
+ * são precisamente o histórico que se quer guardar.
+ */
 export function apagarDelegado(id: number): void {
-  obterBaseDados().prepare('DELETE FROM delegado WHERE id = ?').run(id)
-  registarAuditoria('delegado', id, 'apagar')
+  obterBaseDados()
+    .prepare('UPDATE delegado SET apagado_em = ?, ativo = 0 WHERE id = ?')
+    .run(agora(), id)
+  registarAuditoria('delegado', id, 'arquivar')
+}
+
+/** Devolve ao quadro um delegado arquivado. Volta inativo: quem o arquivou que decida. */
+export function restaurarDelegado(id: number): Delegado | null {
+  obterBaseDados().prepare('UPDATE delegado SET apagado_em = NULL WHERE id = ?').run(id)
+  registarAuditoria('delegado', id, 'restaurar')
+  return obterDelegado(id)
 }
 
 export function listarIndisponibilidades(delegadoId: number): Indisponibilidade[] {
@@ -161,6 +211,94 @@ export function criarVeto(dados: Omit<VetoClube, 'id' | 'clubeNome'>): void {
 
 export function apagarVeto(id: number): void {
   obterBaseDados().prepare('DELETE FROM delegado_veto_clube WHERE id = ?').run(id)
+}
+
+// ---------------------------------------------------------------------------
+// Épocas desportivas
+// ---------------------------------------------------------------------------
+
+const paraEpoca = (l: { season_id: number; descricao: string | null; criada_em: string }): Epoca => ({
+  seasonId: l.season_id,
+  descricao: l.descricao,
+  criadaEm: l.criada_em
+})
+
+export function listarEpocas(): Epoca[] {
+  return (
+    obterBaseDados().prepare('SELECT * FROM epoca ORDER BY season_id DESC').all() as Parameters<
+      typeof paraEpoca
+    >[0][]
+  ).map(paraEpoca)
+}
+
+export function obterEpoca(seasonId: number): Epoca | null {
+  const l = obterBaseDados().prepare('SELECT * FROM epoca WHERE season_id = ?').get(seasonId) as
+    | Parameters<typeof paraEpoca>[0]
+    | undefined
+  return l ? paraEpoca(l) : null
+}
+
+/**
+ * Cria a época se ainda não existir, e diz se foi agora criada.
+ *
+ * É o que acontece quando se importam jogos de uma época que a aplicação ainda
+ * não conhecia. A data de criação fica registada porque é dela que a
+ * importação parte: os jogos anteriores pertencem à época que acabou.
+ */
+export function garantirEpoca(seasonId: number, descricao: string | null): { epoca: Epoca; nova: boolean } {
+  const existente = obterEpoca(seasonId)
+  if (existente) {
+    // A descrição pode chegar mais tarde do que a época ("2027-2028").
+    if (!existente.descricao && descricao) {
+      obterBaseDados().prepare('UPDATE epoca SET descricao = ? WHERE season_id = ?').run(descricao, seasonId)
+      return { epoca: { ...existente, descricao }, nova: false }
+    }
+    return { epoca: existente, nova: false }
+  }
+  obterBaseDados()
+    .prepare('INSERT INTO epoca (season_id, descricao, criada_em) VALUES (?, ?, ?)')
+    .run(seasonId, descricao, agora())
+  registarAuditoria('epoca', seasonId, 'criar', { descricao })
+  return { epoca: obterEpoca(seasonId)!, nova: true }
+}
+
+/**
+ * A configuração que uma competição trazia da época anterior: nível exigido,
+ * delegado assistente e se leva delegado em todos os jogos.
+ *
+ * Uma competição repete-se de época para época, e o coordenador não tem de
+ * voltar a dizer o mesmo todos os anos. Procura-se pelo id da FPF e, se não
+ * houver, pelo nome — o id muda de época para época em algumas competições.
+ */
+export function configuracaoDaEpocaAnterior(
+  fpfCompetitionId: number | null,
+  nome: string,
+  seasonId: number
+): Pick<Competicao, 'nivelMinimo' | 'usaDelegadoAssistente' | 'todosComDelegado'> | null {
+  const db = obterBaseDados()
+  const porId =
+    fpfCompetitionId == null
+      ? undefined
+      : (db
+          .prepare(
+            `SELECT * FROM competicao WHERE fpf_competition_id = ? AND season_id < ?
+              ORDER BY season_id DESC LIMIT 1`
+          )
+          .get(fpfCompetitionId, seasonId) as Parameters<typeof paraCompeticao>[0] | undefined)
+  const linha =
+    porId ??
+    (db
+      .prepare(
+        `SELECT * FROM competicao WHERE nome = ? AND season_id < ? ORDER BY season_id DESC LIMIT 1`
+      )
+      .get(nome, seasonId) as Parameters<typeof paraCompeticao>[0] | undefined)
+  if (!linha) return null
+  const anterior = paraCompeticao(linha)
+  return {
+    nivelMinimo: anterior.nivelMinimo,
+    usaDelegadoAssistente: anterior.usaDelegadoAssistente,
+    todosComDelegado: anterior.todosComDelegado
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1158,9 +1296,24 @@ export function estatisticasPorDelegado(seasonId?: number): Map<number, Estatist
   return mapa
 }
 
+/**
+ * Quem aparece nas contas de uma época: os delegados do quadro, mais os que
+ * entretanto foram arquivados mas fizeram jogos nessa época. Sem eles, os km
+ * de uma época passada mudavam sozinhos quando alguém saísse do quadro.
+ */
+function delegadosDaEpoca(stats: Map<number, EstatisticasDelegado>): Delegado[] {
+  const doQuadro = listarDelegados(false)
+  const conhecidos = new Set(doQuadro.map((d) => d.id))
+  const arquivados = [...stats.keys()]
+    .filter((id) => !conhecidos.has(id))
+    .map((id) => obterDelegado(id))
+    .filter((d): d is Delegado => d !== null)
+  return [...doQuadro, ...arquivados]
+}
+
 export function tabelaKm(seasonId?: number): LinhaKmDelegado[] {
-  const delegados = listarDelegados(false)
   const stats = estatisticasPorDelegado(seasonId)
+  const delegados = delegadosDaEpoca(stats)
   const kms = delegados.map((d) => stats.get(d.id)?.km ?? 0)
   const media = kms.length ? kms.reduce((a, b) => a + b, 0) / kms.length : 0
   return delegados
@@ -1182,10 +1335,62 @@ export function tabelaKm(seasonId?: number): LinhaKmDelegado[] {
     .sort((a, b) => a.km - b.km)
 }
 
+/**
+ * Todos os jogos de um delegado numa época, com a viagem de cada um.
+ *
+ * É o que responde a "porque é que este delegado tem tantos km?" — a tabela do
+ * dashboard dá o total, e o total sozinho não se explica. As sombras aparecem
+ * na lista, marcadas: foram jogos a que o delegado foi, ainda que não contem.
+ */
+export function jogosDoDelegado(delegadoId: number, seasonId?: number): JogoDoDelegado[] {
+  const filtroEpoca = seasonId != null ? 'AND comp.season_id = @seasonId' : ''
+  const linhas = obterBaseDados()
+    .prepare(
+      `SELECT j.id AS jogo_id, j.data_hora, comp.season_id, comp.nome AS competicao_nome,
+              cc.nome AS casa, cf.nome AS fora, r.nome AS recinto,
+              n.papel, n.km, n.minutos, n.fonte_distancia
+         FROM nomeacao n
+         JOIN jogo j ON j.id = n.jogo_id
+         JOIN competicao comp ON comp.id = j.competicao_id
+         JOIN clube cc ON cc.id = j.clube_casa_id
+         JOIN clube cf ON cf.id = j.clube_fora_id
+         LEFT JOIN recinto r ON r.id = j.recinto_id
+        WHERE n.delegado_id = @delegadoId AND n.estado = 'CONFIRMADA' ${filtroEpoca}
+        ORDER BY j.data_hora DESC`
+    )
+    .all(seasonId != null ? { delegadoId, seasonId } : { delegadoId }) as {
+    jogo_id: number
+    data_hora: string | null
+    season_id: number
+    competicao_nome: string
+    casa: string
+    fora: string
+    recinto: string | null
+    papel: string
+    km: number | null
+    minutos: number | null
+    fonte_distancia: string | null
+  }[]
+
+  return linhas.map((l) => ({
+    jogoId: l.jogo_id,
+    dataHora: l.data_hora,
+    seasonId: l.season_id,
+    competicaoNome: l.competicao_nome,
+    clubeCasaNome: l.casa,
+    clubeForaNome: l.fora,
+    recintoNome: l.recinto,
+    papel: l.papel as JogoDoDelegado['papel'],
+    km: l.km,
+    minutos: l.minutos,
+    fonteDistancia: l.fonte_distancia as JogoDoDelegado['fonteDistancia']
+  }))
+}
+
 export function matrizPorCompeticao(seasonId?: number): MatrizDashboard {
-  const delegados = listarDelegados(false)
   const competicoes = listarCompeticoes(seasonId).filter((c) => c.ativa)
   const stats = estatisticasPorDelegado(seasonId)
+  const delegados = delegadosDaEpoca(stats)
   return {
     colunas: competicoes.map((c) => ({ chave: String(c.id), etiqueta: c.nome })),
     linhas: delegados.map((d) => ({ delegadoId: d.id, numero: d.numero, nome: d.nome })),
@@ -1249,7 +1454,7 @@ export function repeticoesPorDelegado(seasonId?: number): LinhaRepeticoes[] {
 
   // Todos os delegados ativos aparecem, mesmo sem repetições: a ausência é
   // informação — é quem ainda está a rodar bem.
-  return listarDelegados(false).map((d) => ({
+  return delegadosDaEpoca(estatisticasPorDelegado(seasonId)).map((d) => ({
     delegadoId: d.id,
     numero: d.numero,
     nome: d.nome,

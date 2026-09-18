@@ -250,7 +250,9 @@ export function registarIpc(contexto: {
   })
 
   // -- Delegados ------------------------------------------------------------
-  registar('delegados:listar', (incluirInativos?: boolean) => repos.listarDelegados(incluirInativos ?? true))
+  registar('delegados:listar', (incluirInativos?: boolean, incluirArquivados?: boolean) =>
+    repos.listarDelegados(incluirInativos, incluirArquivados)
+  )
 
   registar('delegados:guardar', (dados: Omit<Delegado, 'id'> & { id?: number }) => {
     const anterior = dados.id ? repos.obterDelegado(dados.id) : null
@@ -262,7 +264,9 @@ export function registarIpc(contexto: {
     return guardado
   })
 
+  // Arquivar, não apagar: as nomeações das épocas passadas são o histórico.
   registar('delegados:apagar', (id: number) => repos.apagarDelegado(id))
+  registar('delegados:restaurar', (id: number) => repos.restaurarDelegado(id))
 
   registar('delegados:exportar', () => exportarDelegados())
   registar('delegados:importar', (conteudo: string) => importarDelegados(conteudo))
@@ -445,6 +449,7 @@ export function registarIpc(contexto: {
 
   // -- Competições ----------------------------------------------------------
   registar('competicoes:listar', (seasonId?: number) => repos.listarCompeticoes(seasonId))
+  registar('epocas:listar', () => repos.listarEpocas())
   registar('competicoes:guardar', (dados: Omit<Competicao, 'id'> & { id?: number }) => {
     repos.guardarCompeticao(dados)
     return repos.listarCompeticoes()
@@ -585,6 +590,10 @@ export function registarIpc(contexto: {
 
   // -- Dashboard ------------------------------------------------------------
   registar('dashboard:km', (seasonId?: number) => repos.tabelaKm(seasonId))
+  /** Os jogos de um delegado numa época, para explicar os km do dashboard. */
+  registar('dashboard:jogosDoDelegado', (delegadoId: number, seasonId?: number) =>
+    repos.jogosDoDelegado(delegadoId, seasonId)
+  )
   registar('dashboard:porCompeticao', (seasonId?: number) => repos.matrizPorCompeticao(seasonId))
   registar('dashboard:repeticoesClube', (seasonId?: number) => repos.repeticoesPorDelegado(seasonId))
 
