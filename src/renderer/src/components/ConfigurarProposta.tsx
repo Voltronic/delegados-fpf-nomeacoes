@@ -96,6 +96,7 @@ export default function ConfigurarProposta({
               {formatarData(paraDataIso(semana))} — {formatarData(paraDataIso(fim))}
             </b>
             <div className="espacador" style={{ marginLeft: 'auto' }} />
+            <b>Jogos</b>
             <div className="grupo-botoes">
               <button onClick={() => marcar(jogos.filter((j) => !temPrincipal(j.nomeacoes)))}>
                 Por nomear
@@ -106,8 +107,7 @@ export default function ConfigurarProposta({
             </div>
           </div>
 
-          <div className="lista-rolavel">
-            {/* Quem entra na proposta: o motor só avalia estes delegados. */}
+          {/* Quem entra na proposta: o motor só avalia estes delegados. */}
           <div className="linha" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
             <b>Delegados</b>
             <div className="grupo-botoes">
@@ -175,6 +175,7 @@ export default function ConfigurarProposta({
             </div>
           )}
 
+          <div className="lista-rolavel">
           {aCarregar && <div className="vazio">A carregar…</div>}
 
             {!aCarregar && jogos.length === 0 && (
@@ -185,7 +186,24 @@ export default function ConfigurarProposta({
               <table className="tabela">
                 <thead>
                   <tr>
-                    <th style={{ width: 34 }} />
+                    <th style={{ width: 34 }}>
+                      {/* Marca e desmarca a semana inteira sem ser jogo a jogo. */}
+                      <input
+                        type="checkbox"
+                        title={
+                          escolhidos.size === jogos.length
+                            ? 'Desmarcar todos os jogos'
+                            : 'Marcar todos os jogos'
+                        }
+                        checked={jogos.length > 0 && escolhidos.size === jogos.length}
+                        ref={(caixa) => {
+                          if (caixa) {
+                            caixa.indeterminate = escolhidos.size > 0 && escolhidos.size < jogos.length
+                          }
+                        }}
+                        onChange={() => marcar(escolhidos.size === jogos.length ? [] : jogos)}
+                      />
+                    </th>
                     <th>Data</th>
                     <th>Jogo</th>
                     <th>Competição</th>

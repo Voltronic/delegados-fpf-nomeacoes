@@ -1190,6 +1190,36 @@ app.whenReady().then(async () => {
     const listaDeDelegados = await noEcra<number>(
       "return document.querySelectorAll('.lista-escolha label').length;"
     )
+    // A caixa do cabeçalho marca e desmarca a semana inteira, e a escolha de
+    // delegados tem de ficar fora da lista que rola, senão desaparece no scroll.
+    const marcarTodos = await noEcra<{ antes: number; todos: number; nenhum: number; foraDaLista: boolean }>(`
+      const m = document.querySelector('.modal');
+      const cabecalho = m.querySelector('thead input[type=checkbox]');
+      const marcadas = () => m.querySelectorAll('tbody input[type=checkbox]:checked').length;
+      const antes = marcadas();
+      cabecalho.click();
+      const primeiro = marcadas();
+      cabecalho.click();
+      const segundo = marcadas();
+      if (primeiro === 0) cabecalho.click();
+      const lista = m.querySelector('.lista-rolavel');
+      const delegados = [...m.querySelectorAll('b')].find((b) => b.textContent.trim() === 'Delegados');
+      return {
+        antes,
+        todos: Math.max(primeiro, segundo),
+        nenhum: Math.min(primeiro, segundo),
+        foraDaLista: !!delegados && !lista.contains(delegados)
+      };`)
+    verificar(
+      'a caixa do cabeçalho marca e desmarca todos os jogos',
+      marcarTodos.todos > 0 && marcarTodos.nenhum === 0,
+      `→ ${JSON.stringify(marcarTodos)}`
+    )
+    verificar(
+      'e a escolha de delegados fica à vista, fora da lista que rola',
+      marcarTodos.foraDaLista
+    )
+
     verificar(
       'a proposta deixa escolher o grupo de delegados',
       grupoNaProposta.botoes.includes('Elite') &&
