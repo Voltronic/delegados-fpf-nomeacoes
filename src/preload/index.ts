@@ -115,6 +115,7 @@ const api = {
     nomear: invocar('nomeacoes:nomear'),
     remover: invocar('nomeacoes:remover'),
     proposta: invocar('nomeacoes:proposta'),
+    listar: invocar('nomeacoes:listar'),
     aplicarProposta: invocar('nomeacoes:aplicarProposta')
   },
   dashboard: {

@@ -1123,6 +1123,79 @@ app.whenReady().then(async () => {
       `→ barra ${barraDepois ? 'ainda lá' : 'fechada'}, tabela ${naTabela ? 'com' : 'sem'} o jogo`
     )
 
+    log('\n3e. Exportação das nomeações')
+    await irPara('Exportação')
+    const exportacao = await noEcra<{
+      linhas: number
+      grupos: string[]
+      de: string
+      temProcura: boolean
+      botao: string
+      desativado: boolean
+    }>(`
+      const campos = [...document.querySelectorAll('.cabecalho-ecra button, .corpo-ecra button')];
+      const exportar = campos.find((b) => b.textContent.includes('Exportar CSV'));
+      return {
+        linhas: document.querySelectorAll('.tabela tbody tr').length,
+        grupos: [...document.querySelectorAll('.campo .grupo-botoes button')].map((b) => b.textContent.trim()),
+        de: document.querySelector('input[type=datetime-local]')?.value ?? '',
+        temProcura: !!document.querySelector('input[type=search]'),
+        botao: exportar?.textContent?.trim() ?? '',
+        desativado: !!exportar && exportar.disabled
+      };`)
+    verificar(
+      'o ecrã de exportação mostra as nomeações e deixa exportar',
+      exportacao.linhas > 0 && exportacao.botao.includes('Exportar') && !exportacao.desativado,
+      `→ ${JSON.stringify(exportacao)}`
+    )
+    verificar(
+      'com os três filtros e a procura',
+      exportacao.grupos.includes('Todos') &&
+        exportacao.grupos.includes('Elite') &&
+        exportacao.grupos.includes('Principais') &&
+        exportacao.temProcura &&
+        exportacao.de.slice(0, 10) === new Date().toISOString().slice(0, 10),
+      `→ ${exportacao.grupos.join(' | ')}, de ${exportacao.de}`
+    )
+    // Por omissão só o que está para acontecer: o jogo passado fica de fora.
+    const soFuturas = await noEcra<string[]>(
+      "return [...document.querySelectorAll('.tabela tbody tr td:first-child')].map((c) => c.textContent);"
+    )
+    verificar(
+      'e só as nomeações de agora em diante',
+      soFuturas.length > 0 && !soFuturas.some((t) => t.includes('set') && t.includes('11:00')),
+      `→ ${soFuturas.join(' | ')}`
+    )
+
+    // Na proposta automática dá para escolher quem entra.
+    await irPara('Nomeações')
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Proposta'))?.click()"
+    )
+    await esperar(900)
+    const grupoNaProposta = await noEcra<{ botoes: string[]; lista: number }>(`
+      const m = document.querySelector('.modal');
+      const botoes = m ? [...m.querySelectorAll('.grupo-botoes button')].map((b) => b.textContent.trim()) : [];
+      const escolher = m ? [...m.querySelectorAll('.grupo-botoes button')].find((b) => b.textContent.includes('Escolher')) : null;
+      if (escolher) escolher.click();
+      return { botoes, lista: 0 };`)
+    await esperar(400)
+    const listaDeDelegados = await noEcra<number>(
+      "return document.querySelectorAll('.lista-escolha label').length;"
+    )
+    verificar(
+      'a proposta deixa escolher o grupo de delegados',
+      grupoNaProposta.botoes.includes('Elite') &&
+        grupoNaProposta.botoes.includes('Principais') &&
+        grupoNaProposta.botoes.some((b) => b.includes('Escolher')) &&
+        listaDeDelegados > 0,
+      `→ ${grupoNaProposta.botoes.join(' | ')}, ${listaDeDelegados} delegado(s) na lista`
+    )
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Cancelar')?.click()"
+    )
+    await esperar(400)
+
     log('\n4. Recintos por confirmar')
     await janela.webContents.executeJavaScript(
       "[...document.querySelectorAll('.barra-lateral button')].find(b => b.textContent.includes('Clubes')).click()"

@@ -1,4 +1,7 @@
 import type {
+  NomeacaoExportada,
+  NivelDelegado,
+  GrupoDelegados,
   JogoDoDelegado,
   Epoca,
   Alerta,
@@ -263,6 +266,12 @@ export interface Api {
      * Devolve quantas apagou e o caminho da cópia.
      */
     apagarTodas(): Promise<{ apagadas: number; copia: string | null }>
+    /** As nomeações em lista, para exportar. Sem filtro, vêm todas. */
+    listar(filtro?: {
+      de?: string
+      ate?: string
+      nivel?: NivelDelegado
+    }): Promise<NomeacaoExportada[]>
     nomear(dados: {
       jogoId: number
       delegadoId: number
@@ -270,7 +279,11 @@ export interface Api {
       motivoOverride?: string | null
     }): Promise<JogoDetalhado | null>
     remover(jogoId: number, papel: PapelNomeacao, delegadoId?: number): Promise<JogoDetalhado | null>
-    proposta(jogoIds: number[]): Promise<ResultadoPropostaAutomatica>
+    /** `opcoes` diz quem entra na proposta: todos, um nível, ou uma escolha à mão. */
+    proposta(
+      jogoIds: number[],
+      opcoes?: { grupo?: GrupoDelegados; delegadoIds?: number[] }
+    ): Promise<ResultadoPropostaAutomatica>
     aplicarProposta(propostas: PropostaAutomatica[]): Promise<number>
   }
 

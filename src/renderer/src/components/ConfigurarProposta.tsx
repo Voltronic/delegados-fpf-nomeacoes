@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { JogoDetalhado } from '@shared/tipos'
+import type { Delegado, GrupoDelegados, JogoDetalhado } from '@shared/tipos'
 import { diasAte } from '@shared/datas'
 import { temPrincipal } from '@shared/tipos'
 import { classes, formatarDataHora, inicioDaSemana, paraDataIso } from '../lib/formato'
@@ -8,7 +8,7 @@ interface Props {
   /** Semana por onde a janela abre — normalmente a que está a ser vista. */
   semanaInicial: Date
   aFechar: () => void
-  aoGerar: (jogoIds: number[]) => void
+  aoGerar: (jogoIds: number[], opcoes: { grupo: GrupoDelegados; delegadoIds: number[] }) => void
   aGerar: boolean
 }
 
@@ -30,6 +30,17 @@ export default function ConfigurarProposta({
   const [jogos, setJogos] = useState<JogoDetalhado[]>([])
   const [escolhidos, setEscolhidos] = useState<Set<number>>(new Set())
   const [aCarregar, setACarregar] = useState(true)
+  const [grupo, setGrupo] = useState<GrupoDelegados>('TODOS')
+  const [delegados, setDelegados] = useState<Delegado[]>([])
+  const [delegadosEscolhidos, setDelegadosEscolhidos] = useState<Set<number>>(new Set())
+
+  // Só os ativos: propor alguém inativo era propor trabalho que não se faz.
+  useEffect(() => {
+    void window.api.delegados.listar(false).then((lista) => {
+      setDelegados(lista)
+      setDelegadosEscolhidos(new Set(lista.map((d) => d.id)))
+    })
+  }, [])
 
   const fim = new Date(semana)
   fim.setDate(fim.getDate() + 6)
@@ -96,7 +107,75 @@ export default function ConfigurarProposta({
           </div>
 
           <div className="lista-rolavel">
-            {aCarregar && <div className="vazio">A carregar…</div>}
+            {/* Quem entra na proposta: o motor só avalia estes delegados. */}
+          <div className="linha" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+            <b>Delegados</b>
+            <div className="grupo-botoes">
+              {(
+                [
+                  ['TODOS', 'Todos'],
+                  ['ELITE', 'Elite'],
+                  ['PRINCIPAL', 'Principais'],
+                  ['PERSONALIZADO', 'Escolher…']
+                ] as [GrupoDelegados, string][]
+              ).map(([chave, etiqueta]) => (
+                <button
+                  key={chave}
+                  className={classes(grupo === chave && 'ativo')}
+                  onClick={() => setGrupo(chave)}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
+            <span className="silencioso">
+              {grupo === 'PERSONALIZADO'
+                ? `${delegadosEscolhidos.size} de ${delegados.length} escolhidos`
+                : grupo === 'TODOS'
+                  ? `${delegados.length} delegados ativos`
+                  : `${delegados.filter((d) => d.nivel === grupo).length} delegados`}
+            </span>
+          </div>
+
+          {grupo === 'PERSONALIZADO' && (
+            <div className="cartao" style={{ padding: 8, marginBottom: 12 }}>
+              <div className="linha" style={{ marginBottom: 6 }}>
+                <button
+                  className="botao pequeno"
+                  onClick={() => setDelegadosEscolhidos(new Set(delegados.map((d) => d.id)))}
+                >
+                  Todos
+                </button>
+                <button className="botao pequeno" onClick={() => setDelegadosEscolhidos(new Set())}>
+                  Nenhum
+                </button>
+              </div>
+              <div className="lista-escolha">
+                {delegados.map((d) => (
+                  <label key={d.id} className="linha">
+                    <input
+                      type="checkbox"
+                      checked={delegadosEscolhidos.has(d.id)}
+                      onChange={() =>
+                        setDelegadosEscolhidos((atuais) => {
+                          const novos = new Set(atuais)
+                          if (novos.has(d.id)) novos.delete(d.id)
+                          else novos.add(d.id)
+                          return novos
+                        })
+                      }
+                    />
+                    <span className="mono silencioso">{d.numero}</span> {d.nome}
+                    <span className={classes('emblema', d.nivel === 'ELITE' ? 'elite' : 'principal')}>
+                      {d.nivel === 'ELITE' ? 'Elite' : 'Principal'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {aCarregar && <div className="vazio">A carregar…</div>}
 
             {!aCarregar && jogos.length === 0 && (
               <div className="vazio">Não há jogos nesta semana.</div>
@@ -156,8 +235,12 @@ export default function ConfigurarProposta({
         <footer>
           <button
             className="botao primario"
-            disabled={aGerar || escolhidos.size === 0}
-            onClick={() => aoGerar([...escolhidos])}
+            disabled={
+              aGerar ||
+              escolhidos.size === 0 ||
+              (grupo === 'PERSONALIZADO' && delegadosEscolhidos.size === 0)
+            }
+            onClick={() => aoGerar([...escolhidos], { grupo, delegadoIds: [...delegadosEscolhidos] })}
           >
             {aGerar ? 'A calcular…' : `Gerar proposta para ${escolhidos.size} jogos`}
           </button>

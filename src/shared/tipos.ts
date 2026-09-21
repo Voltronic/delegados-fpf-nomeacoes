@@ -179,6 +179,32 @@ export interface Epoca {
   criadaEm: string
 }
 
+/**
+ * Quem o coordenador deixa entrar na proposta automática.
+ *
+ * As nomeações são de níveis diferentes conforme a competição, e há semanas em
+ * que só alguns delegados estão disponíveis: propor com toda a gente obrigava a
+ * desfazer à mão o que o motor sugerisse.
+ */
+export type GrupoDelegados = 'TODOS' | 'ELITE' | 'PRINCIPAL' | 'PERSONALIZADO'
+
+/** Uma nomeação como sai para fora da aplicação, com tudo o que a descreve. */
+export interface NomeacaoExportada {
+  jogoId: number
+  dataHora: string | null
+  competicaoNome: string
+  clubeCasaNome: string
+  clubeForaNome: string
+  recintoNome: string | null
+  delegadoId: number
+  delegadoNumero: string
+  delegadoNome: string
+  delegadoNivel: NivelDelegado
+  papel: PapelNomeacao
+  km: number | null
+  minutos: number | null
+}
+
 /** Uma linha do detalhe de um delegado: um jogo que fez, com a viagem. */
 export interface JogoDoDelegado {
   jogoId: number

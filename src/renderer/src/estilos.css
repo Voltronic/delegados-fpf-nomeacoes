@@ -958,6 +958,25 @@ table.tabela th.ordenada .seta {
   background: var(--superficie-2);
 }
 
+/* Escolher delegados um a um, sem empurrar o resto da janela para baixo. */
+.lista-escolha {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 230px;
+  overflow: auto;
+}
+
+.lista-escolha label {
+  padding: 2px 4px;
+  border-radius: var(--raio-p);
+  cursor: pointer;
+}
+
+.lista-escolha label:hover {
+  background: var(--superficie-2);
+}
+
 .chip-delegado {
   display: inline-flex;
   align-items: center;

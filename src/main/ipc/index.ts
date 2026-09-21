@@ -59,7 +59,8 @@ import {
   guardarConfiguracaoMotor,
   nomear,
   obterConfiguracaoMotor,
-  propostaAutomatica
+  propostaAutomatica,
+  type OpcoesProposta
 } from '../engine/servico'
 
 let clienteFpf: ClienteFpf | null = null
@@ -581,7 +582,11 @@ export function registarIpc(contexto: {
   })
   registar('nomeacoes:ultimaAccao', () => ultimaAccao())
   registar('nomeacoes:desfazer', () => desfazerUltimaAccao())
-  registar('nomeacoes:proposta', (jogoIds: number[]) => propostaAutomatica(jogoIds))
+  registar('nomeacoes:proposta', (jogoIds: number[], opcoes?: OpcoesProposta) =>
+    propostaAutomatica(jogoIds, opcoes)
+  )
+  /** As nomeações em lista, para o ecrã de exportação. */
+  registar('nomeacoes:listar', (filtro?: repos.FiltroNomeacoes) => repos.listarNomeacoes(filtro))
   registar('nomeacoes:aplicarProposta', (propostas: PropostaAutomatica[]) => {
     // Uma proposta mexe em muitos jogos; desfazer só o último seria enganador.
     esquecerUltimaAccao()

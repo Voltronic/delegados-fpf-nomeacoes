@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  GrupoDelegados,
   Candidato,
   Competicao,
   JogoDetalhado,
@@ -205,10 +206,13 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
     await carregarCandidatos(selecionado)
   }
 
-  async function gerarProposta(jogoIds: number[]): Promise<void> {
+  async function gerarProposta(
+    jogoIds: number[],
+    opcoes: { grupo: GrupoDelegados; delegadoIds: number[] }
+  ): Promise<void> {
     setAPropor(true)
     try {
-      setProposta(await window.api.nomeacoes.proposta(jogoIds))
+      setProposta(await window.api.nomeacoes.proposta(jogoIds, opcoes))
       setAConfigurarProposta(false)
       setErro(null)
     } catch (e) {
@@ -784,7 +788,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
           semanaInicial={semana}
           aGerar={aPropor}
           aFechar={() => setAConfigurarProposta(false)}
-          aoGerar={(ids) => void gerarProposta(ids)}
+          aoGerar={(ids, opcoes) => void gerarProposta(ids, opcoes)}
         />
       )}
 

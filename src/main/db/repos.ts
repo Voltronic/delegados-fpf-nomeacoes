@@ -10,6 +10,8 @@ import type {
   Jogo,
   JogoDetalhado,
   JogoDoDelegado,
+  NivelDelegado,
+  NomeacaoExportada,
   LinhaKmDelegado,
   MatrizDashboard,
   LinhaRepeticoes,
@@ -1387,8 +1389,96 @@ export function jogosDoDelegado(delegadoId: number, seasonId?: number): JogoDoDe
   }))
 }
 
+export interface FiltroNomeacoes {
+  /** Data e hora do jogo a partir da qual se quer a lista (ISO local). */
+  de?: string
+  ate?: string
+  /** Só delegados deste nível; sem isto, todos. */
+  nivel?: NivelDelegado
+}
+
+/**
+ * As nomeações em lista, para saírem da aplicação.
+ *
+ * Ordena pela data do jogo, da mais próxima para a mais distante: quem exporta
+ * está a preparar o que aí vem, não a rever o que já foi. A procura por texto
+ * fica no ecrã, que a faz sem acentos.
+ */
+export function listarNomeacoes(filtro: FiltroNomeacoes = {}): NomeacaoExportada[] {
+  const condicoes = ["n.estado = 'CONFIRMADA'"]
+  const params: Record<string, unknown> = {}
+  if (filtro.de) {
+    condicoes.push('j.data_hora >= @de')
+    params.de = filtro.de
+  }
+  if (filtro.ate) {
+    condicoes.push('j.data_hora <= @ate')
+    params.ate = filtro.ate
+  }
+  if (filtro.nivel) {
+    condicoes.push('d.nivel = @nivel')
+    params.nivel = filtro.nivel
+  }
+
+  const linhas = obterBaseDados()
+    .prepare(
+      `SELECT j.id AS jogo_id, j.data_hora, comp.nome AS competicao_nome,
+              cc.nome AS casa, cf.nome AS fora, r.nome AS recinto,
+              d.id AS delegado_id, d.numero, d.nome AS delegado_nome, d.nivel,
+              n.papel, n.km, n.minutos
+         FROM nomeacao n
+         JOIN jogo j ON j.id = n.jogo_id
+         JOIN competicao comp ON comp.id = j.competicao_id
+         JOIN clube cc ON cc.id = j.clube_casa_id
+         JOIN clube cf ON cf.id = j.clube_fora_id
+         JOIN delegado d ON d.id = n.delegado_id
+         LEFT JOIN recinto r ON r.id = j.recinto_id
+        WHERE ${condicoes.join(' AND ')}
+        ORDER BY j.data_hora, comp.nome, cc.nome`
+    )
+    .all(params) as {
+    jogo_id: number
+    data_hora: string | null
+    competicao_nome: string
+    casa: string
+    fora: string
+    recinto: string | null
+    delegado_id: number
+    numero: string
+    delegado_nome: string
+    nivel: string
+    papel: string
+    km: number | null
+    minutos: number | null
+  }[]
+
+  return linhas.map((l) => ({
+    jogoId: l.jogo_id,
+    dataHora: l.data_hora,
+    competicaoNome: l.competicao_nome,
+    clubeCasaNome: l.casa,
+    clubeForaNome: l.fora,
+    recintoNome: l.recinto,
+    delegadoId: l.delegado_id,
+    delegadoNumero: l.numero,
+    delegadoNome: l.delegado_nome,
+    delegadoNivel: l.nivel as NomeacaoExportada['delegadoNivel'],
+    papel: l.papel as NomeacaoExportada['papel'],
+    km: l.km,
+    minutos: l.minutos
+  }))
+}
+
 export function matrizPorCompeticao(seasonId?: number): MatrizDashboard {
-  const competicoes = listarCompeticoes(seasonId).filter((c) => c.ativa)
+  // Primeiro as competições em que todos os jogos levam delegado: são o
+  // trabalho de todas as semanas, e é aí que o coordenador olha. As outras —
+  // Taça e afins, com jogos escolhidos à mão — ficam para o fim.
+  const competicoes = listarCompeticoes(seasonId)
+    .filter((c) => c.ativa)
+    .sort(
+      (a, b) =>
+        Number(b.todosComDelegado) - Number(a.todosComDelegado) || a.nome.localeCompare(b.nome, 'pt')
+    )
   const stats = estatisticasPorDelegado(seasonId)
   const delegados = delegadosDaEpoca(stats)
   return {

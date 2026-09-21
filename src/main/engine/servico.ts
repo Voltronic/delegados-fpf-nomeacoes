@@ -2,6 +2,7 @@ import type {
   Candidato,
   ConfiguracaoMotor,
   JogoDetalhado,
+  GrupoDelegados,
   PapelNomeacao,
   PropostaAutomatica,
   ResultadoPropostaAutomatica
@@ -92,6 +93,32 @@ function estadosDosDelegados(seasonId?: number): EstadoDelegado[] {
       ultimaNomeacaoEm: e?.ultimaNomeacaoEm ?? null
     }
   })
+}
+
+export interface OpcoesProposta {
+  /** Quem entra na proposta; por omissão, todos. */
+  grupo?: GrupoDelegados
+  /** Só com `PERSONALIZADO`: os delegados que o coordenador escolheu. */
+  delegadoIds?: number[]
+}
+
+/**
+ * Restringe os candidatos ao grupo escolhido.
+ *
+ * Filtra-se aqui, antes de avaliar: um delegado que não entra no grupo não é
+ * para aparecer sequer como bloqueado, porque não é uma impossibilidade — é uma
+ * decisão de quem está a nomear.
+ */
+function delegadosDoGrupo(estados: EstadoDelegado[], opcoes: OpcoesProposta): EstadoDelegado[] {
+  const grupo = opcoes.grupo ?? 'TODOS'
+  if (grupo === 'ELITE' || grupo === 'PRINCIPAL') {
+    return estados.filter((e) => e.delegado.nivel === grupo)
+  }
+  if (grupo === 'PERSONALIZADO') {
+    const escolhidos = new Set(opcoes.delegadoIds ?? [])
+    return estados.filter((e) => escolhidos.has(e.delegado.id))
+  }
+  return estados
 }
 
 /** Distâncias de ida entre cada delegado e o recinto do jogo, com cache. */
@@ -188,7 +215,10 @@ export async function nomear(pedido: PedidoNomeacao): Promise<JogoDetalhado | nu
  * Proposta automática para um conjunto de jogos. Devolve apenas sugestões — nada
  * é gravado até o coordenador aceitar no ecrã de revisão.
  */
-export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPropostaAutomatica> {
+export async function propostaAutomatica(
+  jogoIds: number[],
+  opcoes: OpcoesProposta = {}
+): Promise<ResultadoPropostaAutomatica> {
   const vazio: ResultadoPropostaAutomatica = { propostas: [], semSugestao: [], jaCompletos: 0 }
   const todos = listarJogos()
   const jogos = todos.filter((j) => jogoIds.includes(j.id))
@@ -196,7 +226,7 @@ export async function propostaAutomatica(jogoIds: number[]): Promise<ResultadoPr
 
   const competicoes = listarCompeticoes()
   const seasonId = competicoes.find((c) => c.id === jogos[0].competicaoId)?.seasonId
-  const estados = estadosDosDelegados(seasonId)
+  const estados = delegadosDoGrupo(estadosDosDelegados(seasonId), opcoes)
   const config = obterConfiguracaoMotor()
 
   const entradas: EntradaMotor[] = []

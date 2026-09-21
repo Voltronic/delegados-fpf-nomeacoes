@@ -745,6 +745,37 @@ async function principal(): Promise<void> {
       `→ ${semSugestao.length} sem sugestão${semSugestao[0] ? `: ${semSugestao[0].motivos.join(', ')}` : ''}`
     )
 
+    // Quem entra na proposta é decisão de quem nomeia: todos, um nível, ou
+    // uma escolha à mão.
+    const soElite = await propostaAutomatica(jogoIds, { grupo: 'ELITE' })
+    const idsElite = new Set(delegados.filter((d) => d.nivel === 'ELITE').map((d) => d.id))
+    verificar(
+      'a proposta só com elite não sai do grupo',
+      soElite.propostas.length > 0 &&
+        soElite.propostas.every((pr) => !pr.principal || idsElite.has(pr.principal.delegadoId)),
+      `→ ${soElite.propostas.length} jogos, ${idsElite.size} delegado(s) elite`
+    )
+
+    // O delegado 2 está indisponível (secção 6) e o 3 tem veto: para provar que
+    // a escolha à mão manda, é preciso alguém que possa mesmo ser proposto.
+    const unicoDaProposta = delegados[1]
+    const soUm = await propostaAutomatica(jogoIds, {
+      grupo: 'PERSONALIZADO',
+      delegadoIds: [unicoDaProposta.id]
+    })
+    verificar(
+      'e a escolha à mão manda: só entram os delegados escolhidos',
+      soUm.propostas.length > 0 &&
+        soUm.propostas.every((pr) => !pr.principal || pr.principal.delegadoId === unicoDaProposta.id),
+      `→ ${soUm.propostas.length} jogos para ${unicoDaProposta.nome}`
+    )
+    const semNinguem = await propostaAutomatica(jogoIds, { grupo: 'PERSONALIZADO', delegadoIds: [] })
+    verificar(
+      'sem ninguém escolhido não se inventa uma proposta',
+      semNinguem.propostas.length === 0,
+      `→ ${semNinguem.propostas.length} propostas`
+    )
+
     log('\n7b. Esconder jogos, histórico e alertas de recintos')
     // Um jogo que ainda é trabalho: um escondido que já passou sai da lista de
     // escondidos de propósito, e com o primeiro jogo da lista a verificação
@@ -1873,6 +1904,55 @@ async function principal(): Promise<void> {
     verificar(
       'restaurar devolve-o às listas',
       repos.listarDelegados(true).some((d) => d.id === paraArquivar.id)
+    )
+
+    log('\n12c. Exportação das nomeações')
+    const todasAsNomeacoes = repos.listarNomeacoes()
+    verificar(
+      'a lista de exportação traz as nomeações confirmadas, por data',
+      todasAsNomeacoes.length > 0 &&
+        todasAsNomeacoes.every((l) => !!l.delegadoNome && !!l.competicaoNome) &&
+        todasAsNomeacoes.every(
+          (l, i) => i === 0 || (todasAsNomeacoes[i - 1].dataHora ?? '') <= (l.dataHora ?? '')
+        ),
+      `→ ${todasAsNomeacoes.length} nomeação(ões)`
+    )
+
+    const comData = todasAsNomeacoes.filter((l) => l.dataHora)
+    const meio = comData[Math.floor(comData.length / 2)]?.dataHora ?? ''
+    const daquiParaAFrente = repos.listarNomeacoes({ de: meio })
+    verificar(
+      'o filtro de data corta o que fica para trás',
+      daquiParaAFrente.length < todasAsNomeacoes.length &&
+        daquiParaAFrente.every((l) => (l.dataHora ?? '') >= meio),
+      `→ ${daquiParaAFrente.length} de ${todasAsNomeacoes.length} a partir de ${meio}`
+    )
+
+    const soPrincipais = repos.listarNomeacoes({ nivel: 'PRINCIPAL' })
+    verificar(
+      'e o filtro de nível só traz esse grupo',
+      soPrincipais.every((l) => l.delegadoNivel === 'PRINCIPAL') &&
+        soPrincipais.length < todasAsNomeacoes.length,
+      `→ ${soPrincipais.length} de ${todasAsNomeacoes.length}`
+    )
+
+    // No dashboard, as competições com delegado em todos os jogos vêm à frente.
+    const matriz = repos.matrizPorCompeticao(106)
+    const semDelegadoFixoNaMatriz = repos
+      .listarCompeticoes(106)
+      .filter((c) => c.ativa && !c.todosComDelegado)
+      .map((c) => c.nome)
+    const primeiraSemFixo = matriz.colunas.findIndex((c) =>
+      semDelegadoFixoNaMatriz.includes(c.etiqueta)
+    )
+    const ultimaComFixo = matriz.colunas.reduce(
+      (ultima, c, i) => (semDelegadoFixoNaMatriz.includes(c.etiqueta) ? ultima : i),
+      -1
+    )
+    verificar(
+      'as competições com delegado em todos os jogos aparecem primeiro',
+      primeiraSemFixo === -1 || primeiraSemFixo > ultimaComFixo,
+      `→ ${matriz.colunas.map((c) => c.etiqueta).join(' | ')}`
     )
 
     log('\n13. Limpar as nomeações (dados de teste)')

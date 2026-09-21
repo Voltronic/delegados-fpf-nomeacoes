@@ -9,6 +9,7 @@ import Dashboard from './screens/Dashboard'
 import Definicoes from './screens/Definicoes'
 import Delegados from './screens/Delegados'
 import Escondidos from './screens/Escondidos'
+import Exportacao from './screens/Exportacao'
 import Historico from './screens/Historico'
 import Importacao from './screens/Importacao'
 import Nomeacoes from './screens/Nomeacoes'
@@ -24,12 +25,14 @@ type Ecra =
   | 'dashboard'
   | 'alertas'
   | 'definicoes'
+  | 'exportacao'
 
 const MENU: { chave: Ecra; etiqueta: string; icone: string }[] = [
   { chave: 'nomeacoes', etiqueta: 'Nomeações', icone: '📋' },
   { chave: 'historico', etiqueta: 'Histórico', icone: '🗂️' },
   { chave: 'escondidos', etiqueta: 'Escondidos', icone: '🙈' },
   { chave: 'dashboard', etiqueta: 'Dashboard', icone: '📊' },
+  { chave: 'exportacao', etiqueta: 'Exportação', icone: '📤' },
   { chave: 'alertas', etiqueta: 'Alertas', icone: '🔔' },
   { chave: 'delegados', etiqueta: 'Delegados', icone: '👤' },
   { chave: 'clubes', etiqueta: 'Clubes e recintos', icone: '🏟️' },
@@ -134,6 +137,7 @@ export default function App(): JSX.Element {
         {ecra === 'historico' && <Historico />}
         {ecra === 'escondidos' && <Escondidos />}
         {ecra === 'dashboard' && <Dashboard />}
+        {ecra === 'exportacao' && <Exportacao />}
         {ecra === 'alertas' && <Alertas alertas={alertas} aoMudar={setAlertas} />}
         {ecra === 'delegados' && <Delegados tilesUrl={tilesUrl} />}
         {ecra === 'clubes' && <ClubesRecintos tilesUrl={tilesUrl} />}
