@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Alerta, ProgressoSincronizacao, ResultadoAtualizacao } from '@shared/tipos'
-import { classes, formatarDataHora } from '../lib/formato'
+import { classes, formatarDataHora, horaCurta } from '../lib/formato'
 import { avisar, guardarCom, mensagemDeErro } from '../lib/avisos'
 
 const ETIQUETAS: Record<Alerta['tipo'], { texto: string; classe: string }> = {
@@ -94,7 +94,7 @@ export default function Alertas({ alertas, aoMudar }: Props): JSX.Element {
         <h1>Alertas</h1>
         <div className="subtitulo">
           {porLer > 0 ? `${porLer} por ler` : 'nada por ler'}
-          {estado.ultima && ` · última atualização ${new Date(estado.ultima.quando).toLocaleTimeString('pt-PT')}`}
+          {estado.ultima && ` · última atualização ${horaCurta(estado.ultima.quando)}`}
         </div>
         <div className="grupo-botoes">
           <button className={classes(filtro === 'PORLER' && 'ativo')} onClick={() => setFiltro('PORLER')}>

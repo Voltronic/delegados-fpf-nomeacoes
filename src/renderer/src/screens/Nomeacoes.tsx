@@ -15,7 +15,7 @@ import EscolherOutrosJogos from '../components/EscolherOutrosJogos'
 import EditarJogo from '../components/EditarJogo'
 import FaixaUrgentes from '../components/FaixaUrgentes'
 import Mapa, { type PontoMapa, type TrajetoMapa } from '../components/Mapa'
-import { classes, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
+import { classes, formatarData, formatarDataHora, formatarKm, inicioDaSemana, paraDataIso } from '../lib/formato'
 import { limiteDeTrabalho, paraDataLocal } from '@shared/datas'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 
@@ -425,7 +425,7 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
         </div>
         <div>
           <h1>
-            {semana.toLocaleDateString('pt-PT')} — {new Date(fim.getTime() - 86400000).toLocaleDateString('pt-PT')}
+            {formatarData(paraDataIso(semana))} — {formatarData(paraDataIso(new Date(fim.getTime() - 86400000)))}
           </h1>
           <div className="subtitulo">
             {jogos.length} jogos · {nomeados} com delegado

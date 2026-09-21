@@ -1,16 +1,21 @@
 export { diasAte } from '@shared/datas'
 
-const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
-const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
-
-/** Formata um ISO local (YYYY-MM-DDTHH:mm) sem passar por fusos horários. */
+/**
+ * Data e hora de um jogo: dia/mês/ano e relógio de 24 horas, em toda a
+ * aplicação.
+ *
+ * Trabalha sobre o ISO local (YYYY-MM-DDTHH:mm) sem passar por fusos horários:
+ * a hora gravada é a hora a que se joga, e convertê-la mudava-a.
+ *
+ * `T00:00` é hora por anunciar — nesse caso mostra-se só o dia, senão parecia
+ * que o jogo era à meia-noite.
+ */
 export function formatarDataHora(iso: string | null): string {
   if (!iso) return 'sem data'
   const [data, hora] = iso.split('T')
-  const [ano, mes, dia] = data.split('-').map(Number)
-  const diaSemana = DIAS[new Date(ano, mes - 1, dia).getDay()]
+  const [ano, mes, dia] = data.split('-')
   const horas = hora?.slice(0, 5)
-  return `${diaSemana} ${dia} ${MESES[mes - 1]}${horas && horas !== '00:00' ? ` · ${horas}` : ''}`
+  return `${dia}/${mes}/${ano}${horas && horas !== '00:00' ? ` ${horas}` : ''}`
 }
 
 export function formatarData(iso: string | null): string {

@@ -1161,9 +1161,16 @@ app.whenReady().then(async () => {
     const soFuturas = await noEcra<string[]>(
       "return [...document.querySelectorAll('.tabela tbody tr td:first-child')].map((c) => c.textContent);"
     )
+    // O jogo de ontem não pode aparecer: as datas estão em dia/mês/ano.
+    const ontemNoEcra = (() => {
+      const d = new Date()
+      d.setDate(d.getDate() - 1)
+      const dois = (n: number): string => String(n).padStart(2, '0')
+      return `${dois(d.getDate())}/${dois(d.getMonth() + 1)}/${d.getFullYear()}`
+    })()
     verificar(
       'e só as nomeações de agora em diante',
-      soFuturas.length > 0 && !soFuturas.some((t) => t.includes('set') && t.includes('11:00')),
+      soFuturas.length > 0 && !soFuturas.some((t) => t.includes(ontemNoEcra)),
       `→ ${soFuturas.join(' | ')}`
     )
 

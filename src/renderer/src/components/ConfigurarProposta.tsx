@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Delegado, GrupoDelegados, JogoDetalhado } from '@shared/tipos'
 import { diasAte } from '@shared/datas'
 import { temPrincipal } from '@shared/tipos'
-import { classes, formatarDataHora, inicioDaSemana, paraDataIso } from '../lib/formato'
+import { classes, formatarData, formatarDataHora, inicioDaSemana, paraDataIso } from '../lib/formato'
 
 interface Props {
   /** Semana por onde a janela abre — normalmente a que está a ser vista. */
@@ -93,7 +93,7 @@ export default function ConfigurarProposta({
               <button onClick={() => setSemana(new Date(semana.getTime() + 7 * 86400000))}>›</button>
             </div>
             <b>
-              {semana.toLocaleDateString('pt-PT')} — {fim.toLocaleDateString('pt-PT')}
+              {formatarData(paraDataIso(semana))} — {formatarData(paraDataIso(fim))}
             </b>
             <div className="espacador" style={{ marginLeft: 'auto' }} />
             <div className="grupo-botoes">
