@@ -1937,6 +1937,19 @@ async function principal(): Promise<void> {
     )
 
     // No dashboard, as competições com delegado em todos os jogos vêm à frente.
+    // O nome começa por "AAA" de propósito: por ordem alfabética viria primeiro,
+    // por isso aparecer no fim prova que a regra é o delegado fixo, não o nome.
+    repos.guardarCompeticao({
+      fpfCompetitionId: 98766,
+      seasonId: 106,
+      seasonDescricao: '2026-2027',
+      nome: 'AAA Taça Sem Delegado Fixo',
+      organizacao: 'Competições FPF',
+      ativa: true,
+      nivelMinimo: null,
+      usaDelegadoAssistente: false,
+      todosComDelegado: false
+    })
     const matriz = repos.matrizPorCompeticao(106)
     const semDelegadoFixoNaMatriz = repos
       .listarCompeticoes(106)
@@ -1951,7 +1964,10 @@ async function principal(): Promise<void> {
     )
     verificar(
       'as competições com delegado em todos os jogos aparecem primeiro',
-      primeiraSemFixo === -1 || primeiraSemFixo > ultimaComFixo,
+      matriz.colunas.length > 1 &&
+        primeiraSemFixo > 0 &&
+        primeiraSemFixo > ultimaComFixo &&
+        matriz.colunas.at(-1)?.etiqueta === 'AAA Taça Sem Delegado Fixo',
       `→ ${matriz.colunas.map((c) => c.etiqueta).join(' | ')}`
     )
 
