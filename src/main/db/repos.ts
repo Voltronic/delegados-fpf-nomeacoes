@@ -1177,6 +1177,26 @@ export function atualizarKmNomeacao(
     .run(km, minutos, fonte, id)
 }
 
+/**
+ * Jogos com nomeações ainda sem quilómetros.
+ *
+ * Acontece com o histórico semeado, que entra sem distâncias: calculá-las no
+ * arranque atrasaria a abertura, e são centenas de consultas ao serviço de
+ * rotas. Ficam para segundo plano, e esta consulta diz o que falta.
+ */
+export function jogosComNomeacoesSemKm(): number[] {
+  return (
+    obterBaseDados()
+      .prepare(
+        `SELECT DISTINCT n.jogo_id AS id FROM nomeacao n
+           JOIN jogo j ON j.id = n.jogo_id
+          WHERE n.km IS NULL AND n.estado = 'CONFIRMADA' AND j.recinto_id IS NOT NULL
+          ORDER BY j.data_hora DESC`
+      )
+      .all() as { id: number }[]
+  ).map((l) => l.id)
+}
+
 /** Quantas nomeações existem, para avisar antes de as apagar. */
 export function contarNomeacoes(): number {
   const linha = obterBaseDados().prepare('SELECT COUNT(*) AS n FROM nomeacao').get() as { n: number }

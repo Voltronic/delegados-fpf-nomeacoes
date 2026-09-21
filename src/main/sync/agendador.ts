@@ -279,6 +279,19 @@ export async function atualizarJogos(
  * Refaz os km das nomeações de jogos cujo recinto mudou. Só para jogos ainda
  * por realizar — o histórico fica como estava.
  */
+/**
+ * Calcula os quilómetros que faltam às nomeações já gravadas.
+ *
+ * O histórico semeado entra sem distâncias — são centenas, e o serviço de
+ * rotas responde a um pedido de cada vez. Corre em segundo plano depois de a
+ * aplicação abrir, e o que já estiver em cache sai de imediato.
+ */
+export async function completarKmEmFalta(): Promise<number> {
+  const jogos = repos.jogosComNomeacoesSemKm()
+  if (jogos.length) await recalcularKm(jogos)
+  return jogos.length
+}
+
 async function recalcularKm(jogoIds: number[]): Promise<void> {
   for (const jogoId of jogoIds) {
     const jogo = repos.obterJogoDetalhado(jogoId)

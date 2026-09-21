@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join, dirname } from 'node:path'
 import { abrirBaseDados, caminhoBaseDados, PASTA_COPIAS } from './db'
 import { clienteFpfPartilhado, fecharCliente, registarIpc } from './ipc'
-import { iniciarAgendador, pararAgendador } from './sync/agendador'
+import { completarKmEmFalta, iniciarAgendador, pararAgendador } from './sync/agendador'
 
 /**
  * Raiz portátil: em produção é a pasta que contém o executável, para que a
@@ -127,6 +127,14 @@ app.whenReady().then(() => {
 
   criarJanela()
   iniciarAgendador(clienteFpfPartilhado)
+
+  // O histórico semeado entra sem quilómetros: completam-se aqui, sem atrasar a
+  // abertura. Falhar não é grave — fica para o arranque seguinte.
+  void completarKmEmFalta()
+    .then((jogos) => {
+      if (jogos) console.log(`Quilómetros completados em ${jogos} jogos do histórico`)
+    })
+    .catch((erro) => console.warn('Não foi possível completar os quilómetros:', erro))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) criarJanela()

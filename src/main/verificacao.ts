@@ -6,7 +6,7 @@
  * sugestão, proposta automática e — se houver rede — os endpoints reais da FPF.
  */
 import { app } from 'electron'
-import { appendFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import Database from 'better-sqlite3'
@@ -21,7 +21,15 @@ import {
   versaoDoEsquema
 } from './db'
 import * as repos from './db/repos'
+import { completarKmEmFalta } from './sync/agendador'
 import { MIGRACOES } from './db/schema'
+import { semearHistorico } from './db/semente-historico-aplicar'
+import {
+  COMPETICOES_SEMENTE,
+  JOGOS_SEMENTE,
+  NOMEACOES_SEMENTE,
+  RECINTOS_SEMENTE
+} from './db/semente-historico'
 import { semearRecintos } from './db/semente'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
@@ -38,7 +46,9 @@ import {
 import { candidatosParaJogo, nomear, propostaAutomatica } from './engine/servico'
 import { ClienteFpf } from './fpf/cliente'
 import { parseDetalhesCompeticao, parseEpocas, parseJogosJornada, parseOrganizacoes } from './fpf/parsers'
-import { importarCsv, sincronizar } from './fpf/sincronizacao'
+import { importarCsv, sincronizar,
+  competicoesGuardadas
+} from './fpf/sincronizacao'
 import { atualizarJogos } from './sync/agendador'
 
 const verde = (t: string): string => t
@@ -63,6 +73,9 @@ function verificar(descricao: string, condicao: boolean, detalhe = ''): void {
     log(`  ${vermelho('FALHA')} ${descricao}${detalhe ? ` ${detalhe}` : ''}`)
   }
 }
+
+/** Um número de delegado que a semente do histórico usa mesmo. */
+const NUMERO_NA_SEMENTE = NOMEACOES_SEMENTE[0].delegadoNumero
 
 async function principal(): Promise<void> {
   const pasta = mkdtempSync(join(tmpdir(), 'delegados-'))
@@ -2077,6 +2090,166 @@ async function principal(): Promise<void> {
       recusouReposicao.includes('cópias de segurança criadas pela aplicação'),
       `→ ${recusouReposicao || 'aceitou'}`
     )
+
+    log('\nn15. Semente do histórico da época')
+    // Numa base de dados nova, a semente tem de trazer a época inteira: jogos,
+    // clubes, recintos e as nomeações oficiais. É o que o coordenador recebe
+    // sem ter de importar competição nenhuma.
+    const caminhoHistorico = join(pasta, 'data', 'historico.db')
+    abrirBaseDados(caminhoHistorico, { pastaCopias, semearRecintos: false })
+    const bdHistorico = obterBaseDados()
+    const delegadoDaSemente = repos.criarDelegado({
+      numero: NUMERO_NA_SEMENTE,
+      nome: 'Delegado Da Semente',
+      morada: 'morada de teste',
+      lat: 41.2,
+      lng: -8.5,
+      nivel: 'PRINCIPAL',
+      telefone: null,
+      email: null,
+      ativo: true,
+      notas: null,
+      coordsManuais: true
+    })
+    // Um recinto que já existe com coordenadas do coordenador: não se toca.
+    const recintoDaSemente = RECINTOS_SEMENTE.find((r) => r.lat != null)!
+    const meu = repos.encontrarOuCriarRecinto(recintoDaSemente.nome)
+    repos.atualizarRecinto(meu.id, {
+      nome: meu.nome,
+      morada: 'morada do coordenador',
+      lat: 38.5,
+      lng: -9.1,
+      coordsManuais: true
+    })
+
+    const semeado = semearHistorico(bdHistorico)
+    // Só o passado: os jogos a partir do arranque da aplicação são trabalho do
+    // coordenador, e a semente não lhes toca nem os inventa.
+    const jogosDoPassado = JOGOS_SEMENTE.filter((j) => (j.dataHora ?? '') < '2026-09-08').length
+    verificar(
+      'a semente traz o passado — e só o passado — para uma base de dados vazia',
+      semeado.jogosCriados === jogosDoPassado &&
+        semeado.competicoesCriadas > 0 &&
+        semeado.clubesCriados > 100,
+      `→ ${semeado.jogosCriados} de ${jogosDoPassado} jogos anteriores a 08/09, ` +
+        `${semeado.competicoesCriadas} competições, ${semeado.clubesCriados} clubes, ` +
+        `${semeado.recintosCriados} recintos`
+    )
+    verificar(
+      'e nenhum jogo de 08/09 em diante',
+      repos.listarJogos({ de: '2026-09-08', levaDelegado: 'TODOS' }).length === 0,
+      `→ ${repos.listarJogos({ de: '2026-09-08', levaDelegado: 'TODOS' }).length} jogos`
+    )
+    verificar(
+      'e as nomeações do delegado que existe nesta base de dados',
+      semeado.nomeacoesCriadas > 0 &&
+        repos.jogosDoDelegado(delegadoDaSemente.id).length === semeado.nomeacoesCriadas,
+      `→ ${semeado.nomeacoesCriadas} nomeações, ${semeado.delegadosEmFalta.length} delegados sem correspondência`
+    )
+    verificar(
+      'os jogos ficam com a hora oficial, não à meia-noite',
+      repos.jogosDoDelegado(delegadoDaSemente.id).every((j) => !(j.dataHora ?? '').endsWith('T00:00')),
+      `→ ex.: ${repos.jogosDoDelegado(delegadoDaSemente.id)[0]?.dataHora}`
+    )
+    verificar(
+      'um recinto que já tinha coordenadas do coordenador não é tocado',
+      repos.obterRecinto(meu.id)?.lat === 38.5,
+      `→ ${repos.obterRecinto(meu.id)?.lat}`
+    )
+
+    const segunda = semearHistorico(bdHistorico)
+    verificar(
+      'correr outra vez não repete nada',
+      segunda.jogosCriados === 0 &&
+        segunda.nomeacoesCriadas === 0 &&
+        segunda.nomeacoesSubstituidas === 0 &&
+        segunda.clubesCriados === 0,
+      `→ ${JSON.stringify(segunda)}`
+    )
+
+    // Se o coordenador mudou o delegado depois desta semente, a decisão dele é
+    // mais recente: a semente não a reverte, mesmo correndo outra vez.
+    const semeada = repos.jogosDoDelegado(delegadoDaSemente.id)[0]
+    const posterior = repos.criarDelegado({
+      numero: '9099',
+      nome: 'Delegado Posterior',
+      morada: null,
+      lat: 41,
+      lng: -8,
+      nivel: 'PRINCIPAL',
+      telefone: null,
+      email: null,
+      ativo: true,
+      notas: null,
+      coordsManuais: true
+    })
+    bdHistorico
+      .prepare('UPDATE nomeacao SET delegado_id = ? WHERE jogo_id = ? AND papel = ?')
+      .run(posterior.id, semeada.jogoId, semeada.papel)
+    bdHistorico.prepare("DELETE FROM config WHERE chave = 'semente.historico'").run()
+    const terceira = semearHistorico(bdHistorico)
+    const quemLaEsta = bdHistorico
+      .prepare('SELECT delegado_id AS id FROM nomeacao WHERE jogo_id = ? AND papel = ?')
+      .get(semeada.jogoId, semeada.papel) as { id: number }
+    verificar(
+      'uma decisão posterior do coordenador não é revertida pela semente',
+      quemLaEsta.id === posterior.id && terceira.nomeacoesIgnoradas > 0,
+      `→ ${terceira.nomeacoesIgnoradas} nomeação(ões) deixadas como estavam`
+    )
+
+    // As competições semeadas ficam ativas, e é isso que faz o ecrã de
+    // importação aparecer com elas já marcadas — sem o coordenador as procurar.
+    const guardadas = competicoesGuardadas(106)
+    verificar(
+      'as competições da semente ficam marcadas na importação',
+      guardadas.length >= COMPETICOES_SEMENTE.length,
+      `→ ${guardadas.length} de ${COMPETICOES_SEMENTE.length} pré-selecionadas`
+    )
+
+    // Os km entram vazios e são calculados a seguir, em segundo plano.
+    const semKmAntes = repos.jogosComNomeacoesSemKm().length
+    const completados = await completarKmEmFalta()
+    verificar(
+      'os quilómetros do histórico são completados a seguir',
+      semKmAntes > 0 && completados === semKmAntes && repos.jogosComNomeacoesSemKm().length === 0,
+      `→ ${completados} jogos com km calculados`
+    )
+    verificar(
+      'e passam a contar nas estatísticas da época',
+      (repos.tabelaKm(106).find((l) => l.delegadoId === delegadoDaSemente.id)?.km ?? 0) > 0,
+      `→ ${repos.tabelaKm(106).find((l) => l.delegadoId === delegadoDaSemente.id)?.km} km`
+    )
+
+    // E sobre uma cópia da base de dados real, se existir nesta máquina: é o
+    // que diz quantas nomeações entram e quantas são corrigidas.
+    const bdReal = join('release', 'data', 'delegados.db')
+    if (existsSync(bdReal)) {
+      // Com o `-wal`: as escritas mais recentes vivem lá, e copiar só o `.db`
+      // dava uma base de dados a meio — foi o que fez este ensaio mentir.
+      const copia = join(pasta, 'data', 'copia-real.db')
+      copyFileSync(bdReal, copia)
+      for (const extra of ['-wal', '-shm']) {
+        if (existsSync(`${bdReal}${extra}`)) copyFileSync(`${bdReal}${extra}`, `${copia}${extra}`)
+      }
+      const conn = new Database(copia)
+      const antesNomeacoes = (conn.prepare('SELECT COUNT(*) AS n FROM nomeacao').get() as { n: number }).n
+      const real = semearHistorico(conn)
+      const depoisNomeacoes = (conn.prepare('SELECT COUNT(*) AS n FROM nomeacao').get() as { n: number }).n
+      const semHora = (
+        conn.prepare("SELECT COUNT(*) AS n FROM jogo WHERE data_hora LIKE '%T00:00'").get() as { n: number }
+      ).n
+      conn.close()
+      verificar(
+        'na base de dados real, a semente acrescenta sem apagar o que já existe',
+        depoisNomeacoes === antesNomeacoes + real.nomeacoesCriadas &&
+          real.delegadosEmFalta.length === 0,
+        `→ ${antesNomeacoes} → ${depoisNomeacoes} nomeações (${real.nomeacoesCriadas} novas, ` +
+          `${real.nomeacoesSubstituidas} corrigidas), ${real.horasRepostas} horas repostas, ` +
+          `${real.jogosCriados} jogos criados, ${semHora} jogos ainda sem hora`
+      )
+    } else {
+      log('    (sem base de dados real nesta máquina: a cópia não foi testada)')
+    }
 
   } finally {
     // O SQLite ainda tem o ficheiro aberto; se o Windows o bloquear, a pasta

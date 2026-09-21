@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import Database from 'better-sqlite3'
 import { MIGRACOES } from './schema'
 import { semearRecintos } from './semente'
+import { semearHistorico } from './semente-historico-aplicar'
 import * as COPIAS from './copias'
 import { PASTA_COPIAS } from './copias'
 
@@ -63,6 +64,18 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
     const semente = semearRecintos(conn)
     if (semente.criados || semente.preenchidos) {
       console.log(`Recintos conhecidos: ${semente.criados} criados, ${semente.preenchidos} preenchidos`)
+    }
+    // O que já tinha acontecido antes de a aplicação entrar ao serviço: jogos
+    // da época, clubes, recintos e as nomeações oficiais da FPF.
+    const historico = semearHistorico(conn)
+    if (historico.jogosCriados || historico.nomeacoesCriadas || historico.nomeacoesSubstituidas) {
+      console.log(
+        `Histórico da época: ${historico.jogosCriados} jogos, ${historico.nomeacoesCriadas} nomeações, ` +
+          `${historico.nomeacoesSubstituidas} corrigidas, ${historico.horasRepostas} horas repostas`
+      )
+    }
+    if (historico.delegadosEmFalta.length) {
+      console.warn('Histórico: delegados sem correspondência (número):', historico.delegadosEmFalta.join(', '))
     }
   }
   db = conn
