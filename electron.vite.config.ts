@@ -12,7 +12,9 @@ export default defineConfig({
           index: resolve('src/main/index.ts'),
           // Entrada auxiliar do smoke test (`npm run verificar`); nunca é carregada pela app.
           verificacao: resolve('src/main/verificacao.ts'),
-          'verificacao-ui': resolve('src/main/verificacao-ui.ts')
+          'verificacao-ui': resolve('src/main/verificacao-ui.ts'),
+          // Diagnóstico pontual de uma competição no site da FPF.
+          diagnostico: resolve('src/main/diagnostico.ts')
         }
       }
     }

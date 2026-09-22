@@ -317,6 +317,24 @@ export function montarJogo(
 }
 
 /** Chave estável para deduplicar: os jogos futuros não têm `matchId`. */
+/**
+ * A página de manutenção do site da FPF.
+ *
+ * O Centro de Resultados responde 200 com uma página de desculpas quando uma
+ * competição está em manutenção. Sem a reconhecer, a aplicação dizia que o site
+ * estava a bloquear os pedidos e mandava esperar um minuto — e quem lê isso
+ * tenta outra vez, e outra, quando não há nada a fazer senão esperar que a FPF
+ * a reponha.
+ */
+export function paginaEmManutencao(html: string): boolean {
+  const texto = html
+    .replace(/<[^>]+>/g, ' ')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+  return texto.includes('descer aos balnearios') || /manutencao[\s\S]{0,120}desculpa/.test(texto)
+}
+
 export function chaveNatural(
   competicaoId: number,
   fixtureId: number,

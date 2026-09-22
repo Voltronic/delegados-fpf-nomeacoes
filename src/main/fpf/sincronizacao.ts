@@ -17,6 +17,7 @@ import {
   parseEpocas,
   parseJogosJornada,
   parseOrganizacoes,
+  paginaEmManutencao,
   resolverData,
   type AssociacaoFpf,
   type JogoJornadaFpf
@@ -186,8 +187,11 @@ export async function sincronizar(
       // em vez de concluir que a competição está vazia.
       if (!detalhes.fases.some((f) => f.series.length)) {
         erros.push(
-          `${competicao.nome}: não foi possível ler a estrutura da competição. ` +
-            'O site pode estar a bloquear os pedidos — espere um minuto e tente de novo.'
+          paginaEmManutencao(html)
+            ? `${competicao.nome}: o site da FPF tem esta competição em manutenção. ` +
+                'Não há nada a fazer deste lado; a aplicação volta a tentar sozinha.'
+            : `${competicao.nome}: não foi possível ler a estrutura da competição. ` +
+                'O site pode estar a bloquear os pedidos — espere um minuto e tente de novo.'
         )
         continue
       }

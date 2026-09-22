@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   anosDaEpoca,
   chaveNatural,
+  paginaEmManutencao,
   parseDetalhesCompeticao,
   parseEpocas,
   parseInfoJogo,
@@ -266,5 +267,28 @@ describe('deteção do desafio do Cloudflare', () => {
     expect(pareceDesafioCloudflare(fixture('competition-index.html'))).toBe(false)
     expect(pareceDesafioCloudflare(fixture('fixture-futuro.html'))).toBe(false)
     expect(pareceDesafioCloudflare(fixture('fixture-jogado.html'))).toBe(false)
+  })
+})
+
+describe('paginaEmManutencao', () => {
+  // O Centro de Resultados responde 200 com esta página quando uma competição
+  // está em manutenção: sem a reconhecer, a aplicação dizia que o site estava a
+  // bloquear os pedidos e mandava tentar outra vez daí a um minuto.
+  const manutencao = `<html><head><title>FPF - Centro de Resultados</title></head><body>
+    <a>&lt; Voltar</a><nav>FPF Tv Lendas Indicadores Desportivos Centro de Resultados</nav>
+    <h1>Manutenção</h1><h2>Manutenção</h2>
+    <p>Pedimos desculpa, mas tivemos de descer aos balneários</p></body></html>`
+
+  it('reconhece a página de manutenção da FPF', () => {
+    expect(paginaEmManutencao(manutencao)).toBe(true)
+  })
+
+  it('não confunde uma competição verdadeira com manutenção', () => {
+    expect(paginaEmManutencao(fixture('competition-details.html'))).toBe(false)
+    expect(paginaEmManutencao(fixture('competition-details-eliminatorias.html'))).toBe(false)
+  })
+
+  it('nem a página de desafio do Cloudflare, que é outro problema', () => {
+    expect(paginaEmManutencao(fixture('cloudflare-desafio.html'))).toBe(false)
   })
 })

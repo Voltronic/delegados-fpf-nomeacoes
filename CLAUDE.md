@@ -65,8 +65,13 @@ em vez de ser aberta e corrompida.
 npm run dist      # portátil para release/  (NÃO apagar release/ antes)
 npm run verificar # verificações do processo principal, contra o site real da FPF
 npm run verificar:ui  # verificações da interface numa janela Electron
+npm run diagnostico   # uma competição do site da FPF, com o cliente da aplicação
 npm test          # testes unitários
 ```
+
+O `diagnostico` responde à pergunta que a mensagem de erro no ecrã não distingue:
+o site está a bloquear os pedidos, ou aquela competição está em manutenção? Basta
+mudar a lista no topo de `src/main/diagnostico.ts`.
 
 Antes de compilar pode fechar-se a aplicação se estiver aberta. As verificações que arrancam Electron
 deixam processos para trás — convém fechá-los no fim
