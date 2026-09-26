@@ -165,16 +165,15 @@ export default function Importacao(): JSX.Element {
             </label>
             <label className="campo">
               Importar a partir de
+              {/* A explicação fica na dica: uma frase por baixo desalinhava a linha
+                  dos três campos. */}
               <input
                 type="date"
                 value={desde}
                 min={limiteDeImportacao()}
+                title="No máximo um mês para trás: jogos mais antigos já não se nomeiam, e ir buscá-los são centenas de pedidos ao site da FPF."
                 onChange={(e) => setDesde(desdeParaImportar(e.target.value))}
               />
-              <span className="silencioso" style={{ fontWeight: 400 }}>
-                No máximo um mês para trás. Jogos mais antigos já não se nomeiam, e ir buscá-los são
-                centenas de pedidos ao site da FPF.
-              </span>
             </label>
           </div>
 

@@ -1336,6 +1336,24 @@ app.whenReady().then(async () => {
       `→ valor ${campoData.valor}, mínimo ${campoData.minimo}, ${campoData.caixas} caixa(s)`
     )
 
+    // Os três campos da linha têm de ficar à mesma altura: uma frase a mais
+    // debaixo de um deles empurrava-o e desalinhava a linha inteira.
+    const alinhamento = await noEcra<{ topos: number[]; alturas: number[]; etiquetas: string[] }>(`
+      // Só a primeira linha: o ecrã tem outras, e compará-las todas não diz nada.
+      const linha = document.querySelector('.linha-campos');
+      const campos = [...linha.querySelectorAll(':scope > .campo')];
+      return {
+        topos: campos.map((c) => Math.round(c.getBoundingClientRect().top)),
+        alturas: campos.map((c) => Math.round(c.getBoundingClientRect().height)),
+        etiquetas: campos.map((c) => (c.textContent || '').trim().split(String.fromCharCode(10))[0].trim())
+      };`)
+    const iguais = (valores: number[]): boolean => valores.every((v) => Math.abs(v - valores[0]) <= 1)
+    verificar(
+      'e os três campos da linha ficam alinhados',
+      alinhamento.topos.length === 3 && iguais(alinhamento.topos) && iguais(alinhamento.alturas),
+      `→ topos ${alinhamento.topos.join(', ')} | alturas ${alinhamento.alturas.join(', ')}`
+    )
+
     janela.webContents.send('fpf:progresso', {
       etapa: 'LIGA 3 PLACARD — Série A, jornada 5',
       atual: 12,
