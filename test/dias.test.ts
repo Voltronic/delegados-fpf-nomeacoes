@@ -9,7 +9,9 @@ import {
   HORAS_ATE_HISTORICO,
   limiteDeTrabalho,
   paraDataLocal,
-  vaiAcontecer
+  vaiAcontecer,
+  desdeParaImportar,
+  limiteDeImportacao
 } from '../src/shared/datas'
 
 /**
@@ -189,5 +191,32 @@ describe('quando um jogo passa a histórico', () => {
   it('a fronteira é a hora atual menos a duração de um jogo', () => {
     expect(limiteDeTrabalho(new Date(2026, 8, 9, 17, 46))).toBe('2026-09-09T13:46')
     expect(HORAS_ATE_HISTORICO).toBe(4)
+  })
+})
+
+describe('limite de importação', () => {
+  // Ir buscar a época inteira a cada atualização são centenas de pedidos ao
+  // site da FPF, para trazer jogos que já ninguém vai nomear.
+  it('é um mês para trás, e anda sozinho todos os dias', () => {
+    expect(limiteDeImportacao(new Date(2026, 8, 26))).toBe('2026-08-26')
+    expect(limiteDeImportacao(new Date(2026, 8, 27))).toBe('2026-08-27')
+    expect(limiteDeImportacao(new Date(2026, 0, 1))).toBe('2025-12-01')
+  })
+
+  it('num dia que o mês anterior não tem, fica no último dia desse mês', () => {
+    // 31 de março menos um mês daria 3 de março, que não é "há um mês".
+    expect(limiteDeImportacao(new Date(2026, 2, 31))).toBe('2026-02-28')
+    expect(limiteDeImportacao(new Date(2024, 2, 30))).toBe('2024-02-29')
+  })
+
+  it('uma data mais antiga do que o limite é encolhida até ele', () => {
+    const hoje = new Date(2026, 8, 26)
+    expect(desdeParaImportar('2026-07-01', hoje)).toBe('2026-08-26')
+    expect(desdeParaImportar(undefined, hoje)).toBe('2026-08-26')
+    expect(desdeParaImportar(null, hoje)).toBe('2026-08-26')
+  })
+
+  it('e uma data mais recente é respeitada', () => {
+    expect(desdeParaImportar('2026-09-20', new Date(2026, 8, 26))).toBe('2026-09-20')
   })
 })

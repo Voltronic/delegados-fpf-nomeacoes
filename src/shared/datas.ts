@@ -114,6 +114,37 @@ export const HORAS_ATE_HISTORICO = 4
  *
  * Um jogo com data igual ou posterior a isto ainda está na lista de trabalho.
  */
+/**
+ * A data mais antiga que vale a pena importar: um mês para trás, a contar de
+ * hoje, e a janela anda sozinha todos os dias.
+ *
+ * Ir buscar a época inteira a cada atualização são centenas de pedidos ao site
+ * da FPF e minutos de espera, para trazer jogos que já ninguém vai nomear. Um
+ * mês chega e sobra para apanhar adiamentos e correções de jogos recentes.
+ */
+export function limiteDeImportacao(agora = new Date()): string {
+  const d = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())
+  const dia = d.getDate()
+  d.setMonth(d.getMonth() - 1)
+  // 31 de março menos um mês daria 3 de março: nesse caso fica no último dia de
+  // fevereiro, que é o que uma pessoa entende por "há um mês".
+  if (d.getDate() !== dia) d.setDate(0)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/**
+ * A data a partir da qual se importa, respeitando o limite de um mês.
+ *
+ * Vale para todos os caminhos — o ecrã, a atualização automática, uma época
+ * criada há muito tempo: pedir mais antigo não é recusado, é encolhido até ao
+ * limite, para ninguém ficar sem importar por causa de uma data mal escolhida.
+ */
+export function desdeParaImportar(pedido?: string | null, agora = new Date()): string {
+  const limite = limiteDeImportacao(agora)
+  return pedido && pedido > limite ? pedido : limite
+}
+
 export function limiteDeTrabalho(agora = new Date()): string {
   const limite = new Date(agora)
   limite.setHours(limite.getHours() - HORAS_ATE_HISTORICO)

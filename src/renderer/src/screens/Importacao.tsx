@@ -7,7 +7,8 @@ import type {
 } from '@shared/tipos'
 import ImportarCsv from '../components/ImportarCsv'
 import JogoManual from '../components/JogoManual'
-import { classes, formatarDataHora, paraDataIso } from '../lib/formato'
+import { desdeParaImportar, limiteDeImportacao } from '@shared/datas'
+import { classes, formatarDataHora } from '../lib/formato'
 import { avisar, mensagemDeErro } from '../lib/avisos'
 
 export default function Importacao(): JSX.Element {
@@ -15,8 +16,8 @@ export default function Importacao(): JSX.Element {
   const [seasonId, setSeasonId] = useState<number | null>(null)
   const [organizacao, setOrganizacao] = useState<string>('Competições FPF')
   const [escolhidas, setEscolhidas] = useState<Set<number>>(new Set())
-  const [desde, setDesde] = useState<string>(() => paraDataIso(new Date()))
-  const [usarDesde, setUsarDesde] = useState(true)
+  // Um mês para trás, e a janela anda sozinha todos os dias.
+  const [desde, setDesde] = useState<string>(() => limiteDeImportacao())
 
   const [aCarregar, setACarregar] = useState(false)
   const [progresso, setProgresso] = useState<ProgressoSincronizacao | null>(null)
@@ -42,7 +43,7 @@ export default function Importacao(): JSX.Element {
         // Se a época já existe na base de dados, a importação parte do dia em
         // que ela lá entrou.
         const epocaGuardada = (await window.api.epocas.listar()).find((e) => e.seasonId === atual)
-        if (epocaGuardada) setDesde(epocaGuardada.criadaEm.slice(0, 10))
+        if (epocaGuardada) setDesde(desdeParaImportar(epocaGuardada.criadaEm.slice(0, 10)))
         const guardadas = (await window.api.competicoes.listar(atual))
           .filter((x) => x.ativa && x.fpfCompetitionId != null)
           .map((x) => x.fpfCompetitionId!)
@@ -86,7 +87,7 @@ export default function Importacao(): JSX.Element {
         seasonId,
         descricaoEpoca: descricao,
         organizacao,
-        desde: usarDesde ? desde : undefined,
+        desde: desdeParaImportar(desde),
         competicoes: competicoes
           .filter((c) => escolhidas.has(c.competitionId))
           .map((c) => ({
@@ -101,8 +102,7 @@ export default function Importacao(): JSX.Element {
       // seguinte arranca no dia em que ela foi criada: o que é de antes
       // pertence à época que acabou.
       if (r.epoca.nova) {
-        setDesde(r.epoca.criadaEm.slice(0, 10))
-        setUsarDesde(true)
+        setDesde(desdeParaImportar(r.epoca.criadaEm.slice(0, 10)))
         avisar(`Época ${r.epoca.descricao ?? r.epoca.seasonId} criada. A importação passa a partir de hoje.`)
       }
       avisar(`${r.criados} jogos novos, ${r.atualizados} atualizados.`)
@@ -165,20 +165,16 @@ export default function Importacao(): JSX.Element {
             </label>
             <label className="campo">
               Importar a partir de
-              <div className="linha">
-                <input
-                  type="checkbox"
-                  checked={usarDesde}
-                  onChange={(e) => setUsarDesde(e.target.checked)}
-                  style={{ width: 'auto' }}
-                />
-                <input
-                  type="date"
-                  value={desde}
-                  disabled={!usarDesde}
-                  onChange={(e) => setDesde(e.target.value)}
-                />
-              </div>
+              <input
+                type="date"
+                value={desde}
+                min={limiteDeImportacao()}
+                onChange={(e) => setDesde(desdeParaImportar(e.target.value))}
+              />
+              <span className="silencioso" style={{ fontWeight: 400 }}>
+                No máximo um mês para trás. Jogos mais antigos já não se nomeiam, e ir buscá-los são
+                centenas de pedidos ao site da FPF.
+              </span>
             </label>
           </div>
 

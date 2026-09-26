@@ -6,7 +6,7 @@ import type {
   ProgressoSincronizacao,
   ResultadoSincronizacao
 } from '@shared/tipos'
-import { dataHoraAGuardar, dataMudou } from '../../shared/datas'
+import { dataHoraAGuardar, dataMudou, desdeParaImportar } from '../../shared/datas'
 import { COMPETICOES_COM_DELEGADO_SEMPRE } from '../../shared/tipos'
 import { ClienteFpf } from './cliente'
 import {
@@ -113,7 +113,10 @@ export interface PedidoSincronizacao {
   organizacao: string
   /** fpfCompetitionId das competições a sincronizar. */
   competicoes: { competitionId: number; nome: string; nivelMinimo: string | null; usaDelegadoAssistente: boolean }[]
-  /** Só importa jogos a partir desta data (ISO). Vazio = todos. */
+  /**
+   * Só importa jogos a partir desta data (ISO). Nunca vai além de um mês para
+   * trás: uma data mais antiga é encolhida até esse limite.
+   */
   desde?: string
 }
 
@@ -124,6 +127,9 @@ export async function sincronizar(
 ): Promise<ResultadoSincronizacao> {
   pendentes.clear()
   const epoca = anosDaEpoca(pedido.descricaoEpoca)
+  // Um mês para trás, sempre: é a janela que interessa nomear, e poupa
+  // centenas de pedidos ao site da FPF a cada atualização.
+  const desdeMinimo = desdeParaImportar(pedido.desde)
   const erros: string[] = []
   const resumo: ResultadoSincronizacao['competicoes'] = []
 
@@ -269,7 +275,7 @@ export async function sincronizar(
         const jogos = t.jogos ?? parseJogosJornada(await cliente.jogosDaJornada(t.fixtureId))
         for (const jogo of jogos) {
           const dataHora = resolverData(jogo.dataTexto, jogo.horaTexto, epoca)
-          if (pedido.desde && dataHora && dataHora < pedido.desde) continue
+          if (dataHora && dataHora < desdeMinimo) continue
           const chave = chaveNatural(t.competicao.id, t.fixtureId, jogo.clubeCasa, jogo.clubeFora)
           pendentes.set(chave, {
             chaveNatural: chave,

@@ -1312,6 +1312,30 @@ app.whenReady().then(async () => {
     log('\n6. Indicador de atualização')
     // A atualização automática corre em segundo plano e demora minutos: sem
     // este indicador o coordenador vê um ecrã vazio e julga que nada funciona.
+    // A importação não deixa ir buscar jogos com mais de um mês: são centenas
+    // de pedidos ao site da FPF para trazer o que já ninguém vai nomear.
+    await irPara('Importação')
+    await esperar(600)
+    const campoData = await noEcra<{ valor: string; minimo: string; caixas: number }>(`
+      const data = document.querySelector('input[type=date]');
+      const campo = data?.closest('.campo');
+      return {
+        valor: data?.value ?? '',
+        minimo: data?.min ?? '',
+        caixas: campo ? campo.querySelectorAll('input[type=checkbox]').length : -1
+      };`)
+    const haUmMes = (() => {
+      const d = new Date()
+      d.setMonth(d.getMonth() - 1)
+      const dois = (n: number): string => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`
+    })()
+    verificar(
+      'a importação começa há um mês e não deixa escolher mais antigo',
+      campoData.minimo === haUmMes && campoData.valor === haUmMes && campoData.caixas === 0,
+      `→ valor ${campoData.valor}, mínimo ${campoData.minimo}, ${campoData.caixas} caixa(s)`
+    )
+
     janela.webContents.send('fpf:progresso', {
       etapa: 'LIGA 3 PLACARD — Série A, jornada 5',
       atual: 12,
