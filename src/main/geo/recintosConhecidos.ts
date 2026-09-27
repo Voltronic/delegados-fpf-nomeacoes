@@ -26,6 +26,14 @@ export interface RecintoConhecido {
   descricao: string
 }
 
+/**
+ * Muda de cada vez que a lista é regenerada, e é o que faz a semente correr
+ * outra vez em todas as máquinas — inclusive na do coordenador, que já a tinha
+ * aplicado. Sem isto, recintos novos ficavam na aplicação sem nunca chegar à
+ * base de dados de ninguém.
+ */
+export const VERSAO_RECINTOS = '2026-09-28:298'
+
 export const RECINTOS_CONHECIDOS: RecintoConhecido[] = [
   { nome: "Academia Briosa Xxi - Campo Nº 1", lat: 40.2272332, lng: -8.446666, descricao: "Coordenadas do link (40.22723, -8.44667)" },
   { nome: "Academia Distrital Futebol Af Viseu", lat: 40.6873497, lng: -7.8543859, descricao: "Coordenadas do link (40.68735, -7.85439)" },

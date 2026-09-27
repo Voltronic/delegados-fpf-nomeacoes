@@ -175,7 +175,8 @@ async function principal(): Promise<void> {
     )
 
     // A semente de recintos confirmados: numa base de dados nova entram todos,
-    // e numa que já exista nunca substitui o que lá está.
+    // e numa que já exista corrige o que estiver noutro sítio. Corre uma vez
+    // por versão da lista.
     const caminhoSemente = join(pasta, 'data', 'semente.db')
     const semente = new Database(caminhoSemente)
     semente.exec(
@@ -184,7 +185,8 @@ async function principal(): Promise<void> {
          nome_normalizado TEXT NOT NULL UNIQUE, morada TEXT, lat REAL, lng REAL,
          coords_manuais INTEGER NOT NULL DEFAULT 0, geocodificado_em TEXT,
          origem_coords TEXT, morada_resolvida TEXT, confianca TEXT,
-         confirmado INTEGER NOT NULL DEFAULT 0)`
+         confirmado INTEGER NOT NULL DEFAULT 0);
+       CREATE TABLE config (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)`
     )
     const conhecido = RECINTOS_CONHECIDOS[0]
     const outro = RECINTOS_CONHECIDOS[1]
@@ -234,14 +236,36 @@ async function principal(): Promise<void> {
     )
     verificar('não fica nenhum recinto por localizar', semCoordenadas === 0, `→ ${semCoordenadas} sem coordenadas`)
     // Arrancar outra vez não pode voltar a mexer em nada.
+    // Correr a cada arranque eram centenas de comparações para dar sempre o
+    // mesmo: fica registada a versão da lista e não se repete.
+    semente.prepare('UPDATE recinto SET lat = 1.5, lng = 2.5 WHERE nome_normalizado = ?').run(
+      normalizarNome(conhecido.nome)
+    )
     const segundaSemente = semearRecintos(semente)
+    const naoMexeu = semente
+      .prepare('SELECT lat FROM recinto WHERE nome_normalizado = ?')
+      .get(normalizarNome(conhecido.nome)) as { lat: number }
     verificar(
-      'arrancar outra vez não repete, não duplica e não volta a corrigir',
+      'corrida uma vez, não volta a correr na mesma versão',
       segundaSemente.criados === 0 &&
         segundaSemente.preenchidos === 0 &&
         segundaSemente.atualizados === 0 &&
+        naoMexeu.lat === 1.5 &&
         (semente.prepare('SELECT COUNT(*) AS n FROM recinto').get() as { n: number }).n === totalSemeado,
       `→ ${JSON.stringify(segundaSemente)}`
+    )
+
+    // E uma lista nova — mais recintos, ou um ponto corrigido — volta a correr
+    // sozinha, que é como uma correção chega a quem já a tinha aplicado.
+    semente.prepare("UPDATE config SET valor = 'versão antiga' WHERE chave = 'semente.recintos'").run()
+    const terceiraSemente = semearRecintos(semente)
+    const corrigidoDeNovo = semente
+      .prepare('SELECT lat FROM recinto WHERE nome_normalizado = ?')
+      .get(normalizarNome(conhecido.nome)) as { lat: number }
+    verificar(
+      'uma versão nova da lista volta a correr e corrige',
+      terceiraSemente.atualizados === 1 && corrigidoDeNovo.lat === conhecido.lat,
+      `→ ${terceiraSemente.atualizados} corrigidos, lat ${corrigidoDeNovo.lat}`
     )
     semente.close()
 

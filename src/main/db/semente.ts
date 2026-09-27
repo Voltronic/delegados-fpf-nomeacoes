@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { normalizarNome } from '../fpf/html'
-import { RECINTOS_CONHECIDOS } from '../geo/recintosConhecidos'
+import { RECINTOS_CONHECIDOS, VERSAO_RECINTOS } from '../geo/recintosConhecidos'
 
 export interface ResultadoSemente {
   /** Recintos que não existiam e passaram a existir, já localizados. */
@@ -14,8 +14,13 @@ export interface ResultadoSemente {
 /**
  * Põe na base de dados os recintos cuja localização já está confirmada.
  *
- * Corre em cada arranque: cria os que faltam, preenche os que estão sem ponto
- * no mapa e corrige os que estão noutro sítio. A lista manda, porque sai da
+ * Corre uma vez por versão da lista: cria os que faltam, preenche os que estão
+ * sem ponto no mapa e corrige os que estão noutro sítio. Correr a cada arranque
+ * era trabalho repetido para nada — centenas de comparações que davam sempre o
+ * mesmo resultado. Quando a lista é regenerada com recintos novos, a versão
+ * muda e ela volta a correr sozinha em todas as máquinas.
+ *
+ * A lista manda, porque sai da
  * base de dados de quem confirma os recintos um a um — é assim que uma
  * correção dele (um recinto que estava no país errado, por exemplo) chega a
  * todas as instalações sem ninguém repetir o trabalho.
@@ -28,7 +33,14 @@ export interface ResultadoSemente {
  * OpenStreetMap (minutos de espera, vários por confirmar à mão) para chegar
  * exatamente ao mesmo sítio.
  */
+const CHAVE_CONFIG = 'semente.recintos'
+
 export function semearRecintos(conn: Database.Database): ResultadoSemente {
+  const jaCorreu = conn.prepare('SELECT valor FROM config WHERE chave = ?').get(CHAVE_CONFIG) as
+    | { valor: string }
+    | undefined
+  if (jaCorreu?.valor === VERSAO_RECINTOS) return { criados: 0, preenchidos: 0, atualizados: 0 }
+
   const existente = conn.prepare(
     'SELECT id, lat, lng, morada FROM recinto WHERE nome_normalizado = ?'
   )
@@ -95,6 +107,11 @@ export function semearRecintos(conn: Database.Database): ResultadoSemente {
         resultado.atualizados++
       }
     }
+    conn
+      .prepare(
+        'INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor'
+      )
+      .run(CHAVE_CONFIG, VERSAO_RECINTOS)
   })
   correr()
 
