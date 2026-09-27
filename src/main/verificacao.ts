@@ -2108,8 +2108,9 @@ async function principal(): Promise<void> {
         adversarioDoTeste.id,
         new Date().toISOString()
       )
-    const duplicados = repos.jogosDuplicadosPorRenome()
-    for (const d of duplicados) repos.fundirJogoDuplicado(d.manter, d.remover)
+    // A mesma função que corre no arranque, para o coordenador não ter de
+    // esperar pela atualização seguinte para deixar de ver o jogo a dobrar.
+    const duplicados = repos.juntarJogosDuplicados()
     const sobrou = repos.listarJogos({ levaDelegado: 'TODOS' }).filter((j) => j.fpfFixtureId === 777001)
     verificar(
       'um jogo que já estava a dobrar é junto num só, sem perder a nomeação',

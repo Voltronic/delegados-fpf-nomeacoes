@@ -239,10 +239,9 @@ export async function atualizarJogos(
   // Um clube que muda de nome no site — "Ad Fundão" passou a "Ad Fundão /
   // Alambique" — fazia nascer outra vez todos os jogos dele, porque a chave
   // natural inclui os clubes. Junta-se o que ficou a dobrar.
-  for (const duplicado of repos.jogosDuplicadosPorRenome()) {
-    repos.fundirJogoDuplicado(duplicado.manter, duplicado.remover)
+  for (const descricao of repos.juntarJogosDuplicados()) {
     resultado.jogosFundidos++
-    console.log(`Jogo a dobrar junto num só: ${duplicado.descricao}`)
+    console.log(`Jogo a dobrar junto num só: ${descricao}`)
   }
 
   // Um recinto sem coordenadas não tem distâncias, e sem distâncias o motor não

@@ -1207,6 +1207,19 @@ export function fundirJogoDuplicado(manter: number, remover: number): void {
   registarAuditoria('jogo', manter, 'fundir-duplicado', { remover })
 }
 
+/**
+ * Junta todos os jogos que estejam a dobrar por renome de clube, e diz quantos.
+ *
+ * Corre no arranque: é uma consulta local e instantânea, e fazer o coordenador
+ * esperar pela atualização seguinte — que fala com o site da FPF e demora
+ * minutos — para deixar de ver o mesmo jogo duas vezes não faz sentido.
+ */
+export function juntarJogosDuplicados(): string[] {
+  const pares = jogosDuplicadosPorRenome()
+  for (const par of pares) fundirJogoDuplicado(par.manter, par.remover)
+  return pares.map((p) => p.descricao)
+}
+
 export function apagarJogo(id: number): void {
   obterBaseDados().prepare('DELETE FROM jogo WHERE id = ?').run(id)
 }

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join, dirname } from 'node:path'
 import { abrirBaseDados, caminhoBaseDados, PASTA_COPIAS } from './db'
 import { clienteFpfPartilhado, fecharCliente, registarIpc } from './ipc'
+import * as repos from './db/repos'
 import { completarKmEmFalta, iniciarAgendador, pararAgendador } from './sync/agendador'
 
 /**
@@ -124,6 +125,14 @@ app.whenReady().then(() => {
     preload: join(__dirname, '../preload/index.mjs'),
     paginaRenderer: join(__dirname, '../renderer/index.html')
   })
+
+  // Jogos a dobrar por um clube ter mudado de nome: juntam-se já, sem esperar
+  // pela atualização seguinte.
+  const juntos = repos.juntarJogosDuplicados()
+  if (juntos.length) {
+    console.log(`Jogos a dobrar juntos num só: ${juntos.length}`)
+    for (const descricao of juntos) console.log(`   ${descricao}`)
+  }
 
   criarJanela()
   iniciarAgendador(clienteFpfPartilhado)
