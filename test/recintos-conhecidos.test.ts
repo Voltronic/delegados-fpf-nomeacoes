@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RECINTOS_CONHECIDOS, recintoConhecido } from '../src/main/geo/recintosConhecidos'
 import { eRecintoPorIndicar } from '../src/main/fpf/recintoPorIndicar'
+import { avisoForaDePortugal, foraDePortugal } from '../src/main/geo/limitesPortugal'
 
 /**
  * Os nomes à esquerda são exatamente os que estão gravados na base de dados do
@@ -90,5 +91,35 @@ describe('recintos por indicar', () => {
     expect(eRecintoPorIndicar('Campo da Mata')).toBe(false)
     // Um recinto que por acaso tenha "indicar" no nome continua a ser recinto.
     expect(eRecintoPorIndicar('Campo do Indicador')).toBe(false)
+  })
+})
+
+describe('limites de Portugal', () => {
+  // Dois recintos chegaram a ficar gravados no Brasil, por links do Google Maps
+  // que apanharam o homónimo: "Estádio Municipal Castelo Branco" no Paraná e
+  // "Campo de Futebol Bom Jesus" no Rio Grande do Sul.
+  it('aceita o continente, a Madeira e os Açores', () => {
+    expect(foraDePortugal(38.7223, -9.1393)).toBe(false) // Lisboa
+    expect(foraDePortugal(41.1579, -8.6291)).toBe(false) // Porto
+    expect(foraDePortugal(32.6669, -16.9241)).toBe(false) // Funchal
+    expect(foraDePortugal(37.7412, -25.6756)).toBe(false) // Ponta Delgada
+    expect(foraDePortugal(39.4557, -31.1276)).toBe(false) // Flores
+  })
+
+  it('recusa o homónimo de outro país', () => {
+    expect(foraDePortugal(-26.0144276, -51.3442306)).toBe(true) // Castelo Branco, Paraná
+    expect(foraDePortugal(-29.730169, -52.4493429)).toBe(true) // Bom Jesus, Rio Grande do Sul
+    expect(foraDePortugal(40.4168, -3.7038)).toBe(true) // Madrid
+  })
+
+  it('não se pronuncia sobre um recinto ainda por localizar', () => {
+    expect(foraDePortugal(null, null)).toBe(false)
+    expect(foraDePortugal(38.7, null)).toBe(false)
+  })
+
+  it('o aviso diz as coordenadas e porque é que isto importa', () => {
+    const aviso = avisoForaDePortugal(-26.0144276, -51.3442306)
+    expect(aviso).toContain('-26.01443')
+    expect(aviso).toContain('quilómetros')
   })
 })

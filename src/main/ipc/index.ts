@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, powerSaveBlocker, shell } from 'electron'
+import { avisoForaDePortugal, foraDePortugal } from '../geo/limitesPortugal'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type {
@@ -393,6 +394,11 @@ export function registarIpc(contexto: {
   registar('geo:procurar', async (termo: string) => {
     const coladas = extrairCoordenadas(termo)
     if (coladas) {
+      // Apanha-se aqui, antes de gravar: é o momento em que quem colou ainda
+      // tem o mapa aberto e percebe que escolheu o homónimo de outro país.
+      if (foraDePortugal(coladas.lat, coladas.lng)) {
+        throw new Error(avisoForaDePortugal(coladas.lat, coladas.lng))
+      }
       return [
         {
           lat: coladas.lat,
@@ -411,6 +417,11 @@ export function registarIpc(contexto: {
     // recinto que a pesquisa não acerta — lê-se sem contactar ninguém.
     const coladas = extrairCoordenadas(termo)
     if (coladas) {
+      // Apanha-se aqui, antes de gravar: é o momento em que quem colou ainda
+      // tem o mapa aberto e percebe que escolheu o homónimo de outro país.
+      if (foraDePortugal(coladas.lat, coladas.lng)) {
+        throw new Error(avisoForaDePortugal(coladas.lat, coladas.lng))
+      }
       return [
         {
           lat: coladas.lat,

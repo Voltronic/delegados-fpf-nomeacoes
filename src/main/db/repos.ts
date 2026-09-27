@@ -27,6 +27,7 @@ import { dataHoraAGuardar, limiteDeTrabalho, vaiAcontecer } from '../../shared/d
 import { normalizarNome } from '../fpf/html'
 import { eRecintoPorIndicar } from '../fpf/recintoPorIndicar'
 import { jogosQueColidem, type Folga } from '../sync/conflitos'
+import { avisoForaDePortugal, foraDePortugal } from '../geo/limitesPortugal'
 
 const agora = (): string => new Date().toISOString()
 const bool = (v: unknown): boolean => v === 1 || v === true
@@ -433,6 +434,11 @@ export function atualizarRecinto(
   id: number,
   dados: { nome: string; morada: string | null; lat: number | null; lng: number | null; coordsManuais: boolean }
 ): Recinto {
+  // Um ponto fora do país só pode ser engano, e é dos que não se vê: fica
+  // gravado como confirmado e passa a inventar as distâncias todas do recinto.
+  if (foraDePortugal(dados.lat, dados.lng)) {
+    throw new Error(avisoForaDePortugal(dados.lat!, dados.lng!))
+  }
   obterBaseDados()
     .prepare(
       `UPDATE recinto SET nome = ?, nome_normalizado = ?, morada = ?, lat = ?, lng = ?,

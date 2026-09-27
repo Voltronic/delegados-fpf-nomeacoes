@@ -1813,6 +1813,28 @@ async function principal(): Promise<void> {
     const semCoords = repos.encontrarOuCriarRecinto('Campo Da Mata')
     verificar('há um recinto por localizar', repos.recintosSemCoordenadas().length >= 1)
 
+    // Um link do Google Maps com o homónimo de outro país é o engano mais fácil
+    // de cometer e o mais difícil de ver: ficava gravado como confirmado, e a
+    // partir daí todas as distâncias do recinto eram inventadas.
+    let recusouForaDePortugal = ''
+    try {
+      repos.atualizarRecinto(semCoords.id, {
+        nome: semCoords.nome,
+        morada: 'Castelo Branco, Paraná',
+        lat: -26.0144276,
+        lng: -51.3442306,
+        coordsManuais: true
+      })
+    } catch (erro) {
+      recusouForaDePortugal = (erro as Error).message
+    }
+    verificar(
+      'um recinto fora de Portugal é recusado, e continua por localizar',
+      recusouForaDePortugal.includes('não são em Portugal') &&
+        repos.obterRecinto(semCoords.id)?.lat == null,
+      `→ ${recusouForaDePortugal || 'aceitou'}`
+    )
+
     const atualizacao = await atualizarJogos(new ClienteFpf({ baseUrl: 'https://resultados.fpf.pt' }))
     verificar(
       'a atualização localiza os recintos sem que ninguém carregue num botão',
