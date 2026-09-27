@@ -180,6 +180,7 @@ export async function atualizarJogos(
     atualizados: 0,
     alertas: [],
     erros: [],
+    jogosFundidos: 0,
     competicoesComErro,
     recintosLocalizados: 0,
     recintosPorLocalizar: 0,
@@ -234,6 +235,15 @@ export async function atualizarJogos(
   // sincronização não lhes toca porque o texto da FPF não mudou. Corrige-se
   // aqui, antes de localizar: os recintos que isto cria são procurados já.
   const recintosCorrigidos = repos.reconciliarRecintos()
+
+  // Um clube que muda de nome no site — "Ad Fundão" passou a "Ad Fundão /
+  // Alambique" — fazia nascer outra vez todos os jogos dele, porque a chave
+  // natural inclui os clubes. Junta-se o que ficou a dobrar.
+  for (const duplicado of repos.jogosDuplicadosPorRenome()) {
+    repos.fundirJogoDuplicado(duplicado.manter, duplicado.remover)
+    resultado.jogosFundidos++
+    console.log(`Jogo a dobrar junto num só: ${duplicado.descricao}`)
+  }
 
   // Um recinto sem coordenadas não tem distâncias, e sem distâncias o motor não
   // ordena ninguém — não faz sentido deixar isto à espera de alguém se lembrar
@@ -351,6 +361,7 @@ async function correr(apenas?: number[], eNovaTentativa = false): Promise<void> 
       atualizados: 0,
       alertas: [],
       erros: [(erro as Error).message],
+      jogosFundidos: 0,
       // Sem saber quais falharam, volta-se a tentar as mesmas desta vez.
       competicoesComErro: apenas,
       recintosLocalizados: 0,

@@ -26,6 +26,7 @@ import { obterBaseDados, registarAuditoria } from './index'
 import { dataHoraAGuardar, limiteDeTrabalho, vaiAcontecer } from '../../shared/datas'
 import { normalizarNome } from '../fpf/html'
 import { eRecintoPorIndicar } from '../fpf/recintoPorIndicar'
+import { ePatrocinioAcrescentado } from '../fpf/renomeClube'
 import { jogosQueColidem, type Folga } from '../sync/conflitos'
 import { avisoForaDePortugal, foraDePortugal } from '../geo/limitesPortugal'
 
@@ -980,6 +981,50 @@ export function descreverAlteracao(
   return partes.length ? partes.join(' · ') : null
 }
 
+/**
+ * O mesmo jogo já gravado com o clube escrito de outra maneira.
+ *
+ * A chave natural inclui o nome dos clubes, e a FPF acrescenta patrocínios a
+ * meio da época: quando o "Ad Fundão" passou a "Ad Fundão / Alambique", a
+ * atualização deixou de reconhecer vinte jogos e criou-os outra vez.
+ *
+ * Só se aceita com tudo o resto igual — competição, jornada, dia e adversário.
+ * Com essas quatro condições não há confusão possível entre a equipa principal
+ * e a B: num mesmo dia e jornada, um adversário joga uma vez.
+ */
+function jogoDoMesmoEncontro(dados: EntradaJogo): { id: number } | undefined {
+  if (dados.fpfFixtureId == null || !dados.dataHora) return undefined
+  const candidatos = obterBaseDados()
+    .prepare(
+      `SELECT j.id, j.clube_casa_id, j.clube_fora_id, cc.nome AS casa, cf.nome AS fora
+         FROM jogo j
+         JOIN clube cc ON cc.id = j.clube_casa_id
+         JOIN clube cf ON cf.id = j.clube_fora_id
+        WHERE j.competicao_id = @competicaoId AND j.fpf_fixture_id = @fixtureId
+          AND substr(j.data_hora, 1, 10) = @dia
+          AND (j.clube_casa_id = @casa OR j.clube_fora_id = @fora)`
+    )
+    .all({
+      competicaoId: dados.competicaoId,
+      fixtureId: dados.fpfFixtureId,
+      dia: dados.dataHora.slice(0, 10),
+      casa: dados.clubeCasaId,
+      fora: dados.clubeForaId
+    }) as { id: number; clube_casa_id: number; clube_fora_id: number; casa: string; fora: string }[]
+
+  const nomeDoClube = obterBaseDados().prepare('SELECT nome FROM clube WHERE id = ?')
+  const nomeCasa = (nomeDoClube.get(dados.clubeCasaId) as { nome: string } | undefined)?.nome ?? ''
+  const nomeFora = (nomeDoClube.get(dados.clubeForaId) as { nome: string } | undefined)?.nome ?? ''
+  return candidatos.find((c) => {
+    const mesmaCasa = c.clube_casa_id === dados.clubeCasaId
+    const mesmoFora = c.clube_fora_id === dados.clubeForaId
+    if (mesmaCasa && mesmoFora) return true
+    if (mesmaCasa) return ePatrocinioAcrescentado(c.fora, nomeFora)
+    if (mesmoFora) return ePatrocinioAcrescentado(c.casa, nomeCasa)
+    return false
+  })
+}
+
 export function guardarJogo(dados: EntradaJogo): number {
   const db = obterBaseDados()
   const existente = obterJogoPorChave(dados.chaveNatural)
@@ -1002,6 +1047,20 @@ export function guardarJogo(dados: EntradaJogo): number {
     associarRecintoDoJogo(dados.clubeCasaId, dados.competicaoId, dados.recintoId)
     return existente.id
   }
+  // Antes de criar: o mesmo encontro pode já lá estar com o clube escrito de
+  // outra maneira. Atualiza-se esse, senão o jogo aparecia a dobrar na lista.
+  const mesmoEncontro = jogoDoMesmoEncontro(dados)
+  if (mesmoEncontro) {
+    db.prepare(
+      `UPDATE jogo SET chave_natural=@chaveNatural, clube_casa_id=@clubeCasaId,
+         clube_fora_id=@clubeForaId, data_hora=@dataHora, recinto_id=@recintoId,
+         recinto_texto_fpf=@recintoTextoFpf, estado=@estado, alterado_em=@alteradoEm
+       WHERE id=@id`
+    ).run({ ...dados, id: mesmoEncontro.id, alteradoEm: agora() })
+    associarRecintoDoJogo(dados.clubeCasaId, dados.competicaoId, dados.recintoId)
+    return mesmoEncontro.id
+  }
+
   const info = db
     .prepare(
       `INSERT INTO jogo (chave_natural, competicao_id, fase, serie, jornada, fpf_fixture_id, fpf_match_id,
@@ -1046,6 +1105,106 @@ export function seguirFpfDeNovo(id: number): JogoDetalhado | null {
     .run(id)
   registarAuditoria('jogo', id, 'seguir-fpf')
   return obterJogoDetalhado(id)
+}
+
+export interface JogoDuplicado {
+  /** O jogo que fica: é o mais antigo, com o histórico e a hora certa. */
+  manter: number
+  remover: number
+  descricao: string
+}
+
+/**
+ * Jogos a dobrar porque um clube mudou de nome no site da FPF.
+ *
+ * Fica o mais antigo: é o que tem as nomeações, os alertas e a hora real — o
+ * recém-criado costuma vir sem hora, porque a FPF deixa de a mostrar depois de
+ * o jogo se realizar.
+ */
+export function jogosDuplicadosPorRenome(): JogoDuplicado[] {
+  const linhas = obterBaseDados()
+    .prepare(
+      `SELECT a.id AS manter, b.id AS remover, a.data_hora AS quando,
+              ca.nome AS casa_a, fa.nome AS fora_a, cb.nome AS casa_b, fb.nome AS fora_b,
+              a.clube_casa_id AS casa_a_id, a.clube_fora_id AS fora_a_id,
+              b.clube_casa_id AS casa_b_id, b.clube_fora_id AS fora_b_id
+         FROM jogo a
+         JOIN jogo b ON a.id < b.id AND a.competicao_id = b.competicao_id
+          AND a.fpf_fixture_id = b.fpf_fixture_id
+          AND substr(a.data_hora, 1, 10) = substr(b.data_hora, 1, 10)
+          AND (a.clube_casa_id = b.clube_casa_id OR a.clube_fora_id = b.clube_fora_id)
+         JOIN clube ca ON ca.id = a.clube_casa_id
+         JOIN clube fa ON fa.id = a.clube_fora_id
+         JOIN clube cb ON cb.id = b.clube_casa_id
+         JOIN clube fb ON fb.id = b.clube_fora_id`
+    )
+    .all() as {
+    manter: number
+    remover: number
+    quando: string | null
+    casa_a: string
+    fora_a: string
+    casa_b: string
+    fora_b: string
+    casa_a_id: number
+    fora_a_id: number
+    casa_b_id: number
+    fora_b_id: number
+  }[]
+
+  return linhas
+    .filter((l) => {
+      const casaIgual = l.casa_a_id === l.casa_b_id
+      const foraIgual = l.fora_a_id === l.fora_b_id
+      if (casaIgual && foraIgual) return true
+      if (casaIgual) return ePatrocinioAcrescentado(l.fora_a, l.fora_b)
+      if (foraIgual) return ePatrocinioAcrescentado(l.casa_a, l.casa_b)
+      return false
+    })
+    .map((l) => ({
+      manter: l.manter,
+      remover: l.remover,
+      descricao: `${l.casa_b} × ${l.fora_b} (${l.quando?.slice(0, 10) ?? 'sem data'})`
+    }))
+}
+
+/**
+ * Junta um jogo duplicado no que fica: o nome novo dos clubes passa para lá, as
+ * nomeações que só existirem no duplicado são recuperadas, e o duplicado é
+ * apagado.
+ */
+export function fundirJogoDuplicado(manter: number, remover: number): void {
+  const db = obterBaseDados()
+  const transacao = db.transaction(() => {
+    const novo = db.prepare('SELECT * FROM jogo WHERE id = ?').get(remover) as LinhaJogo | undefined
+    if (!novo) return
+
+    const papeisQueFicam = new Set(
+      (db.prepare(`SELECT papel FROM nomeacao WHERE jogo_id = ? AND estado <> 'CANCELADA'`).all(manter) as {
+        papel: string
+      }[]).map((n) => n.papel)
+    )
+    for (const n of db
+      .prepare(`SELECT id, papel FROM nomeacao WHERE jogo_id = ? AND estado <> 'CANCELADA'`)
+      .all(remover) as { id: number; papel: string }[]) {
+      if (papeisQueFicam.has(n.papel)) continue
+      db.prepare('UPDATE nomeacao SET jogo_id = ? WHERE id = ?').run(manter, n.id)
+    }
+
+    // Primeiro sai o duplicado, e só depois o que fica recebe a chave dele: a
+    // chave natural é única, e as duas linhas não podem tê-la ao mesmo tempo.
+    db.prepare('DELETE FROM jogo WHERE id = ?').run(remover)
+
+    // O nome do clube é o que a FPF usa agora; a hora fica a do jogo que fica,
+    // porque o duplicado costuma vir sem ela.
+    db.prepare(
+      `UPDATE jogo SET chave_natural = ?, clube_casa_id = ?, clube_fora_id = ?,
+         recinto_texto_fpf = COALESCE(?, recinto_texto_fpf)
+       WHERE id = ?`
+    ).run(novo.chave_natural, novo.clube_casa_id, novo.clube_fora_id, novo.recinto_texto_fpf, manter)
+  })
+  transacao()
+  registarAuditoria('jogo', manter, 'fundir-duplicado', { remover })
 }
 
 export function apagarJogo(id: number): void {

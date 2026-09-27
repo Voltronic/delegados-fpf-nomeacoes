@@ -8,6 +8,7 @@ const resultado = (extra: Partial<ResultadoAtualizacao>): ResultadoAtualizacao =
   atualizados: 0,
   alertas: [],
   erros: [],
+  jogosFundidos: 0,
   recintosLocalizados: 0,
   recintosPorLocalizar: 0,
   recintosPorConfirmar: 0,

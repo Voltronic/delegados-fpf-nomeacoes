@@ -509,6 +509,8 @@ export interface ResultadoAtualizacao {
    * a tentar só essas pouco depois. Sem valor, não se sabe quais foram.
    */
   competicoesComErro?: number[]
+  /** Jogos que estavam a dobrar por um clube ter mudado de nome, e foram juntos. */
+  jogosFundidos: number
   /** Recintos novos que ficaram com ponto no mapa nesta atualização. */
   recintosLocalizados: number
   /** Recintos que continuam sem coordenadas e precisam de mão humana. */

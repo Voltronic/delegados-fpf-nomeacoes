@@ -2036,6 +2036,93 @@ async function principal(): Promise<void> {
       `→ ${matriz.colunas.map((c) => c.etiqueta).join(' | ')}`
     )
 
+    log('\n12d. Clubes que mudam de nome no site da FPF')
+    // O caso real: o "Ad Fundão" passou a "Ad Fundão / Alambique" a meio de
+    // setembro e apareceram vinte jogos a dobrar, porque a chave de um jogo
+    // inclui o nome dos clubes.
+    const semPatrocinio = repos.encontrarOuCriarClube('Ad Teste')
+    const adversarioDoTeste = repos.encontrarOuCriarClube('Clube Adversário De Teste')
+    const dadosDoJogo = {
+      competicaoId: competicao.id,
+      fase: null,
+      serie: null,
+      jornada: '1',
+      fpfFixtureId: 777001,
+      fpfMatchId: null,
+      dataHora: horasDaqui(200),
+      clubeForaId: adversarioDoTeste.id,
+      recintoId: recintos[0].id,
+      recintoTextoFpf: null,
+      estado: 'AGENDADO' as const
+    }
+    const jogoOriginal = repos.guardarJogo({
+      ...dadosDoJogo,
+      chaveNatural: `${competicao.id}:777001:adteste:clubeadversariodeteste`,
+      clubeCasaId: semPatrocinio.id
+    })
+    await nomear({ jogoId: jogoOriginal, delegadoId: delegados[0].id, papel: 'PRINCIPAL' })
+
+    const comPatrocinio = repos.encontrarOuCriarClube('Ad Teste / Patrocínio')
+    const depoisDoRenome = repos.guardarJogo({
+      ...dadosDoJogo,
+      chaveNatural: `${competicao.id}:777001:adtestepatrocinio:clubeadversariodeteste`,
+      clubeCasaId: comPatrocinio.id
+    })
+    const jogoAtualizado = repos.obterJogoDetalhado(jogoOriginal)
+    verificar(
+      'um clube que muda de nome não faz nascer o jogo outra vez',
+      depoisDoRenome === jogoOriginal &&
+        jogoAtualizado?.clubeCasaNome === 'Ad Teste / Patrocínio' &&
+        jogoAtualizado.nomeacoes.length === 1,
+      `→ jogo ${depoisDoRenome} (era ${jogoOriginal}), ${jogoAtualizado?.clubeCasaNome}, ` +
+        `${jogoAtualizado?.nomeacoes.length} nomeação(ões)`
+    )
+
+    // A equipa B é outra equipa: tem outros jogos e outros delegados.
+    const equipaB = repos.encontrarOuCriarClube('Ad Teste "B"')
+    const jogoDaEquipaB = repos.guardarJogo({
+      ...dadosDoJogo,
+      chaveNatural: `${competicao.id}:777001:adtesteb:clubeadversariodeteste`,
+      clubeCasaId: equipaB.id
+    })
+    verificar(
+      'mas a equipa B continua a ser um jogo à parte',
+      jogoDaEquipaB !== jogoOriginal,
+      `→ jogo ${jogoDaEquipaB} contra ${jogoOriginal}`
+    )
+    repos.apagarJogo(jogoDaEquipaB)
+
+    // E os que já nasceram a dobrar, antes desta regra, juntam-se na atualização.
+    obterBaseDados()
+      .prepare(
+        `INSERT INTO jogo (chave_natural, competicao_id, fase, serie, jornada, fpf_fixture_id,
+           fpf_match_id, data_hora, clube_casa_id, clube_fora_id, recinto_id, recinto_texto_fpf,
+           estado, importado_em)
+         VALUES (?, ?, NULL, NULL, '1', 777001, NULL, ?, ?, ?, NULL, NULL, 'AGENDADO', ?)`
+      )
+      .run(
+        `${competicao.id}:777001:adtestepatrociniodobrado:clubeadversariodeteste`,
+        competicao.id,
+        `${(dadosDoJogo.dataHora ?? '').slice(0, 10)}T00:00`,
+        comPatrocinio.id,
+        adversarioDoTeste.id,
+        new Date().toISOString()
+      )
+    const duplicados = repos.jogosDuplicadosPorRenome()
+    for (const d of duplicados) repos.fundirJogoDuplicado(d.manter, d.remover)
+    const sobrou = repos.listarJogos({ levaDelegado: 'TODOS' }).filter((j) => j.fpfFixtureId === 777001)
+    verificar(
+      'um jogo que já estava a dobrar é junto num só, sem perder a nomeação',
+      duplicados.length === 1 &&
+        sobrou.length === 1 &&
+        sobrou[0].id === jogoOriginal &&
+        sobrou[0].nomeacoes.length === 1 &&
+        !(sobrou[0].dataHora ?? '').endsWith('T00:00'),
+      `→ ${duplicados.length} duplicado(s), ficou ${sobrou.length} jogo com ` +
+        `${sobrou[0]?.nomeacoes.length} nomeação(ões) às ${sobrou[0]?.dataHora?.slice(11)}`
+    )
+    repos.apagarJogo(jogoOriginal)
+
     log('\n13. Limpar as nomeações (dados de teste)')
     // Apagar as nomeações (limpeza dos dados de teste) só pode levar as
     // nomeações — delegados, clubes, recintos e jogos ficam.
