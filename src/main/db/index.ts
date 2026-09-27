@@ -62,8 +62,11 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
   // exista só preenchem o que estiver em falta.
   if (comRecintos) {
     const semente = semearRecintos(conn)
-    if (semente.criados || semente.preenchidos) {
-      console.log(`Recintos conhecidos: ${semente.criados} criados, ${semente.preenchidos} preenchidos`)
+    if (semente.criados || semente.preenchidos || semente.atualizados) {
+      console.log(
+        `Recintos conhecidos: ${semente.criados} criados, ${semente.preenchidos} preenchidos, ` +
+          `${semente.atualizados} corrigidos`
+      )
     }
     // O que já tinha acontecido antes de a aplicação entrar ao serviço: jogos
     // da época, clubes, recintos e as nomeações oficiais da FPF.

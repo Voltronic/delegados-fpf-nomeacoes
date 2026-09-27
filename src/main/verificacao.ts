@@ -188,7 +188,7 @@ async function principal(): Promise<void> {
     )
     const conhecido = RECINTOS_CONHECIDOS[0]
     const outro = RECINTOS_CONHECIDOS[1]
-    // Um com coordenadas diferentes das da lista: tem de ficar como está.
+    // Um com coordenadas diferentes das da lista: tem de ser corrigido.
     semente
       .prepare(
         `INSERT INTO recinto (nome, nome_normalizado, morada, lat, lng, confirmado)
@@ -216,13 +216,17 @@ async function principal(): Promise<void> {
       'a semente cria os recintos que faltam e conta certo',
       totalSemeado === RECINTOS_CONHECIDOS.length &&
         resultadoSemente.criados === RECINTOS_CONHECIDOS.length - 2 &&
-        resultadoSemente.preenchidos === 1,
-      `→ ${totalSemeado} recintos, ${resultadoSemente.criados} criados, ${resultadoSemente.preenchidos} preenchidos`
+        resultadoSemente.preenchidos === 1 &&
+        resultadoSemente.atualizados === 1,
+      `→ ${totalSemeado} recintos, ${resultadoSemente.criados} criados, ` +
+        `${resultadoSemente.preenchidos} preenchidos, ${resultadoSemente.atualizados} corrigidos`
     )
+    // A lista manda: é assim que uma correção — um recinto que estava no país
+    // errado, por exemplo — chega a todas as instalações.
     verificar(
-      'nunca mexe num recinto que já tem coordenadas',
-      jaExistia.lat === 1.5 && jaExistia.lng === 2.5 && jaExistia.morada === 'morada do coordenador',
-      `→ ${jaExistia.lat}, ${jaExistia.lng}`
+      'corrige um recinto que estava noutro sítio',
+      jaExistia.lat === conhecido.lat && jaExistia.lng === conhecido.lng,
+      `→ ${jaExistia.lat}, ${jaExistia.lng} (era 1.5, 2.5)`
     )
     verificar(
       'preenche o que existia sem ponto no mapa',
@@ -232,10 +236,12 @@ async function principal(): Promise<void> {
     // Arrancar outra vez não pode voltar a mexer em nada.
     const segundaSemente = semearRecintos(semente)
     verificar(
-      'arrancar outra vez não repete nem duplica',
+      'arrancar outra vez não repete, não duplica e não volta a corrigir',
       segundaSemente.criados === 0 &&
         segundaSemente.preenchidos === 0 &&
-        (semente.prepare('SELECT COUNT(*) AS n FROM recinto').get() as { n: number }).n === totalSemeado
+        segundaSemente.atualizados === 0 &&
+        (semente.prepare('SELECT COUNT(*) AS n FROM recinto').get() as { n: number }).n === totalSemeado,
+      `→ ${JSON.stringify(segundaSemente)}`
     )
     semente.close()
 
