@@ -991,6 +991,69 @@ app.whenReady().then(async () => {
       `→ ${scrollInterno} com scroll interno`
     )
 
+    // As três tabelas têm de rolar com a página: dentro de um contentor com
+    // scroll próprio, o cabeçalho cola-se a ele — que não rola na vertical — e
+    // fica para trás enquanto se percorre a tabela.
+    const cabecalhosDoDashboard = await noEcra<{ tabelas: number; presas: string[]; fixas: number }>(`
+      const tabelas = [...document.querySelectorAll('.corpo-ecra table.tabela')];
+      const presas = [];
+      let fixas = 0;
+      for (const tabela of tabelas) {
+        const th = tabela.querySelector('thead th');
+        if (th && getComputedStyle(th).position === 'sticky') fixas++;
+        let pai = tabela.parentElement;
+        while (pai && pai !== document.body) {
+          const estilo = getComputedStyle(pai);
+          if (estilo.overflow !== 'visible' || estilo.overflowY !== 'visible') {
+            if (!pai.classList.contains('corpo-ecra')) presas.push(pai.className || pai.tagName);
+            break;
+          }
+          pai = pai.parentElement;
+        }
+      }
+      return { tabelas: tabelas.length, presas, fixas };`)
+    verificar(
+      'os cabeçalhos das três tabelas do dashboard acompanham a rolagem',
+      cabecalhosDoDashboard.tabelas === 3 && cabecalhosDoDashboard.fixas === 3 && cabecalhosDoDashboard.presas.length === 0,
+      `→ ${cabecalhosDoDashboard.tabelas} tabelas, ${cabecalhosDoDashboard.fixas} com cabeçalho fixo, ` +
+        `presas em: ${cabecalhosDoDashboard.presas.join(', ') || 'nenhuma'}`
+    )
+
+    // O filtro de nível vale para o ecrã inteiro.
+    const linhasAntesDoFiltro = await noEcra<number[]>(
+      "return [...document.querySelectorAll('.corpo-ecra table.tabela')].map((t) => t.querySelectorAll('tbody tr').length);"
+    )
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.cabecalho-ecra .grupo-botoes button')].find((b) => b.textContent.trim() === 'Elite')?.click()"
+    )
+    await esperar(400)
+    const comElite = await noEcra<{ linhas: number[]; emblemas: string[] }>(`
+      const tabelas = [...document.querySelectorAll('.corpo-ecra table.tabela')];
+      return {
+        linhas: tabelas.map((t) => t.querySelectorAll('tbody tr').length),
+        emblemas: [...tabelas[0].querySelectorAll('tbody .emblema')].map((e) => e.textContent.trim())
+      };`)
+    verificar(
+      'filtrar por elite ajusta as três tabelas',
+      comElite.linhas.every((n, i) => n < linhasAntesDoFiltro[i]) &&
+        comElite.linhas[0] > 0 &&
+        comElite.emblemas.every((e) => e === 'Elite'),
+      `→ ${linhasAntesDoFiltro.join('/')} linhas para ${comElite.linhas.join('/')}, ` +
+        `níveis: ${[...new Set(comElite.emblemas)].join(', ')}`
+    )
+    await janela.webContents.executeJavaScript(
+      "[...document.querySelectorAll('.cabecalho-ecra .grupo-botoes button')].find((b) => b.textContent.trim() === 'Todos')?.click()"
+    )
+    await esperar(400)
+    const linhasDepoisDeRepor = await noEcra<number[]>(
+      "return [...document.querySelectorAll('.corpo-ecra table.tabela')].map((t) => t.querySelectorAll('tbody tr').length);"
+    )
+    verificar(
+      'e voltar a todos repõe as listas',
+      linhasDepoisDeRepor.every((n, i) => n === linhasAntesDoFiltro[i]),
+      `→ ${linhasDepoisDeRepor.join('/')} contra ${linhasAntesDoFiltro.join('/')}`
+    )
+
     log('\n3b2. Paginação do histórico')
     await irPara('Histórico')
     // Com uma época inteira o histórico chega a centenas de linhas:

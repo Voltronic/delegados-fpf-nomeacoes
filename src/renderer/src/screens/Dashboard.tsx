@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Epoca, LinhaKmDelegado, LinhaRepeticoes, MatrizDashboard } from '@shared/tipos'
+import type {
+  Epoca,
+  LinhaKmDelegado,
+  LinhaRepeticoes,
+  MatrizDashboard,
+  NivelDelegado
+} from '@shared/tipos'
 import JogosDoDelegado from '../components/JogosDoDelegado'
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
@@ -7,6 +13,7 @@ import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
 export default function Dashboard(): JSX.Element {
   const [epocas, setEpocas] = useState<Epoca[]>([])
   const [detalhe, setDetalhe] = useState<LinhaKmDelegado | null>(null)
+  const [nivel, setNivel] = useState<'TODOS' | NivelDelegado>('TODOS')
   const [seasonId, setSeasonId] = useState<number | ''>('')
   const [km, setKm] = useState<LinhaKmDelegado[]>([])
   const [porCompeticao, setPorCompeticao] = useState<MatrizDashboard | null>(null)
@@ -48,21 +55,49 @@ export default function Dashboard(): JSX.Element {
       }),
       []
     )
-  const { ordenadas: kmOrdenado, ordem: ordemKm, alternar: alternarKm } = useOrdenacao(km, colunasKm, {
+  // O filtro de nível vale para o ecrã inteiro: as três tabelas mostram os
+  // mesmos delegados, senão comparava-se uma lista com outra diferente.
+  const visiveis = useMemo(
+    () => (nivel === 'TODOS' ? km : km.filter((l) => l.nivel === nivel)),
+    [km, nivel]
+  )
+  const idsVisiveis = useMemo(() => new Set(visiveis.map((l) => l.delegadoId)), [visiveis])
+  const porCompeticaoVisivel = useMemo(() => {
+    if (!porCompeticao || nivel === 'TODOS') return porCompeticao
+    return {
+      ...porCompeticao,
+      linhas: porCompeticao.linhas.filter((l) => idsVisiveis.has(l.delegadoId)),
+      celulas: porCompeticao.celulas.filter((c) => idsVisiveis.has(c.delegadoId))
+    }
+  }, [porCompeticao, idsVisiveis, nivel])
+  const repeticoesVisiveis = useMemo(
+    () => (nivel === 'TODOS' ? repeticoes : repeticoes.filter((l) => idsVisiveis.has(l.delegadoId))),
+    [repeticoes, idsVisiveis, nivel]
+  )
+
+  const {
+    ordenadas: kmOrdenado,
+    ordem: ordemKm,
+    alternar: alternarKm
+  } = useOrdenacao(visiveis, colunasKm, {
     coluna: 'km',
     sentido: 'desc'
   })
 
-  const kmMaximo = Math.max(1, ...km.map((l) => l.km))
-  const totalKm = km.reduce((a, l) => a + l.km, 0)
-  const totalJogos = km.reduce((a, l) => a + l.jogos, 0)
-  const totalVoos = km.reduce((a, l) => a + l.voos, 0)
-  const amplitude = km.length ? Math.max(...km.map((l) => l.km)) - Math.min(...km.map((l) => l.km)) : 0
+  // Os totais seguem o filtro; o desvio não, porque é a distância à média da
+  // época inteira — é isso que o coordenador quer equilibrar.
+  const kmMaximo = Math.max(1, ...visiveis.map((l) => l.km))
+  const totalKm = visiveis.reduce((a, l) => a + l.km, 0)
+  const totalJogos = visiveis.reduce((a, l) => a + l.jogos, 0)
+  const totalVoos = visiveis.reduce((a, l) => a + l.voos, 0)
+  const amplitude = visiveis.length
+    ? Math.max(...visiveis.map((l) => l.km)) - Math.min(...visiveis.map((l) => l.km))
+    : 0
 
   function exportarCsv(): void {
     const linhas = [
       ['Numero', 'Nome', 'Nivel', 'Jogos', 'Voos', 'Km', 'Desvio', 'Horas'].join(';'),
-      ...km.map((l) =>
+      ...visiveis.map((l) =>
         [l.numero, l.nome, l.nivel, l.jogos, l.voos, l.km, l.desvio, (l.minutos / 60).toFixed(1)].join(';')
       )
     ].join('\n')
@@ -88,7 +123,25 @@ export default function Dashboard(): JSX.Element {
             ))}
           </select>
         </div>
+        <div className="grupo-botoes">
+          {(
+            [
+              ['TODOS', 'Todos'],
+              ['ELITE', 'Elite'],
+              ['PRINCIPAL', 'Principais']
+            ] as ['TODOS' | NivelDelegado, string][]
+          ).map(([chave, etiqueta]) => (
+            <button
+              key={chave}
+              className={classes(nivel === chave && 'ativo')}
+              onClick={() => setNivel(chave)}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
         <div className="subtitulo">
+          {visiveis.length} {visiveis.length === 1 ? 'delegado' : 'delegados'} ·{' '}
           {totalJogos} nomeações · {formatarKm(totalKm)} no total · amplitude entre delegados{' '}
           <b>{formatarKm(amplitude)}</b>
           {totalVoos > 0 && (
@@ -210,8 +263,8 @@ export default function Dashboard(): JSX.Element {
           )}
         </div>
 
-        <Matriz titulo="Jogos por competição" matriz={porCompeticao} />
-        <Repeticoes linhas={repeticoes} />
+        <Matriz titulo="Jogos por competição" matriz={porCompeticaoVisivel} />
+        <Repeticoes linhas={repeticoesVisiveis} />
       </div>
 
       {detalhe && (
@@ -272,66 +325,63 @@ function Matriz({ titulo, matriz }: { titulo: string; matriz: MatrizDashboard | 
     <div className="cartao">
       <h2>{titulo}</h2>
       {/*
-        Sem altura máxima: o cartão cresce com o número de delegados e quem
-        rola é a página. Com um limite fixo, a tabela ficava com um scroll
-        próprio dentro de outro, e nunca se via a lista toda de uma vez.
-        A rolagem horizontal fica, porque as colunas são tantas quantos os
-        clubes da época.
+        Sem contentor com scroll à volta: quem rola é a página, e é isso que
+        faz o cabeçalho acompanhar a rolagem até ao fim da tabela. Dentro de um
+        contentor próprio, o cabeçalho colava-se a ele — que não rola na
+        vertical — e ficava para trás.
       */}
-      <div className="envolve-tabela" style={{ border: 'none', maxHeight: 'none', overflowY: 'visible' }}>
-        <table className="tabela">
-          <thead>
-            <tr>
+      <table className="tabela">
+        <thead>
+          <tr>
+            <ColunaOrdenavel
+              coluna="delegado"
+              ordem={ordem}
+              alternar={alternar}
+              style={{ position: 'sticky', left: 0, zIndex: 2 }}
+            >
+              Delegado
+            </ColunaOrdenavel>
+            {colunas.map((c) => (
               <ColunaOrdenavel
-                coluna="delegado"
+                key={c.chave}
+                coluna={c.chave}
                 ordem={ordem}
                 alternar={alternar}
-                style={{ position: 'sticky', left: 0, zIndex: 2 }}
+                className="num"
+                title={c.etiqueta}
               >
-                Delegado
+                {c.etiqueta.length > 22 ? `${c.etiqueta.slice(0, 20)}…` : c.etiqueta}
               </ColunaOrdenavel>
-              {colunas.map((c) => (
-                <ColunaOrdenavel
-                  key={c.chave}
-                  coluna={c.chave}
-                  ordem={ordem}
-                  alternar={alternar}
-                  className="num"
-                  title={c.etiqueta}
-                >
-                  {c.etiqueta.length > 22 ? `${c.etiqueta.slice(0, 20)}…` : c.etiqueta}
-                </ColunaOrdenavel>
-              ))}
-              <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
-                Total
-              </ColunaOrdenavel>
-            </tr>
-          </thead>
-          <tbody>
-            {ordenadas.map((l) => {
-              const total = colunas.reduce((a, c) => a + valor(l.delegadoId, c.chave), 0)
-              return (
-                <tr key={l.delegadoId}>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <span className="mono silencioso">{l.numero}</span> {l.nome}
-                  </td>
-                  {colunas.map((c) => {
-                    const v = valor(l.delegadoId, c.chave)
-                    return (
-                      <td key={c.chave} className={classes('num', v === 0 ? 'matriz-celula-0' : 'matriz-celula-n')}>
-                        {v === 0 ? '·' : v}
-                      </td>
-                    )
-                  })}
-                  <td className="num">
-                    <b>{total}</b>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+            ))}
+            <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
+              Total
+            </ColunaOrdenavel>
+          </tr>
+        </thead>
+        <tbody>
+          {ordenadas.map((l) => {
+            const total = colunas.reduce((a, c) => a + valor(l.delegadoId, c.chave), 0)
+            return (
+              <tr key={l.delegadoId}>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <span className="mono silencioso">{l.numero}</span> {l.nome}
+                </td>
+                {colunas.map((c) => {
+                  const v = valor(l.delegadoId, c.chave)
+                  return (
+                    <td key={c.chave} className={classes('num', v === 0 ? 'matriz-celula-0' : 'matriz-celula-n')}>
+                      {v === 0 ? '·' : v}
+                    </td>
+                  )
+                })}
+                <td className="num">
+                  <b>{total}</b>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -383,65 +433,63 @@ function Repeticoes({ linhas }: { linhas: LinhaRepeticoes[] }): JSX.Element {
       {linhas.length === 0 ? (
         <div className="vazio">Sem dados ainda.</div>
       ) : (
-        <div className="envolve-tabela" style={{ border: 'none', maxHeight: 'none', overflowY: 'visible' }}>
-          <table className="tabela">
-            <thead>
-              <tr>
-                <ColunaOrdenavel
-                  coluna="delegado"
-                  ordem={ordem}
-                  alternar={alternar}
-                  style={{ position: 'sticky', left: 0, zIndex: 2, width: 200 }}
-                >
-                  Delegado
+        <table className="tabela">
+          <thead>
+            <tr>
+              <ColunaOrdenavel
+                coluna="delegado"
+                ordem={ordem}
+                alternar={alternar}
+                style={{ position: 'sticky', left: 0, zIndex: 2, width: 200 }}
+              >
+                Delegado
+              </ColunaOrdenavel>
+              {colunas.map((vezes) => (
+                <ColunaOrdenavel key={vezes} coluna={String(vezes)} ordem={ordem} alternar={alternar}>
+                  {vezes}×
                 </ColunaOrdenavel>
-                {colunas.map((vezes) => (
-                  <ColunaOrdenavel key={vezes} coluna={String(vezes)} ordem={ordem} alternar={alternar}>
-                    {vezes}×
-                  </ColunaOrdenavel>
-                ))}
-                <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
-                  Total
-                </ColunaOrdenavel>
-              </tr>
-            </thead>
-            <tbody>
-              {ordenadas.map((l) => (
-                <tr key={l.delegadoId}>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <span className="mono silencioso">{l.numero}</span> {l.nome}
-                  </td>
-                  {colunas.map((vezes) => {
-                    const doGrupo = l.repeticoes.filter((r) => r.vezes === vezes)
-                    return (
-                      <td key={vezes} className={doGrupo.length === 0 ? 'matriz-celula-0' : undefined}>
-                        {doGrupo.length === 0 ? (
-                          '·'
-                        ) : (
-                          <div className="chips">
-                            {doGrupo.map((r) => (
-                              <span
-                                key={`${r.clubeId}-${r.competicaoId}`}
-                                className="chip-delegado"
-                                title={`${r.clubeNome} — ${r.competicaoNome} (${r.vezes} vezes)`}
-                              >
-                                {r.clubeNome}
-                                <span className="silencioso"> · {r.competicaoNome}</span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    )
-                  })}
-                  <td className="num">
-                    <b>{l.repeticoes.length}</b>
-                  </td>
-                </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+              <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
+                Total
+              </ColunaOrdenavel>
+            </tr>
+          </thead>
+          <tbody>
+            {ordenadas.map((l) => (
+              <tr key={l.delegadoId}>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <span className="mono silencioso">{l.numero}</span> {l.nome}
+                </td>
+                {colunas.map((vezes) => {
+                  const doGrupo = l.repeticoes.filter((r) => r.vezes === vezes)
+                  return (
+                    <td key={vezes} className={doGrupo.length === 0 ? 'matriz-celula-0' : undefined}>
+                      {doGrupo.length === 0 ? (
+                        '·'
+                      ) : (
+                        <div className="chips">
+                          {doGrupo.map((r) => (
+                            <span
+                              key={`${r.clubeId}-${r.competicaoId}`}
+                              className="chip-delegado"
+                              title={`${r.clubeNome} — ${r.competicaoNome} (${r.vezes} vezes)`}
+                            >
+                              {r.clubeNome}
+                              <span className="silencioso"> · {r.competicaoNome}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  )
+                })}
+                <td className="num">
+                  <b>{l.repeticoes.length}</b>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   )
