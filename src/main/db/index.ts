@@ -68,17 +68,15 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
           `${semente.atualizados} corrigidos`
       )
     }
-    // O que já tinha acontecido antes de a aplicação entrar ao serviço: jogos
-    // da época, clubes, recintos e as nomeações oficiais da FPF.
+    // Clubes, recintos, competições e jogos que a aplicação traz consigo, para
+    // uma instalação nova ter com que trabalhar. Nunca nomeações, e nunca por
+    // cima do que já exista.
     const historico = semearHistorico(conn)
-    if (historico.jogosCriados || historico.nomeacoesCriadas || historico.nomeacoesSubstituidas) {
+    if (historico.jogosCriados || historico.competicoesCriadas || historico.clubesCriados) {
       console.log(
-        `Histórico da época: ${historico.jogosCriados} jogos, ${historico.nomeacoesCriadas} nomeações, ` +
-          `${historico.nomeacoesSubstituidas} corrigidas, ${historico.horasRepostas} horas repostas`
+        `Semente da época: ${historico.jogosCriados} jogos, ${historico.competicoesCriadas} competições, ` +
+          `${historico.clubesCriados} clubes, ${historico.recintosCriados} recintos`
       )
-    }
-    if (historico.delegadosEmFalta.length) {
-      console.warn('Histórico: delegados sem correspondência (número):', historico.delegadosEmFalta.join(', '))
     }
   }
   db = conn
