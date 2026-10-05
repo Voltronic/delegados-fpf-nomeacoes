@@ -15,7 +15,7 @@ import { avisar, mensagemDeErro } from '../lib/avisos'
  * jogos e quilómetros leva cada delegado, quando é que alguém esteve num clube.
  *
  * Entram todos os jogos passados das competições com delegado em todos os
- * jogos, e das outras só os escolhidos. Os jogos de hoje e de ontem dessas
+ * jogos, e das outras só os escolhidos. Os jogos dos últimos três dias dessas
  * competições que ninguém escolheu podem ser recuperados num popup, como na
  * lista da semana, para trazer um jogo que afinal teve delegado e registar
  * quem lá foi.
@@ -45,13 +45,13 @@ export default function Historico(): JSX.Element {
   }, [competicaoId, texto])
 
   // Os jogos das competições sem delegado fixo que ninguém escolheu, só de hoje
-  // e de ontem: recuperar serve para um jogo que acabou de acontecer, e uma
+  // de ontem e de anteontem: recuperar serve para um jogo recente, e uma
   // época inteira de jogos antigos só atrapalhava a escolha. A competição e a
   // procura escolhem-se dentro do popup.
   const carregarOutros = useCallback(async () => {
-    const ontem = new Date()
-    ontem.setDate(ontem.getDate() - 1)
-    setOutros(await window.api.jogos.historico({ levaDelegado: 'SEM', de: paraDataIso(ontem) }))
+    const anteontem = new Date()
+    anteontem.setDate(anteontem.getDate() - 2)
+    setOutros(await window.api.jogos.historico({ levaDelegado: 'SEM', de: paraDataIso(anteontem) }))
   }, [])
 
   useEffect(() => {
@@ -301,7 +301,7 @@ export default function Historico(): JSX.Element {
       {escolherOutros && (
         <EscolherOutrosJogos
           titulo="Jogos de competições sem delegado fixo"
-          subtitulo="Jogos de hoje e de ontem, já realizados, de competições em que só alguns levam delegado. Escolha os que tiveram delegado."
+          subtitulo="Jogos de hoje, de ontem e de anteontem, já realizados, de competições em que só alguns levam delegado. Escolha os que tiveram delegado."
           jogos={outros}
           textoConfirmar={(n) => (n === 1 ? 'Trazer 1 jogo para o histórico' : `Trazer ${n} jogos para o histórico`)}
           aFechar={() => setEscolherOutros(false)}

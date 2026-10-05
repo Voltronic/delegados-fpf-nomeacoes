@@ -139,11 +139,14 @@ function semear(): void {
   })
 
   // E dois jogos da mesma Taça já realizados, que ninguém escolheu: o de ontem
-  // tem de aparecer para recuperar no histórico, o de há três dias não.
+  // e o de anteontem têm de aparecer para recuperar no histórico; o de há
+  // quatro dias não.
   const ontem = new Date(hoje)
   ontem.setDate(hoje.getDate() - 1)
-  const haTresDias = new Date(hoje)
-  haTresDias.setDate(hoje.getDate() - 3)
+  const anteontem = new Date(hoje)
+  anteontem.setDate(hoje.getDate() - 2)
+  const haQuatroDias = new Date(hoje)
+  haQuatroDias.setDate(hoje.getDate() - 4)
   repos.guardarJogo({
     chaveNatural: 'ui:taca-passada',
     competicaoId: taca.id,
@@ -160,6 +163,21 @@ function semear(): void {
     estado: 'REALIZADO'
   })
   repos.guardarJogo({
+    chaveNatural: 'ui:taca-anteontem',
+    competicaoId: taca.id,
+    fase: null,
+    serie: null,
+    jornada: null,
+    fpfFixtureId: 652396,
+    fpfMatchId: null,
+    dataHora: `${anteontem.getFullYear()}-${pd(anteontem.getMonth() + 1)}-${pd(anteontem.getDate())}T11:00`,
+    clubeCasaId: clubes[2].id,
+    clubeForaId: clubes[1].id,
+    recintoId: recintos[2].id,
+    recintoTextoFpf: null,
+    estado: 'REALIZADO'
+  })
+  repos.guardarJogo({
     chaveNatural: 'ui:taca-antiga',
     competicaoId: taca.id,
     fase: null,
@@ -167,7 +185,7 @@ function semear(): void {
     jornada: null,
     fpfFixtureId: 652397,
     fpfMatchId: null,
-    dataHora: `${haTresDias.getFullYear()}-${pd(haTresDias.getMonth() + 1)}-${pd(haTresDias.getDate())}T11:00`,
+    dataHora: `${haQuatroDias.getFullYear()}-${pd(haQuatroDias.getMonth() + 1)}-${pd(haQuatroDias.getDate())}T11:00`,
     clubeCasaId: clubes[0].id,
     clubeForaId: clubes[2].id,
     recintoId: recintos[0].id,
@@ -1141,7 +1159,7 @@ app.whenReady().then(async () => {
       return { existe: !!b, texto: b?.textContent ?? '' };`)
     verificar(
       'o histórico mostra a barra dos jogos de competições sem delegado fixo',
-      barraHistorico.existe && /1 jogo de competições sem delegado fixo/.test(barraHistorico.texto),
+      barraHistorico.existe && /2 jogos de competições sem delegado fixo/.test(barraHistorico.texto),
       `→ ${barraHistorico.texto || 'sem barra'}`
     )
     await janela.webContents.executeJavaScript("document.querySelector('.outros-jogos .cabecalho')?.click()")
@@ -1150,10 +1168,10 @@ app.whenReady().then(async () => {
       const m = document.querySelector('.escolher-outros-jogos');
       return { aberto: !!m, linhas: m ? [...m.querySelectorAll('tbody tr')].map((tr) => tr.textContent) : [] };`)
     verificar(
-      'o popup do histórico só tem os jogos de hoje e de ontem, não os mais antigos',
+      'o popup do histórico tem os jogos dos últimos três dias, e não os mais antigos',
       popupHistorico.aberto &&
-        popupHistorico.linhas.length === 1 &&
-        popupHistorico.linhas[0].includes('TAÇA DE PORTUGAL DE TESTE'),
+        popupHistorico.linhas.length === 2 &&
+        popupHistorico.linhas.every((l) => l.includes('TAÇA DE PORTUGAL DE TESTE')),
       `→ ${JSON.stringify(popupHistorico)}`
     )
     await janela.webContents.executeJavaScript(
@@ -1176,14 +1194,17 @@ app.whenReady().then(async () => {
       "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Concluído')?.click()"
     )
     await esperar(500)
-    const barraDepois = await noEcra<boolean>("return !!document.querySelector('.outros-jogos');")
+    // Trazido um dos dois, a barra fica com o outro.
+    const barraDepois = await noEcra<string>(
+      "return document.querySelector('.outros-jogos .cabecalho')?.textContent ?? 'sem barra';"
+    )
     const naTabela = (await janela.webContents.executeJavaScript(
       "[...document.querySelectorAll('.tabela tbody tr')].some((tr) => tr.textContent.includes('TAÇA DE PORTUGAL DE TESTE'))"
     )) as boolean
     verificar(
-      'e o jogo passa para a tabela do histórico',
-      !barraDepois && naTabela,
-      `→ barra ${barraDepois ? 'ainda lá' : 'fechada'}, tabela ${naTabela ? 'com' : 'sem'} o jogo`
+      'e o jogo passa para a tabela do histórico, ficando o outro na barra',
+      naTabela && /1 jogo de competições sem delegado fixo/.test(barraDepois),
+      `→ barra "${barraDepois}", tabela ${naTabela ? 'com' : 'sem'} o jogo`
     )
 
     log('\n3e. Exportação das nomeações')

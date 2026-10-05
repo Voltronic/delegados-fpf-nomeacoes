@@ -523,6 +523,16 @@ async function principal(): Promise<void> {
       usaDelegadoAssistente: false,
       todosComDelegado: false
     })
+    // Datas relativas ao dia em que isto corre. Com datas fixas, a verificação
+    // apodrecia: os jogos de setembro deixaram de ter futuro em outubro, e o
+    // que falhava era o teste, não a aplicação.
+    const diaDaqui = (dias: number, hora = '15:00'): string => {
+      const d = new Date()
+      d.setDate(d.getDate() + dias)
+      const p2 = (n: number): string => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${hora}`
+    }
+
     const jogoDaTaca = repos.guardarJogo({
       chaveNatural: 'teste:taca',
       competicaoId: taca.id,
@@ -531,7 +541,7 @@ async function principal(): Promise<void> {
       jornada: null,
       fpfFixtureId: null,
       fpfMatchId: null,
-      dataHora: '2026-10-25T15:00',
+      dataHora: diaDaqui(5),
       clubeCasaId: clubes[0].id,
       clubeForaId: clubes[1].id,
       recintoId: repos.recintoDoClube(clubes[0].id, taca.id),
@@ -594,7 +604,7 @@ async function principal(): Promise<void> {
           jornada: String(i + 1),
           fpfFixtureId: 1000 + i,
           fpfMatchId: null,
-          dataHora: `2026-09-${String(13 + i * 7).padStart(2, '0')}T15:00`,
+          dataHora: diaDaqui(3 + i * 7),
           clubeCasaId: casa.id,
           clubeForaId: fora.id,
           recintoId: repos.recintoDoClube(casa.id, competicao.id),
@@ -606,7 +616,7 @@ async function principal(): Promise<void> {
     verificar('8 jogos gravados', repos.listarJogos().length === 8)
     verificar(
       'filtro por intervalo de datas',
-      repos.listarJogos({ de: '2026-09-13', ate: '2026-09-21T23:59' }).length === 2
+      repos.listarJogos({ de: diaDaqui(3).slice(0, 10), ate: `${diaDaqui(10).slice(0, 10)}T23:59` }).length === 2
     )
 
     log('\n4. Motor de sugestão')
