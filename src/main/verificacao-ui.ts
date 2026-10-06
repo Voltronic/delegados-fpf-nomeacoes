@@ -1047,6 +1047,24 @@ app.whenReady().then(async () => {
         }
       }
       return { tabelas: tabelas.length, presas, fixas };`)
+    // E nada pode passar da largura: a matriz tem uma coluna por competição, e
+    // com os nomes por extenso empurrava a página inteira para o lado — os
+    // outros cartões iam atrás, com as primeiras colunas fora do ecrã.
+    const larguras = await noEcra<{ corpo: number; visivel: number; matriz: number; cartao: number }>(`
+      const corpo = document.querySelector('.corpo-ecra');
+      const matriz = document.querySelector('table.tabela.matriz');
+      return {
+        corpo: corpo ? corpo.scrollWidth : 0,
+        visivel: corpo ? corpo.clientWidth : 0,
+        matriz: matriz ? Math.round(matriz.getBoundingClientRect().width) : 0,
+        cartao: matriz ? Math.round(matriz.parentElement.getBoundingClientRect().width) : 0
+      };`)
+    verificar(
+      'o dashboard não rola para o lado, e a matriz cabe no cartão',
+      larguras.corpo <= larguras.visivel + 1 && larguras.matriz <= larguras.cartao + 1,
+      `→ corpo ${larguras.corpo}/${larguras.visivel}, matriz ${larguras.matriz} no cartão ${larguras.cartao}`
+    )
+
     verificar(
       'os cabeçalhos das três tabelas do dashboard acompanham a rolagem',
       cabecalhosDoDashboard.tabelas === 3 && cabecalhosDoDashboard.fixas === 3 && cabecalhosDoDashboard.presas.length === 0,

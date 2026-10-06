@@ -468,6 +468,32 @@ table.tabela tbody tr:hover {
   background: var(--superficie-2);
 }
 
+/*
+ * A matriz tem uma coluna por competição e não pode passar da largura do
+ * cartão: a página não rola para o lado, e uma tabela que o obrigasse levava
+ * com ela todos os outros cartões.
+ */
+table.tabela.matriz {
+  table-layout: fixed;
+}
+
+table.tabela.matriz th,
+table.tabela.matriz td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+table.tabela.matriz th:first-child,
+table.tabela.matriz td:first-child {
+  width: 200px;
+}
+
+table.tabela.matriz th:last-child,
+table.tabela.matriz td:last-child {
+  width: 56px;
+}
+
 table.tabela td.num,
 table.tabela th.num {
   text-align: right;

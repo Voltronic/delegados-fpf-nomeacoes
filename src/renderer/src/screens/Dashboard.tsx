@@ -9,6 +9,7 @@ import type {
 import JogosDoDelegado from '../components/JogosDoDelegado'
 import { classes, formatarKm, formatarMinutos } from '../lib/formato'
 import { ColunaOrdenavel, useOrdenacao, type Valores } from '../lib/ordenacao'
+import { abreviarCompeticao } from '@shared/competicoes'
 
 export default function Dashboard(): JSX.Element {
   const [epocas, setEpocas] = useState<Epoca[]>([])
@@ -329,8 +330,13 @@ function Matriz({ titulo, matriz }: { titulo: string; matriz: MatrizDashboard | 
         faz o cabeçalho acompanhar a rolagem até ao fim da tabela. Dentro de um
         contentor próprio, o cabeçalho colava-se a ele — que não rola na
         vertical — e ficava para trás.
+
+        Por isso a tabela tem de caber na largura: com vinte competições e os
+        nomes por extenso, era ela que empurrava a página inteira para o lado.
+        As colunas repartem o espaço (`table-layout: fixed`) e os cabeçalhos vão
+        abreviados, com o nome completo no `title`.
       */}
-      <table className="tabela">
+      <table className="tabela matriz">
         <thead>
           <tr>
             <ColunaOrdenavel
@@ -350,7 +356,7 @@ function Matriz({ titulo, matriz }: { titulo: string; matriz: MatrizDashboard | 
                 className="num"
                 title={c.etiqueta}
               >
-                {c.etiqueta.length > 22 ? `${c.etiqueta.slice(0, 20)}…` : c.etiqueta}
+                {abreviarCompeticao(c.etiqueta)}
               </ColunaOrdenavel>
             ))}
             <ColunaOrdenavel coluna="total" ordem={ordem} alternar={alternar} className="num">
