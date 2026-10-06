@@ -15,7 +15,7 @@ import { avisar, mensagemDeErro } from '../lib/avisos'
  * jogos e quilómetros leva cada delegado, quando é que alguém esteve num clube.
  *
  * Entram todos os jogos passados das competições com delegado em todos os
- * jogos, e das outras só os escolhidos. Os jogos dos últimos três dias dessas
+ * jogos, e das outras só os escolhidos. Os jogos da última semana dessas
  * competições que ninguém escolheu podem ser recuperados num popup, como na
  * lista da semana, para trazer um jogo que afinal teve delegado e registar
  * quem lá foi.
@@ -45,13 +45,13 @@ export default function Historico(): JSX.Element {
   }, [competicaoId, texto])
 
   // Os jogos das competições sem delegado fixo que ninguém escolheu, só de hoje
-  // de ontem e de anteontem: recuperar serve para um jogo recente, e uma
+  // da última semana: recuperar serve para um jogo recente, e uma
   // época inteira de jogos antigos só atrapalhava a escolha. A competição e a
   // procura escolhem-se dentro do popup.
   const carregarOutros = useCallback(async () => {
-    const anteontem = new Date()
-    anteontem.setDate(anteontem.getDate() - 2)
-    setOutros(await window.api.jogos.historico({ levaDelegado: 'SEM', de: paraDataIso(anteontem) }))
+    const haUmaSemana = new Date()
+    haUmaSemana.setDate(haUmaSemana.getDate() - 7)
+    setOutros(await window.api.jogos.historico({ levaDelegado: 'SEM', de: paraDataIso(haUmaSemana) }))
   }, [])
 
   useEffect(() => {
@@ -193,6 +193,21 @@ export default function Historico(): JSX.Element {
             </div>
           )}
 
+          {outros.length > 0 && (
+            <div className="outros-jogos">
+              <button
+                className="cabecalho"
+                title="Escolher jogos destas competições para o histórico"
+                onClick={() => setEscolherOutros(true)}
+              >
+                <span className="seta" aria-hidden>
+                  ▸
+                </span>
+                {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado fixo
+              </button>
+            </div>
+          )}
+
           {visiveis.length > 0 && (
             <table className="tabela">
               <thead>
@@ -281,27 +296,13 @@ export default function Historico(): JSX.Element {
             irPara={paginacao.irPara}
           />
 
-          {outros.length > 0 && (
-            <div className="outros-jogos">
-              <button
-                className="cabecalho"
-                title="Escolher jogos destas competições para o histórico"
-                onClick={() => setEscolherOutros(true)}
-              >
-                <span className="seta" aria-hidden>
-                  ▸
-                </span>
-                {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado fixo
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
       {escolherOutros && (
         <EscolherOutrosJogos
           titulo="Jogos de competições sem delegado fixo"
-          subtitulo="Jogos de hoje, de ontem e de anteontem, já realizados, de competições em que só alguns levam delegado. Escolha os que tiveram delegado."
+          subtitulo="Jogos da última semana, já realizados, de competições em que só alguns levam delegado. Escolha os que tiveram delegado."
           jogos={outros}
           textoConfirmar={(n) => (n === 1 ? 'Trazer 1 jogo para o histórico' : `Trazer ${n} jogos para o histórico`)}
           aFechar={() => setEscolherOutros(false)}

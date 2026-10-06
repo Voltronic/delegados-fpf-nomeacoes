@@ -76,6 +76,8 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
       avisar('O número e o nome são obrigatórios.', 'erro')
       return
     }
+    // A morada de antes, para saber se o ponto no mapa mudou com esta gravação.
+    const antes = typeof selecionado === 'number' ? delegados.find((d) => d.id === selecionado) : null
     const guardado = await guardarCom(
       () => window.api.delegados.guardar(formulario),
       `${formulario.nome} guardado.`
@@ -84,6 +86,30 @@ export default function Delegados({ tilesUrl }: Props): JSX.Element {
     await carregar()
     setSelecionado(guardado.id)
     setMensagem(null)
+
+    // Mudar de sítio deixa os km já gravados a contar a partir do sítio antigo.
+    // Qual dos dois casos é — mudou de casa agora, ou a morada estava errada
+    // desde o início — só sabe quem está a editar, por isso pergunta-se.
+    if (antes && (antes.lat !== guardado.lat || antes.lng !== guardado.lng)) {
+      const recalcular = confirm(
+        `${guardado.nome} ficou noutra localização. Recalcular os quilómetros dos jogos ` +
+          'desta época em que já está nomeado?\n\n' +
+          'Responda Cancelar se ele mudou de casa agora: aí os km do que já fez estão certos. ' +
+          'As épocas anteriores nunca são tocadas.'
+      )
+      if (recalcular) {
+        try {
+          const quantos = await window.api.delegados.recalcularKm(guardado.id)
+          avisar(
+            quantos === 0
+              ? 'Não havia jogos desta época para recalcular.'
+              : `${quantos} ${quantos === 1 ? 'jogo recalculado' : 'jogos recalculados'}.`
+          )
+        } catch (erro) {
+          avisar(mensagemDeErro(erro), 'erro')
+        }
+      }
+    }
   }
 
   /**

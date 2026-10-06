@@ -139,14 +139,16 @@ function semear(): void {
   })
 
   // E dois jogos da mesma Taça já realizados, que ninguém escolheu: o de ontem
-  // e o de anteontem têm de aparecer para recuperar no histórico; o de há
-  // quatro dias não.
+  // e o de anteontem têm de aparecer para recuperar no histórico; o de há dez
+  // dias, fora da última semana, não.
   const ontem = new Date(hoje)
   ontem.setDate(hoje.getDate() - 1)
   const anteontem = new Date(hoje)
   anteontem.setDate(hoje.getDate() - 2)
   const haQuatroDias = new Date(hoje)
   haQuatroDias.setDate(hoje.getDate() - 4)
+  const haDezDias = new Date(hoje)
+  haDezDias.setDate(hoje.getDate() - 10)
   repos.guardarJogo({
     chaveNatural: 'ui:taca-passada',
     competicaoId: taca.id,
@@ -178,6 +180,21 @@ function semear(): void {
     estado: 'REALIZADO'
   })
   repos.guardarJogo({
+    chaveNatural: 'ui:taca-ha-quatro-dias',
+    competicaoId: taca.id,
+    fase: null,
+    serie: null,
+    jornada: null,
+    fpfFixtureId: 652395,
+    fpfMatchId: null,
+    dataHora: `${haQuatroDias.getFullYear()}-${pd(haQuatroDias.getMonth() + 1)}-${pd(haQuatroDias.getDate())}T11:00`,
+    clubeCasaId: clubes[0].id,
+    clubeForaId: clubes[1].id,
+    recintoId: recintos[0].id,
+    recintoTextoFpf: null,
+    estado: 'REALIZADO'
+  })
+  repos.guardarJogo({
     chaveNatural: 'ui:taca-antiga',
     competicaoId: taca.id,
     fase: null,
@@ -185,7 +202,7 @@ function semear(): void {
     jornada: null,
     fpfFixtureId: 652397,
     fpfMatchId: null,
-    dataHora: `${haQuatroDias.getFullYear()}-${pd(haQuatroDias.getMonth() + 1)}-${pd(haQuatroDias.getDate())}T11:00`,
+    dataHora: `${haDezDias.getFullYear()}-${pd(haDezDias.getMonth() + 1)}-${pd(haDezDias.getDate())}T11:00`,
     clubeCasaId: clubes[0].id,
     clubeForaId: clubes[2].id,
     recintoId: recintos[0].id,
@@ -785,7 +802,7 @@ app.whenReady().then(async () => {
     log('\n2d. Jogos de competições sem delegado fixo')
     await irPara('Nomeações')
     // O jogo da Taça não pode estar na lista de trabalho, mas tem de estar
-    // à mão: é isso que o bloco no fim da lista serve.
+    // à mão: é isso que a barra no cimo da lista serve.
     const bloco = (await janela.webContents.executeJavaScript(
       `(() => {
          const b = document.querySelector('.outros-jogos');
@@ -795,7 +812,7 @@ app.whenReady().then(async () => {
          return JSON.stringify({
            presente: true,
            texto: b.querySelector('.cabecalho')?.textContent?.replace(/\\s+/g, ' ').trim(),
-           noFim: itens.indexOf(b) === itens.length - 1,
+           noInicio: itens.indexOf(b) === 0,
            jogosNaLista: document.querySelectorAll('.item-jogo').length
          });
        })()`
@@ -803,12 +820,12 @@ app.whenReady().then(async () => {
     const outros = JSON.parse(bloco) as {
       presente: boolean
       texto?: string
-      noFim?: boolean
+      noInicio?: boolean
       jogosNaLista?: number
     }
     verificar(
-      'os jogos sem delegado fixo aparecem num bloco no fim da lista',
-      outros.presente && outros.noFim === true && /sem delegado fixo/.test(outros.texto ?? ''),
+      'os jogos sem delegado fixo aparecem numa barra no cimo da lista',
+      outros.presente && outros.noInicio === true && /sem delegado fixo/.test(outros.texto ?? ''),
       `→ ${bloco}`
     )
 
@@ -1159,7 +1176,7 @@ app.whenReady().then(async () => {
       return { existe: !!b, texto: b?.textContent ?? '' };`)
     verificar(
       'o histórico mostra a barra dos jogos de competições sem delegado fixo',
-      barraHistorico.existe && /2 jogos de competições sem delegado fixo/.test(barraHistorico.texto),
+      barraHistorico.existe && /3 jogos de competições sem delegado fixo/.test(barraHistorico.texto),
       `→ ${barraHistorico.texto || 'sem barra'}`
     )
     await janela.webContents.executeJavaScript("document.querySelector('.outros-jogos .cabecalho')?.click()")
@@ -1168,9 +1185,9 @@ app.whenReady().then(async () => {
       const m = document.querySelector('.escolher-outros-jogos');
       return { aberto: !!m, linhas: m ? [...m.querySelectorAll('tbody tr')].map((tr) => tr.textContent) : [] };`)
     verificar(
-      'o popup do histórico tem os jogos dos últimos três dias, e não os mais antigos',
+      'o popup do histórico tem os jogos da última semana, e não os mais antigos',
       popupHistorico.aberto &&
-        popupHistorico.linhas.length === 2 &&
+        popupHistorico.linhas.length === 3 &&
         popupHistorico.linhas.every((l) => l.includes('TAÇA DE PORTUGAL DE TESTE')),
       `→ ${JSON.stringify(popupHistorico)}`
     )
@@ -1194,7 +1211,7 @@ app.whenReady().then(async () => {
       "[...document.querySelectorAll('.modal footer button')].find((b) => b.textContent.trim() === 'Concluído')?.click()"
     )
     await esperar(500)
-    // Trazido um dos dois, a barra fica com o outro.
+    // Trazido um dos três, a barra fica com os outros dois.
     const barraDepois = await noEcra<string>(
       "return document.querySelector('.outros-jogos .cabecalho')?.textContent ?? 'sem barra';"
     )
@@ -1202,8 +1219,8 @@ app.whenReady().then(async () => {
       "[...document.querySelectorAll('.tabela tbody tr')].some((tr) => tr.textContent.includes('TAÇA DE PORTUGAL DE TESTE'))"
     )) as boolean
     verificar(
-      'e o jogo passa para a tabela do histórico, ficando o outro na barra',
-      naTabela && /1 jogo de competições sem delegado fixo/.test(barraDepois),
+      'e o jogo passa para a tabela do histórico, ficando os outros na barra',
+      naTabela && /2 jogos de competições sem delegado fixo/.test(barraDepois),
       `→ barra "${barraDepois}", tabela ${naTabela ? 'com' : 'sem'} o jogo`
     )
 

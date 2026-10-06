@@ -301,6 +301,44 @@ export async function completarKmEmFalta(): Promise<number> {
   return jogos.length
 }
 
+/**
+ * Recalcula os km das nomeações de um delegado numa época, a partir da morada
+ * que ele tem agora.
+ *
+ * Os km são congelados na nomeação de propósito — assim o histórico não muda
+ * sozinho. Mas uma morada errada fazia-os nascer errados, e aí o congelamento
+ * só serve para perpetuar o engano. Quem edita a morada é que sabe qual dos
+ * casos é, por isso isto só corre quando é pedido.
+ *
+ * Fica-se pela época indicada: as anteriores são história fechada, e mexer nos
+ * km delas mudava contas que já foram dadas como boas.
+ */
+export async function recalcularKmDoDelegado(delegadoId: number, seasonId?: number): Promise<number> {
+  const delegado = repos.obterDelegado(delegadoId)
+  const origem =
+    delegado?.lat != null && delegado.lng != null ? { lat: delegado.lat, lng: delegado.lng } : null
+  let recalculados = 0
+  for (const jogo of repos.jogosDoDelegado(delegadoId, seasonId)) {
+    const detalhe = repos.obterJogoDetalhado(jogo.jogoId)
+    if (!detalhe?.recintoId) continue
+    const nomeacao = detalhe.nomeacoes.find((n) => n.delegadoId === delegadoId)
+    if (!nomeacao) continue
+    const recinto = repos.obterRecinto(detalhe.recintoId)
+    const destino =
+      recinto?.lat != null && recinto.lng != null ? { lat: recinto.lat, lng: recinto.lng } : null
+    const distancia = await obterDistancia(delegadoId, detalhe.recintoId, origem, destino)
+    if (!distancia) continue
+    repos.atualizarKmNomeacao(
+      nomeacao.id,
+      Math.round(distancia.km * 2 * 10) / 10,
+      distancia.minutos != null ? Math.round(distancia.minutos * 2) : null,
+      distancia.fonte
+    )
+    recalculados++
+  }
+  return recalculados
+}
+
 async function recalcularKm(jogoIds: number[]): Promise<void> {
   for (const jogoId of jogoIds) {
     const jogo = repos.obterJogoDetalhado(jogoId)

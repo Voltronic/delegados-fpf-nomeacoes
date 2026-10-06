@@ -4,6 +4,7 @@ import Database from 'better-sqlite3'
 import { MIGRACOES } from './schema'
 import { semearRecintos } from './semente'
 import { semearHistorico } from './semente-historico-aplicar'
+import { semearMoradas } from './semente-moradas'
 import * as COPIAS from './copias'
 import { PASTA_COPIAS } from './copias'
 
@@ -76,6 +77,15 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
       console.log(
         `Semente da época: ${historico.jogosCriados} jogos, ${historico.competicoesCriadas} competições, ` +
           `${historico.clubesCriados} clubes, ${historico.recintosCriados} recintos`
+      )
+    }
+    // Moradas corrigidas depois de a aplicação já estar em uso. Os km dos jogos
+    // desses delegados ficam por calcular, e o arranque trata deles a seguir.
+    const moradas = semearMoradas(conn)
+    if (moradas.corrigidos.length) {
+      console.log(
+        `Moradas corrigidas: ${moradas.corrigidos.join(', ')} ` +
+          `(${moradas.nomeacoesPorRecalcular} nomeações por recalcular)`
       )
     }
   }

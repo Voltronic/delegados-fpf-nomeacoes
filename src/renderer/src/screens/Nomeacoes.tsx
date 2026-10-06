@@ -496,6 +496,22 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                   )}
                 </div>
               )}
+              {outros.length > 0 && (
+                <div className="outros-jogos">
+                  <button
+                    className="cabecalho"
+                    title="Escolher jogos destas competições para nomear"
+                    onClick={() => setEscolherOutros(true)}
+                  >
+                    <span className="seta" aria-hidden>
+                      ▸
+                    </span>
+                    {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado
+                    fixo
+                  </button>
+                </div>
+              )}
+
               {jogos.map((j) => (
                 <div
                   key={j.id}
@@ -575,21 +591,6 @@ export default function Nomeacoes({ tilesUrl, versaoDados }: Props): JSX.Element
                 </div>
               ))}
 
-              {outros.length > 0 && (
-                <div className="outros-jogos">
-                  <button
-                    className="cabecalho"
-                    title="Escolher jogos destas competições para nomear"
-                    onClick={() => setEscolherOutros(true)}
-                  >
-                    <span className="seta" aria-hidden>
-                      ▸
-                    </span>
-                    {outros.length} {outros.length === 1 ? 'jogo' : 'jogos'} de competições sem delegado
-                    fixo
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 

@@ -21,7 +21,7 @@ import {
   versaoDoEsquema
 } from './db'
 import * as repos from './db/repos'
-import { completarKmEmFalta } from './sync/agendador'
+import { completarKmEmFalta, recalcularKmDoDelegado } from './sync/agendador'
 import { MIGRACOES } from './db/schema'
 import { semearHistorico } from './db/semente-historico-aplicar'
 import {
@@ -30,6 +30,7 @@ import {
   RECINTOS_SEMENTE
 } from './db/semente-historico'
 import { semearRecintos } from './db/semente'
+import { semearMoradas } from './db/semente-moradas'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
 import { limiteDeTrabalho } from '../shared/datas'
@@ -2133,6 +2134,53 @@ async function principal(): Promise<void> {
     )
     repos.apagarJogo(jogoOriginal)
 
+    log('\n12e. Morada corrigida pela semente, e km recalculados')
+    // A morada de um delegado pode chegar errada e só se dar por isso depois de
+    // ele já ter jogos feitos. A correção vai na semente, corre uma vez em cada
+    // máquina, e deixa os km desses jogos por calcular.
+    const fernando = repos.criarDelegado({
+      numero: '110',
+      nome: 'Fernando Ferreira',
+      morada: 'Guarda',
+      lat: 40.5308408,
+      lng: -7.2221421,
+      nivel: 'PRINCIPAL',
+      telefone: null,
+      email: null,
+      ativo: true,
+      notas: null,
+      coordsManuais: true
+    })
+    const jogoDoFernando = repos.listarJogos()[0]
+    await nomear({ jogoId: jogoDoFernando.id, delegadoId: fernando.id, papel: 'ASSISTENTE' })
+    const kmDaGuarda = repos.jogosDoDelegado(fernando.id, 106)[0]?.km ?? 0
+
+    obterBaseDados().prepare("DELETE FROM config WHERE chave = 'semente.moradas'").run()
+    const moradas = semearMoradas(obterBaseDados())
+    const mudado = repos.obterDelegado(fernando.id)!
+    verificar(
+      'a semente corrige a morada e deixa os km do que ele já fez por calcular',
+      mudado.morada === 'Lousada' &&
+        Math.abs((mudado.lat ?? 0) - 41.2778714) < 0.0001 &&
+        moradas.corrigidos.includes('Fernando Ferreira') &&
+        repos.jogosDoDelegado(fernando.id, 106).every((j) => j.km === null),
+      `→ ${mudado.morada} (${mudado.lat}, ${mudado.lng}), ${moradas.nomeacoesPorRecalcular} nomeação(ões)`
+    )
+    verificar('e não volta a correr na mesma máquina', semearMoradas(obterBaseDados()).corrigidos.length === 0)
+
+    const recalculados = await recalcularKmDoDelegado(fernando.id, 106)
+    const kmDeLousada = repos.jogosDoDelegado(fernando.id, 106)[0]?.km ?? 0
+    verificar(
+      'recalcular repõe os km a partir da morada nova',
+      recalculados === 1 && kmDeLousada > 0 && kmDeLousada !== kmDaGuarda,
+      `→ ${kmDaGuarda} km da Guarda, ${kmDeLousada} km de Lousada`
+    )
+    verificar(
+      'e uma época anterior não é tocada',
+      (await recalcularKmDoDelegado(fernando.id, 99)) === 0
+    )
+    repos.apagarDelegado(fernando.id)
+
     log('\n13. Limpar as nomeações (dados de teste)')
     // Apagar as nomeações (limpeza dos dados de teste) só pode levar as
     // nomeações — delegados, clubes, recintos e jogos ficam.
@@ -2240,7 +2288,7 @@ async function principal(): Promise<void> {
       `→ ${recusouReposicao || 'aceitou'}`
     )
 
-    log('\nn15. Semente da época: clubes, recintos, competições e jogos')
+    log('\n15. Semente da época: clubes, recintos, competições e jogos')
     // Numa base de dados nova, a semente dá com que trabalhar sem importar nada
     // da FPF. Não traz nomeações: quem nomeia é o coordenador.
     const caminhoHistorico = join(pasta, 'data', 'historico.db')

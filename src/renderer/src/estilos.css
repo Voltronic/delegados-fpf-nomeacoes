@@ -560,16 +560,17 @@ table.tabela th.num {
  */
 .outros-jogos {
   /*
-   * Colado ao fundo do painel: com dezenas de jogos na lista, um bloco no fim
-   * ficava fora do ecrã e ninguém sabia que existia. Assim está sempre à vista
-   * sem ocupar espaço de trabalho.
+   * Colada ao cimo da lista: é onde se olha primeiro, e assim não se confunde
+   * com o fim do que se está a ler. Fica à vista por mais que se role, que era
+   * o problema de a ter no fim — com dezenas de jogos, ninguém sabia que
+   * existia.
    */
   position: sticky;
-  bottom: 0;
+  top: 0;
   z-index: 2;
-  border-top: 1px solid var(--borda-forte);
+  border-bottom: 1px solid var(--borda-forte);
   background: var(--superficie-2);
-  box-shadow: 0 -4px 10px rgba(20, 28, 40, 0.06);
+  box-shadow: 0 4px 10px rgba(20, 28, 40, 0.06);
 }
 
 

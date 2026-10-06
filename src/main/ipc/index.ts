@@ -52,7 +52,9 @@ import { chaveNatural } from '../fpf/parsers'
 import { geocodificar, invalidarCache, obterTrajeto } from '../geo'
 import { geocodificarRecintosEmFalta } from '../geo/lote'
 import { extrairCoordenadas } from '../geo/googlemaps'
-import { atualizarJogos, cancelarNovaTentativa, depoisDeAtualizar, estadoAtualizacao } from '../sync/agendador'
+import { atualizarJogos, cancelarNovaTentativa, depoisDeAtualizar, estadoAtualizacao,
+  recalcularKmDoDelegado
+} from '../sync/agendador'
 import { descreverQuando, folgaDe } from '../sync/conflitos'
 import {
   aplicarProposta,
@@ -269,6 +271,13 @@ export function registarIpc(contexto: {
   // Arquivar, não apagar: as nomeações das épocas passadas são o histórico.
   registar('delegados:apagar', (id: number) => repos.apagarDelegado(id))
   registar('delegados:restaurar', (id: number) => repos.restaurarDelegado(id))
+  /**
+   * Recalcula os km deste delegado na época corrente, a partir da morada que
+   * tem agora. As épocas anteriores ficam como estão.
+   */
+  registar('delegados:recalcularKm', (id: number) =>
+    recalcularKmDoDelegado(id, repos.listarEpocas()[0]?.seasonId)
+  )
 
   registar('delegados:exportar', () => exportarDelegados())
   registar('delegados:importar', (conteudo: string) => importarDelegados(conteudo))

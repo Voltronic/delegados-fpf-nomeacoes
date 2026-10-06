@@ -55,6 +55,7 @@ const api = {
     gravarFicheiro: invocar('delegados:gravarFicheiro'),
     apagar: invocar('delegados:apagar'),
     restaurar: invocar('delegados:restaurar'),
+    recalcularKm: invocar('delegados:recalcularKm'),
     geocodificar: invocar('delegados:geocodificar'),
     indisponibilidades: invocar('delegados:indisponibilidades'),
     criarIndisponibilidade: invocar('delegados:criarIndisponibilidade'),

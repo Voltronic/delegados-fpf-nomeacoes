@@ -166,6 +166,11 @@ export interface Api {
     /** Arquiva o delegado: sai das listas, mas as épocas que fez ficam. */
     apagar(id: number): Promise<void>
     restaurar(id: number): Promise<Delegado | null>
+    /**
+     * Recalcula os km dos jogos desta época em que o delegado está nomeado, a
+     * partir da morada atual. Devolve quantos foram recalculados.
+     */
+    recalcularKm(id: number): Promise<number>
     geocodificar(id: number): Promise<Delegado | null>
     indisponibilidades(delegadoId: number): Promise<Indisponibilidade[]>
     criarIndisponibilidade(dados: Omit<Indisponibilidade, 'id'>): Promise<Indisponibilidade[]>
