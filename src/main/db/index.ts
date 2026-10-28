@@ -66,7 +66,7 @@ export function abrirBaseDados(caminho: string, opcoes: OpcoesBaseDados = {}): D
     if (semente.criados || semente.preenchidos || semente.atualizados) {
       console.log(
         `Recintos conhecidos: ${semente.criados} criados, ${semente.preenchidos} preenchidos, ` +
-          `${semente.atualizados} corrigidos`
+          `${semente.atualizados} corrigidos, ${semente.recintosMovidos} mudaram de sítio`
       )
     }
     // Clubes, recintos, competições e jogos que a aplicação traz consigo, para

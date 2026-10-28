@@ -26,7 +26,7 @@ const VAZIO = (): ResultadoHistorico => ({
 
 /** Marca em `config` que esta semente já correu, para não repetir trabalho. */
 const CHAVE_CONFIG = 'semente.historico'
-const VERSAO = '2026-2027:1'
+const VERSAO = '2026-2027:2'
 
 /**
  * Põe na base de dados os clubes, os recintos, as competições e os jogos da

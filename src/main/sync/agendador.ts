@@ -8,6 +8,7 @@ import type {
 } from '@shared/tipos'
 import { escreverConfig, lerConfig } from '../db'
 import * as repos from '../db/repos'
+import { CHAVE_MOVIDOS } from '../db/semente'
 import type { EntradaAlerta } from '../db/repos'
 import { ClienteFpf } from '../fpf/cliente'
 import { chavesPendentes, sincronizar } from '../fpf/sincronizacao'
@@ -295,6 +296,27 @@ export async function atualizarJogos(
  * rotas responde a um pedido de cada vez. Corre em segundo plano depois de a
  * aplicação abrir, e o que já estiver em cache sai de imediato.
  */
+/**
+ * Recalcula os km dos jogos que se realizam em recintos que a semente moveu.
+ *
+ * A semente não mexe em nomeações — nem para lhes tocar nos km: o que lá está
+ * é trabalho de quem usa a aplicação. O que ela deixa é o recado de que um
+ * recinto mudou de sítio; é aqui, já com a aplicação aberta, que os km desses
+ * jogos passam a contar a partir do ponto certo. Nenhuma nomeação é criada ou
+ * apagada: só os quilómetros das que existem são refeitos.
+ */
+export async function recalcularKmDosRecintosMovidos(): Promise<number> {
+  const guardado = lerConfig(CHAVE_MOVIDOS)
+  if (!guardado) return 0
+  const ids = JSON.parse(guardado) as number[]
+  const jogos = ids.length ? repos.jogosComNomeacoesNosRecintos(ids) : []
+  if (jogos.length) await recalcularKm(jogos)
+  // O recado só se apaga depois de o trabalho estar feito: se a aplicação
+  // fechar a meio, o arranque seguinte repete-o.
+  escreverConfig(CHAVE_MOVIDOS, JSON.stringify([]))
+  return jogos.length
+}
+
 export async function completarKmEmFalta(): Promise<number> {
   const jogos = repos.jogosComNomeacoesSemKm()
   if (jogos.length) await recalcularKm(jogos)

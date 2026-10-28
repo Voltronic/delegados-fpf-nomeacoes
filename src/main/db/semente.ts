@@ -9,6 +9,12 @@ export interface ResultadoSemente {
   preenchidos: number
   /** Recintos que existiam noutro sítio ou com outra descrição, e foram corrigidos. */
   atualizados: number
+  /**
+   * Recintos que mudaram de sítio. A semente não lhes mexe nos jogos nem nas
+   * nomeações — limita-se a deixar os números registados, e é o arranque que
+   * manda recalcular os km a partir do ponto certo.
+   */
+  recintosMovidos: number
 }
 
 /**
@@ -35,11 +41,19 @@ export interface ResultadoSemente {
  */
 const CHAVE_CONFIG = 'semente.recintos'
 
+/**
+ * Onde fica o recado para o arranque: os recintos que a semente moveu, cujos
+ * jogos têm km calculados a partir do sítio antigo.
+ */
+export const CHAVE_MOVIDOS = 'recintos.movidos'
+
 export function semearRecintos(conn: Database.Database): ResultadoSemente {
   const jaCorreu = conn.prepare('SELECT valor FROM config WHERE chave = ?').get(CHAVE_CONFIG) as
     | { valor: string }
     | undefined
-  if (jaCorreu?.valor === VERSAO_RECINTOS) return { criados: 0, preenchidos: 0, atualizados: 0 }
+  if (jaCorreu?.valor === VERSAO_RECINTOS) {
+    return { criados: 0, preenchidos: 0, atualizados: 0, recintosMovidos: 0 }
+  }
 
   const existente = conn.prepare(
     'SELECT id, lat, lng, morada FROM recinto WHERE nome_normalizado = ?'
@@ -66,7 +80,11 @@ export function semearRecintos(conn: Database.Database): ResultadoSemente {
       WHERE id = ?`
   )
 
-  const resultado: ResultadoSemente = { criados: 0, preenchidos: 0, atualizados: 0 }
+  const resultado: ResultadoSemente = { criados: 0, preenchidos: 0, atualizados: 0, recintosMovidos: 0 }
+  // Recintos que mudaram de sítio: os km dos jogos que lá se realizam foram
+  // calculados a partir do ponto antigo e deixam de valer. Um recinto criado
+  // agora não entra aqui — ainda não há jogo nenhum a apontar para ele.
+  const mudaramDeSitio = new Set<number>()
   // Coordenadas são de vírgula flutuante: comparam-se com folga, senão o mesmo
   // ponto contava como diferente a cada arranque.
   const mesmoPonto = (a: number | null, b: number): boolean => a != null && Math.abs(a - b) < 1e-7
@@ -95,6 +113,7 @@ export function semearRecintos(conn: Database.Database): ResultadoSemente {
       if (linha.lat == null) {
         preencher.run(descricao, recinto.lat, recinto.lng, agora, descricao, linha.id)
         resultado.preenchidos++
+        mudaramDeSitio.add(linha.id)
         continue
       }
 
@@ -105,7 +124,28 @@ export function semearRecintos(conn: Database.Database): ResultadoSemente {
       if (pontoDiferente || descricaoDiferente) {
         corrigir.run(descricao, recinto.lat, recinto.lng, agora, descricao, linha.id)
         resultado.atualizados++
+        // Só o ponto conta para os km: mudar a descrição não move nada.
+        if (pontoDiferente) mudaramDeSitio.add(linha.id)
       }
+    }
+    if (mudaramDeSitio.size) {
+      const ids = [...mudaramDeSitio]
+      const marcadores = ids.map(() => '?').join(',')
+      // A cache de distâncias desses recintos foi calculada a partir do ponto
+      // antigo: deixa de valer. É uma cache, não é trabalho de ninguém.
+      conn.prepare(`DELETE FROM distancia_cache WHERE recinto_id IN (${marcadores})`).run(...ids)
+      // As nomeações não se tocam aqui. A semente só deixa o recado — quais os
+      // recintos que mudaram — e quem recalcula os km é o arranque.
+      const pendentes = conn.prepare('SELECT valor FROM config WHERE chave = ?').get(CHAVE_MOVIDOS) as
+        | { valor: string }
+        | undefined
+      const todos = [...new Set([...(pendentes ? (JSON.parse(pendentes.valor) as number[]) : []), ...ids])]
+      conn
+        .prepare(
+          'INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor'
+        )
+        .run(CHAVE_MOVIDOS, JSON.stringify(todos))
+      resultado.recintosMovidos = ids.length
     }
     conn
       .prepare(

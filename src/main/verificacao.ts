@@ -29,7 +29,7 @@ import {
   JOGOS_SEMENTE,
   RECINTOS_SEMENTE
 } from './db/semente-historico'
-import { semearRecintos } from './db/semente'
+import { CHAVE_MOVIDOS, semearRecintos } from './db/semente'
 import { semearMoradas } from './db/semente-moradas'
 import { exportarDelegados, importarDelegados } from './delegados/servico'
 import { normalizarNome } from './fpf/html'
@@ -186,7 +186,16 @@ async function principal(): Promise<void> {
          coords_manuais INTEGER NOT NULL DEFAULT 0, geocodificado_em TEXT,
          origem_coords TEXT, morada_resolvida TEXT, confianca TEXT,
          confirmado INTEGER NOT NULL DEFAULT 0);
-       CREATE TABLE config (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)`
+       CREATE TABLE config (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
+       CREATE TABLE jogo (id INTEGER PRIMARY KEY AUTOINCREMENT, recinto_id INTEGER);
+       CREATE TABLE nomeacao (
+         id INTEGER PRIMARY KEY AUTOINCREMENT, jogo_id INTEGER NOT NULL,
+         delegado_id INTEGER NOT NULL, km REAL, minutos REAL, fonte_distancia TEXT,
+         estado TEXT NOT NULL DEFAULT 'CONFIRMADA');
+       CREATE TABLE distancia_cache (
+         delegado_id INTEGER NOT NULL, recinto_id INTEGER NOT NULL, km REAL NOT NULL,
+         minutos REAL, fonte TEXT NOT NULL, atualizado_em TEXT NOT NULL,
+         PRIMARY KEY (delegado_id, recinto_id))`
     )
     const conhecido = RECINTOS_CONHECIDOS[0]
     const outro = RECINTOS_CONHECIDOS[1]
@@ -201,6 +210,33 @@ async function principal(): Promise<void> {
     semente
       .prepare('INSERT INTO recinto (nome, nome_normalizado) VALUES (?, ?)')
       .run(outro.nome, normalizarNome(outro.nome))
+
+    // Um jogo em cada um desses recintos, com um delegado nomeado e km já
+    // calculados a partir do sítio antigo.
+    const idDoRecinto = (nome: string): number =>
+      (
+        semente.prepare('SELECT id FROM recinto WHERE nome_normalizado = ?').get(normalizarNome(nome)) as {
+          id: number
+        }
+      ).id
+    const criarJogoEm = (recintoId: number): number => {
+      const info = semente.prepare('INSERT INTO jogo (recinto_id) VALUES (?)').run(recintoId)
+      semente
+        .prepare(
+          `INSERT INTO nomeacao (jogo_id, delegado_id, km, minutos, fonte_distancia)
+           VALUES (?, 1, 123.4, 90, 'OSRM')`
+        )
+        .run(Number(info.lastInsertRowid))
+      return Number(info.lastInsertRowid)
+    }
+    criarJogoEm(idDoRecinto(conhecido.nome))
+    criarJogoEm(idDoRecinto(outro.nome))
+    semente
+      .prepare(
+        `INSERT INTO distancia_cache (delegado_id, recinto_id, km, minutos, fonte, atualizado_em)
+         VALUES (1, ?, 123.4, 90, 'OSRM', '2026-01-01')`
+      )
+      .run(idDoRecinto(conhecido.nome))
 
     const resultadoSemente = semearRecintos(semente)
     const jaExistia = semente
@@ -235,6 +271,35 @@ async function principal(): Promise<void> {
       preenchido.lat === outro.lat && preenchido.lng === outro.lng && preenchido.confirmado === 1
     )
     verificar('não fica nenhum recinto por localizar', semCoordenadas === 0, `→ ${semCoordenadas} sem coordenadas`)
+
+    // A semente não escreve na tabela das nomeações — nem para lhes mexer nos
+    // km. O que lá está é trabalho de quem usa a aplicação.
+    const nomeacoesIntactas = (
+      semente.prepare('SELECT COUNT(*) AS n FROM nomeacao WHERE km = 123.4').get() as { n: number }
+    ).n
+    const quantasNomeacoes = (
+      semente.prepare('SELECT COUNT(*) AS n FROM nomeacao').get() as { n: number }
+    ).n
+    verificar(
+      'a semente não mexe nas nomeações que já existem',
+      nomeacoesIntactas === 2 && quantasNomeacoes === 2,
+      `→ ${nomeacoesIntactas} de ${quantasNomeacoes} nomeações com os km que tinham`
+    )
+
+    // O que ela faz é deixar o recado: estes recintos mudaram de sítio, e os
+    // km dos jogos que lá se realizam têm de ser refeitos pelo arranque.
+    const recado = semente.prepare('SELECT valor FROM config WHERE chave = ?').get(CHAVE_MOVIDOS) as
+      | { valor: string }
+      | undefined
+    const movidos = recado ? (JSON.parse(recado.valor) as number[]) : []
+    const cacheApagada = (
+      semente.prepare('SELECT COUNT(*) AS n FROM distancia_cache').get() as { n: number }
+    ).n
+    verificar(
+      'e deixa registados os recintos que moveu, com a cache de distâncias limpa',
+      movidos.length === 2 && resultadoSemente.recintosMovidos === 2 && cacheApagada === 0,
+      `→ ${movidos.length} recintos no recado, ${cacheApagada} distâncias em cache`
+    )
     // Arrancar outra vez não pode voltar a mexer em nada.
     // Correr a cada arranque eram centenas de comparações para dar sempre o
     // mesmo: fica registada a versão da lista e não se repete.

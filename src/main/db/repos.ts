@@ -1362,6 +1362,22 @@ export function atualizarKmNomeacao(
  * arranque atrasaria a abertura, e são centenas de consultas ao serviço de
  * rotas. Ficam para segundo plano, e esta consulta diz o que falta.
  */
+/** Jogos com nomeações que se realizam num destes recintos. */
+export function jogosComNomeacoesNosRecintos(recintoIds: number[]): number[] {
+  if (!recintoIds.length) return []
+  const marcadores = recintoIds.map(() => '?').join(',')
+  return (
+    obterBaseDados()
+      .prepare(
+        `SELECT DISTINCT n.jogo_id AS id FROM nomeacao n
+           JOIN jogo j ON j.id = n.jogo_id
+          WHERE n.estado = 'CONFIRMADA' AND j.recinto_id IN (${marcadores})
+          ORDER BY j.data_hora DESC`
+      )
+      .all(...recintoIds) as { id: number }[]
+  ).map((l) => l.id)
+}
+
 export function jogosComNomeacoesSemKm(): number[] {
   return (
     obterBaseDados()

@@ -3,7 +3,12 @@ import { join, dirname } from 'node:path'
 import { abrirBaseDados, caminhoBaseDados, PASTA_COPIAS } from './db'
 import { clienteFpfPartilhado, fecharCliente, registarIpc } from './ipc'
 import * as repos from './db/repos'
-import { completarKmEmFalta, iniciarAgendador, pararAgendador } from './sync/agendador'
+import {
+  completarKmEmFalta,
+  iniciarAgendador,
+  pararAgendador,
+  recalcularKmDosRecintosMovidos
+} from './sync/agendador'
 
 /**
  * Raiz portátil: em produção é a pasta que contém o executável, para que a
@@ -144,6 +149,15 @@ app.whenReady().then(() => {
       if (jogos) console.log(`Quilómetros completados em ${jogos} jogos do histórico`)
     })
     .catch((erro) => console.warn('Não foi possível completar os quilómetros:', erro))
+
+  // E os jogos cujos recintos a semente pôs noutro sítio: os km estavam
+  // calculados a partir do ponto antigo. Só se mexe nos quilómetros, nunca na
+  // nomeação em si.
+  void recalcularKmDosRecintosMovidos()
+    .then((jogos) => {
+      if (jogos) console.log(`Quilómetros refeitos em ${jogos} jogos de recintos que mudaram de sítio`)
+    })
+    .catch((erro) => console.warn('Não foi possível refazer os quilómetros:', erro))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) criarJanela()
